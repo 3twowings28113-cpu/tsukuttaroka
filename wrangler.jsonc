@@ -1,0 +1,30 @@
+{
+  // Cloudflare Workers の設定。公開URLは https://tsukuttaroka.<サブドメイン>.workers.dev になる
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tsukuttaroka",
+  "account_id": "e3e492aaab64f45f91577631a395250b",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-06-01",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "html_handling": "auto-trailing-slash",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/*"]
+  },
+  "observability": { "enabled": true },
+  "vars": {
+    // 使うAIモデル（npm run setup が、実際に動いたものに書き換える）
+    "GEMINI_MODEL": "gemini-3.8-flash",
+    "GEMINI_FALLBACK_MODEL": "gemini-flash-lite-latest",
+    "GEMINI_API_STYLE": "interactions"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "tsukuttaroka-db",
+      // npm run setup が自動で書き換える
+      "database_id": "2c6fdf96-94fb-4d3d-86f6-6de7cb18a572"
+    }
+  ]
+}

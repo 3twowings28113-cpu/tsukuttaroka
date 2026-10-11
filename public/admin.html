@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>運営ページ｜投稿、つくったろか。</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700&family=Zen+Maru+Gothic:wght@900&display=swap">
+<style>
+  /* 運営用：情報を詰めて一覧しやすく。色はアプリと同じ役割で控えめに */
+  :root {
+    color-scheme: light;
+    --bg: #F6F4EE; --paper: #FFFFFF; --ink: #121212; --sub: #5F5A4F; --rule: #DAD5C9;
+    --yellow: #FFDE59; --blue: #0A66C2; --blue-press: #004182; --coral: #FF7373; --ok: #1E7A46;
+    --f-body: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif;
+    --f-display: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Noto Sans JP", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 500 15px/1.6 var(--f-body); }
+  button, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--yellow); border-bottom: 2px solid var(--ink); }
+  .bar { max-width: 1100px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .title { font-family: var(--f-display); font-weight: 900; font-size: 18px; margin: 0; }
+  .title small { font-family: var(--f-body); font-weight: 700; font-size: 12px; margin-left: 8px; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  .panel { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 14px 16px; }
+  .panel h2 { margin: 0 0 10px; font-size: 15px; }
+  .btn { min-height: 42px; padding: 0 14px; border: 2px solid var(--ink); border-radius: 10px; background: var(--paper); font-weight: 700; cursor: pointer; }
+  .btn:active { transform: translate(1px, 1px); }
+  .btn-primary { background: var(--blue); color: #fff; }
+  .btn-primary:active { background: var(--blue-press); }
+  .btn-danger { border-color: #B3261E; color: #B3261E; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .login { max-width: 420px; margin: 40px auto; display: grid; gap: 10px; }
+  .login input { min-height: 46px; padding: 0 12px; border: 2px solid var(--ink); border-radius: 10px; background: #fff; font-size: 16px; }
+  .msg { font-size: 14px; font-weight: 700; }
+  .msg.bad { color: #B3261E; }
+  .msg.good { color: var(--ok); }
+  .status { display: flex; flex-wrap: wrap; gap: 8px 16px; font-size: 14px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--rule); background: #FBFAF7; font-weight: 700; }
+  .dotc { width: 9px; height: 9px; border-radius: 50%; background: var(--sub); }
+  .dotc.on { background: var(--ok); }
+  .dotc.off { background: #B3261E; }
+  .nums { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+  .num { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; }
+  .num b { display: block; font-size: 26px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+  .num span { font-size: 12px; color: var(--sub); font-weight: 700; }
+  .num.warn b { color: #B3261E; }
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  .bars { display: grid; gap: 6px; }
+  .brow { display: grid; grid-template-columns: 11em minmax(0, 1fr) 3em; gap: 8px; align-items: center; font-size: 14px; }
+  .brow .track { height: 10px; background: #EFECE4; border-radius: 5px; overflow: hidden; }
+  .brow .fill { height: 100%; background: var(--blue); }
+  .brow .n { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; }
+  .empty { color: var(--sub); font-size: 14px; }
+  .errs { display: grid; gap: 6px; font-size: 13px; }
+  .errs div { padding: 6px 10px; border-left: 4px solid var(--coral); background: #FFF6F5; }
+  .table-wrap { overflow-x: auto; }
+  table.people td.n { text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-size: 12px; color: var(--sub); white-space: nowrap; }
+  td.at, td.role, td.tone { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tr.item { cursor: pointer; }
+  tr.item:hover td { background: #FBFAF6; }
+  tr.detail td { background: #FBFAF6; }
+  .detail-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+  .detail-grid h3 { margin: 0 0 4px; font-size: 13px; }
+  .pre { white-space: pre-wrap; overflow-wrap: anywhere; background: #fff; border: 1px solid var(--rule); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+  .tag { display: inline-block; padding: 0 8px; border-radius: 6px; background: #EEF3F8; font-size: 12px; font-weight: 700; margin: 0 4px 4px 0; }
+  .num.hot { border: 2px solid var(--ink); background: var(--yellow); }
+  .rep-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .rep-head h2 { margin: 0; }
+  .judge-box { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 16px; align-items: start; padding: 12px; margin-bottom: 12px; border: 2px solid var(--ink); border-radius: 10px; background: #FFFBE6; }
+  .judge-qr { width: 180px; height: 180px; padding: 8px; background: #fff; border: 1px solid var(--rule); border-radius: 8px; }
+  .judge-qr svg { display: block; width: 100%; height: 100%; }
+  .judge-side { display: grid; gap: 8px; }
+  .judge-side p { margin: 0; }
+  .judge-side input { width: 100%; min-height: 42px; padding: 0 10px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; font-size: 14px; }
+  .roster-line { font-size: 14px; margin-bottom: 8px; }
+  .roster-line details { display: inline; margin-left: 8px; }
+  .roster-line summary { display: inline; cursor: pointer; color: var(--blue); font-weight: 700; }
+  .roster-line p { margin: 6px 0 0; }
+  td.stars { white-space: nowrap; font-weight: 700; }
+  tr.is-hidden td { color: var(--sub); text-decoration: line-through; }
+  tr.is-hidden td:last-child { text-decoration: none; }
+  .btn-sm { min-height: 34px; padding: 0 10px; font-size: 13px; }
+  .tag.warn { background: #FFF1D6; }
+  details.roster { margin-top: 12px; }
+  details.roster summary { cursor: pointer; font-weight: 700; min-height: 36px; display: flex; align-items: center; }
+  details.roster textarea { width: 100%; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; font: inherit; font-size: 14px; margin: 6px 0; }
+  .confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px; border: 2px solid #B3261E; border-radius: 10px; background: #FFF6F5; }
+  .awards { display: grid; gap: 10px; margin-bottom: 12px; padding: 10px 12px; border: 2px solid var(--ink); border-radius: 10px; background: #FFFBE6; }
+  .awards > div > h3 { margin: 0 0 2px; font-size: 15px; }
+  .awards .award-names { display: flex; flex-wrap: wrap; gap: 2px 16px; font-size: 20px; font-weight: 700; line-height: 1.5; }
+  .awards .award-sub { font-size: 12px; color: var(--sub); font-weight: 700; }
+  .awards .none { margin: 0; color: var(--sub); font-size: 14px; font-weight: 400; }
+  @media (max-width: 720px) {
+    .nums { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .judge-box { grid-template-columns: 1fr; }
+    .judge-qr { justify-self: center; }
+    .cols, .detail-grid { grid-template-columns: 1fr; }
+    .brow { grid-template-columns: 7em minmax(0, 1fr) 2.5em; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1 class="title">運営ページ<small>投稿、つくったろか。</small></h1>
+    <div class="row" id="topActions" hidden>
+      <button class="btn" id="reloadBtn" type="button">更新</button>
+      <button class="btn" id="logoutBtn" type="button">ログアウト</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="panel login" id="login">
+    <h2>合言葉を入れてください</h2>
+    <label for="pass" class="msg">合言葉</label>
+    <input id="pass" type="password" autocomplete="current-password" inputmode="text">
+    <button class="btn btn-primary" id="loginBtn" type="button">ひらく</button>
+    <p class="msg bad" id="loginMsg" role="alert"></p>
+  </section>
+
+  <div id="dash" hidden style="display:grid;gap:16px">
+    <section class="panel">
+      <div class="status" id="status"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn btn-primary" id="testBtn" type="button">AIの接続テスト</button>
+        <button class="btn" id="csvBtn" type="button">CSVをダウンロード</button>
+        <button class="btn" id="toggleBtn" type="button">受付を止める</button>
+      </div>
+      <p class="msg" id="opMsg" role="status" aria-live="polite"></p>
+    </section>
+
+    <section class="nums" id="nums" aria-label="件数"></section>
+
+    <section class="panel" id="repPanel">
+      <div class="rep-head">
+        <h2>投稿報告（パネラーが読む投稿）<span id="repCount" class="empty"></span></h2>
+        <div class="row">
+          <button class="btn btn-primary" id="judgeBtn" type="button">パネラー用リンク</button>
+          <button class="btn" id="repCsvBtn" type="button">報告のCSV</button>
+        </div>
+      </div>
+      <div class="judge-box" id="judgeBox" hidden>
+        <div class="judge-qr" id="judgeQr" role="img" aria-label="パネラー用リンクのQRコード"></div>
+        <div class="judge-side">
+          <p class="msg">このリンクをパネラーに送ってください（LINEやメッセージで）。開くと、届いた投稿が自動で並び、新しい投稿が来ると音で知らせます。</p>
+          <input id="judgeUrl" readonly aria-label="パネラー用リンク">
+          <div class="row">
+            <button class="btn" id="judgeCopy" type="button">リンクをコピー</button>
+            <a class="btn" id="judgeOpen" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;text-decoration:none;color:inherit">自分でも開く</a>
+          </div>
+          <p class="empty">リンクは合言葉から作っています。合言葉を変えると、このリンクも変わります。</p>
+        </div>
+      </div>
+      <div class="roster-line" id="rosterLine"></div>
+      <div class="awards" id="awards" aria-label="表彰リスト（呼ぶ順）"></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>報告</th><th>名前</th><th>作り方</th><th>★</th><th>本文（冒頭）</th><th>リンク</th><th></th></tr></thead>
+          <tbody id="repRows"></tbody>
+        </table>
+      </div>
+      <p class="empty" id="noReps" hidden>まだありません。参加者が「投稿したで！」と報告すると、ここに並びます（10秒ごとに更新）。</p>
+      <details class="roster">
+        <summary>参加者名簿を入れる（任意）</summary>
+        <p class="empty" style="margin:0">1行に1人、名前だけ貼り付けてください。報告の名前と照らし合わせて、まだ報告していない人が分かります。</p>
+        <textarea id="rosterText" rows="6" aria-label="参加者名簿"></textarea>
+        <div class="row"><button class="btn" id="rosterSave" type="button">名簿を保存</button><span class="msg" id="rosterMsg" role="status"></span></div>
+      </details>
+    </section>
+
+    <div class="cols">
+      <section class="panel"><h2>よく選ばれたネタ TOP5</h2><div class="bars" id="topCards"></div></section>
+      <section class="panel"><h2>選ばれたパターン</h2><div class="bars" id="tones"></div></section>
+      <section class="panel"><h2>書き方（作るときに選んだもの）</h2><div class="bars" id="modes"></div></section>
+    </div>
+
+    <section class="panel" id="peoplePanel">
+      <h2>アプリを使った人（最初に入れた名前）<span id="peopleCount" class="empty"></span></h2>
+      <div class="table-wrap"><table class="people">
+        <thead><tr><th>名前</th><th>フォロー</th><th>作った</th><th>コピー</th><th>報告</th></tr></thead>
+        <tbody id="peopleRows"></tbody>
+      </table></div>
+      <p class="empty" id="noPeople" hidden>まだいません。参加者が名前を入れて投稿文を作ると、ここに並びます。</p>
+    </section>
+
+    <section class="panel" id="errPanel" hidden><h2>最近のエラー</h2><div class="errs" id="errs"></div></section>
+
+    <section class="panel">
+      <h2>集まった投稿（共有ONの人だけ）<span id="postCount" class="empty"></span></h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>日時</th><th>立場</th><th>ネタ</th><th>パターン</th><th>投稿文（冒頭）</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p class="empty" id="noRows" hidden>まだありません。参加者が「コピーしてLinkedInをひらく」を押すと、ここに並びます。</p>
+      <div class="row" style="margin-top:10px"><button class="btn" id="moreBtn" type="button" hidden>もっと見る</button></div>
+    </section>
+
+    <section class="panel">
+      <h2>データの削除</h2>
+      <p class="empty" style="margin:0 0 8px">リハーサルのテストデータを消すときに使います。集まった投稿・件数・投稿報告・★がすべて消えます（参加者名簿は残ります）。</p>
+      <button class="btn btn-danger" id="wipeBtn" type="button">全データを削除</button>
+      <div class="confirm" id="wipeConfirm" hidden style="margin-top:8px">
+        <span class="msg bad">本当に消す？元に戻せません。</span>
+        <button class="btn btn-danger" id="wipeYes" type="button">消す</button>
+        <button class="btn" id="wipeNo" type="button">やめる</button>
+      </div>
+    </section>
+  </div>
+</main>
+
+<script src="config.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script>
+(() => {
+  const KEY = "tsukuttaroka.admin";
+  const $ = (s) => document.querySelector(s);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const TONE = { emo: "エモい", humor: "ユーモア", straight: "学び" };
+  let pass = "";
+  try { pass = sessionStorage.getItem(KEY) || localStorage.getItem(KEY) || ""; } catch {}
+  // URLの「#k=合言葉」で開いたら、そのままログイン（# のあとはサーバーに送られない）。読んだら URL から消す
+  const hashK = new URLSearchParams(location.hash.slice(1)).get("k");
+  if (hashK) {
+    pass = hashK.trim();
+    try { localStorage.setItem(KEY, pass); } catch {}
+    history.replaceState(null, "", location.pathname);
+  }
+  let offset = 0;
+  let summary = null;
+  let reps = null;
+  const openReps = new Set();
+  let rosterTouched = false;
+
+  async function api(path, opts = {}) {
+    const res = await fetch(path, { ...opts, headers: { "content-type": "application/json", "x-admin-passcode": pass, ...(opts.headers || {}) } });
+    if (res.status === 401 || res.status === 403) {
+      const d = await res.json().catch(() => ({}));
+      throw Object.assign(new Error(d.message || "auth"), { auth: true });
+    }
+    return res;
+  }
+
+  async function login() {
+    pass = $("#pass").value.trim();
+    $("#loginMsg").textContent = "";
+    try {
+      await loadSummary();
+      try { localStorage.setItem(KEY, pass); } catch {}
+      showDash();
+      loadRows(true);
+      loadReports().catch(() => {});
+    } catch (e) {
+      $("#loginMsg").textContent = e.auth ? e.message : "つながりませんでした。URLを確認してください。";
+    }
+  }
+  function showDash() {
+    $("#login").hidden = true;
+    $("#dash").hidden = false;
+    $("#topActions").hidden = false;
+  }
+  function logout() {
+    try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch {}
+    location.reload();
+  }
+
+  async function loadSummary() {
+    const res = await api("api/admin/summary");
+    summary = await res.json();
+    renderSummary();
+  }
+  function renderSummary() {
+    const s = summary;
+    $("#status").innerHTML = [
+      `<span class="pill"><span class="dotc ${s.hasKey ? "on" : "off"}"></span>AI：${s.hasKey ? esc(s.model) + "（予備 " + esc(s.fallback) + "）" : "キー未設定（サンプル文で動作中）"}</span>`,
+      `<span class="pill"><span class="dotc ${s.generation === "on" ? "on" : "off"}"></span>受付：${s.generation === "on" ? "受付中" : "停止中"}</span>`,
+      `<span class="pill"><span class="dotc ${s.db ? "on" : "off"}"></span>データベース：${s.db ? "OK" : "未設定"}</span>`,
+    ].join("");
+    $("#toggleBtn").textContent = s.generation === "on" ? "受付を止める" : "受付を再開する";
+    const c = s.counts;
+    const cell = (label, n, warn, hot) => `<div class="num${warn && n ? " warn" : ""}${hot ? " hot" : ""}"><b>${n}</b><span>${label}</span></div>`;
+    $("#nums").innerHTML = cell("生成", c.generate) + cell("書き直し", c.refine) + cell("コピー", c.copy) + cell("あとで投稿", c.later) + cell("投稿報告", c.report || 0, false, true) + cell("エラー", c.error, true);
+    const bars = (items) => {
+      const max = Math.max(1, ...items.map((x) => x.n));
+      return items.length
+        ? items.map((x) => `<div class="brow"><span>${esc(x.label)}</span><span class="track"><span class="fill" style="width:${(x.n / max) * 100}%;display:block"></span></span><span class="n">${x.n}</span></div>`).join("")
+        : '<p class="empty">まだありません</p>';
+    };
+    $("#topCards").innerHTML = bars(s.topCards || []);
+    $("#tones").innerHTML = bars(Object.keys(TONE).map((k) => ({ label: TONE[k], n: (s.tones || {})[k] || 0 })).filter((x) => x.n || Object.keys(s.tones || {}).length));
+    const errs = s.recentErrors || [];
+    $("#errPanel").hidden = !errs.length;
+    $("#errs").innerHTML = errs.map((e) => `<div><b>${esc(e.at)}</b>　${esc(e.where || "")}　${esc(e.model || "")}　${esc(e.status || "")} ${esc(e.reason || "")}<br>${esc(e.hint || "")}</div>`).join("");
+    $("#postCount").textContent = `　${s.posts}件`;
+    const MODE_NAME = { "": "おまかせ", first: "はじめての投稿", ishizaka: "石坂さん風" };
+    const modes = s.modes || {};
+    $("#modes").innerHTML = bars(Object.keys(MODE_NAME).map((k) => ({ label: MODE_NAME[k], n: modes[k] || 0 })).filter(() => Object.keys(modes).length));
+    const people = s.people || [];
+    $("#peopleCount").textContent = `　${people.length}人（主催をフォロー ${s.followed || 0}人）`;
+    $("#noPeople").hidden = people.length > 0;
+    $("#peopleRows").innerHTML = people
+      .map((p) => `<tr><td>${esc(p.name)}</td><td class="n">${p.followed ? "済" : "—"}</td><td class="n">${p.made ? p.made + "回" : "—"}</td><td class="n">${p.copied ? "済" : "—"}</td><td class="n">${p.reported ? "済" : "<b>まだ</b>"}</td></tr>`)
+      .join("");
+  }
+
+  async function loadRows(reset) {
+    if (reset) { offset = 0; $("#rows").innerHTML = ""; }
+    const res = await api(`api/admin/posts?limit=50&offset=${offset}`);
+    const d = await res.json();
+    const rows = d.rows || [];
+    offset += rows.length;
+    const html = rows.map((r) => {
+      const detail = `
+        <div class="detail-grid">
+          <div>
+            <h3>回答</h3>
+            <div class="pre">${esc((r.answers || []).map((a) => `【${a.label}】${[(a.chips || []).join("／"), a.text].filter(Boolean).join("｜")}`).join("\n"))}</div>
+            <h3 style="margin-top:8px">じぶん色</h3>
+            <div>${["formality", "kansai", "length", "emoji"].map((k) => `<span class="tag">${esc(r.style[k] || "")}</span>`).join("")}${r.style.phrase ? `<span class="tag">一言：${esc(r.style.phrase)}</span>` : ""}</div>
+          </div>
+          <div>
+            <h3>投稿文（${esc(TONE[r.tone] || "")}${r.edited ? "・自分で直した" : ""}／${r.action === "later" ? "あとで投稿" : "コピーしてLinkedIn"}）</h3>
+            <div class="pre">${esc(r.finalText)}</div>
+          </div>
+        </div>`;
+      return `<tr class="item" data-id="${r.id}" tabindex="0"><td class="at">${esc(r.at)}</td><td class="role">${esc(r.role || "—")}</td><td>${esc((r.cards || []).join("、"))}</td><td class="tone">${esc(TONE[r.tone] || "")}</td><td>${esc(String(r.finalText || "").replace(/\s+/g, " ").slice(0, 48))}…</td></tr><tr class="detail" id="d${r.id}" hidden><td colspan="5">${detail}</td></tr>`;
+    }).join("");
+    $("#rows").insertAdjacentHTML("beforeend", html);
+    $("#noRows").hidden = offset > 0;
+    $("#moreBtn").hidden = rows.length < 50;
+  }
+
+  // ---------- 投稿報告 ----------
+  async function loadReports() {
+    const res = await api("api/admin/reports");
+    reps = await res.json();
+    renderReports();
+  }
+  function renderAwards(visible) {
+    const el = $("#awards");
+    if (!el) return;
+    const cfg = window.APP_CONFIG || {};
+    const judges = Array.isArray(cfg.judges) ? cfg.judges : [];
+    const picksBy = new Map();   // 審査員 -> 選んだ参加者の名前
+    const namePickers = new Map(); // 参加者 -> 選んだ審査員
+    for (const r of visible) {
+      for (const j of r.stars || []) {
+        if (!picksBy.has(j)) picksBy.set(j, []);
+        picksBy.get(j).push(r.name);
+        if (!namePickers.has(r.name)) namePickers.set(r.name, []);
+        namePickers.get(r.name).push(j);
+      }
+    }
+    const extra = [...picksBy.keys()].filter((j) => !judges.includes(j) && j !== "運営スタッフ");
+    const order = [...judges, "運営スタッフ", ...extra];
+    el.innerHTML = order.map((j) => {
+      const names = picksBy.get(j) || [];
+      const list = names.length
+        ? `<div class="award-names">${names.map((n) => {
+            const others = (namePickers.get(n) || []).filter((x) => x !== j);
+            return `<span>${esc(n)}${others.length ? `<span class="award-sub">（${esc(others.join("・"))}も）</span>` : ""}</span>`;
+          }).join("")}</div>`
+        : '<p class="none">まだ選んでいません</p>';
+      return `<div><h3>${esc(j)}</h3>${list}</div>`;
+    }).join("");
+  }
+  function renderReports() {
+    const d = reps || { rows: [] };
+    const rows = d.rows || [];
+    const visible = rows.filter((r) => !r.hidden);
+    renderAwards(visible);
+    $("#repCount").textContent = `　${visible.length}件`;
+    if (d.roster) {
+      const miss = d.roster.missing || [];
+      $("#rosterLine").innerHTML = `名簿 <b>${d.roster.total}</b>人中 <b>${d.roster.reported}</b>人が報告ずみ` +
+        (miss.length ? `<details><summary>まだの人（${miss.length}人）</summary><p>${miss.map(esc).join("、")}</p></details>` : "");
+    } else $("#rosterLine").innerHTML = "";
+    if (!rosterTouched) $("#rosterText").value = d.rosterText || "";
+    $("#noReps").hidden = rows.length > 0;
+    $("#repRows").innerHTML = rows.map((r) => {
+      const excerpt = String(r.body || "").replace(/\s+/g, " ");
+      const flags = (d.roster && !r.inRoster ? '<span class="tag warn">名簿になし</span>' : "") + (r.screenOk ? "" : '<span class="tag">スクリーン×</span>');
+      return `<tr class="item${r.hidden ? " is-hidden" : ""}" data-rid="${esc(r.id)}" tabindex="0">
+          <td class="at">${esc(String(r.at).slice(11))}</td>
+          <td><b>${esc(r.name)}</b> ${flags}</td>
+          <td class="role">${r.source === "self" ? "自分で" : "アプリ"}</td>
+          <td class="stars">${r.stars.length ? "★" + r.stars.length : ""}</td>
+          <td>${excerpt ? esc(excerpt.slice(0, 40)) + (excerpt.length > 40 ? "…" : "") : '<span class="empty">（本文なし）</span>'}</td>
+          <td>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">開く</a>` : "—"}</td>
+          <td><button class="btn btn-sm" type="button" data-hide="${esc(r.id)}" data-to="${r.hidden ? 0 : 1}">${r.hidden ? "戻す" : "隠す"}</button></td>
+        </tr>
+        <tr class="detail" id="rd-${esc(r.id)}"${openReps.has(r.id) ? "" : " hidden"}><td colspan="7">
+          <div class="pre">${esc(r.body || "（本文なし）")}</div>
+          ${r.stars.length ? `<p style="margin:6px 0 0">★を付けた人：${r.stars.map(esc).join("、")}</p>` : ""}
+        </td></tr>`;
+    }).join("");
+  }
+  async function hideReport(id, to) {
+    await api("api/admin/report-hide", { method: "POST", body: JSON.stringify({ id, hidden: to === "1" }) });
+    await loadReports();
+    loadSummary().catch(() => {});
+  }
+  async function showJudgeLink() {
+    const box = $("#judgeBox");
+    if (!box.hidden) { box.hidden = true; return; }
+    const d = await (await api("api/admin/judge-link")).json();
+    const url = location.origin + d.path;
+    $("#judgeUrl").value = url;
+    $("#judgeOpen").href = url;
+    const qr = qrcode(0, "M");
+    qr.addData(url);
+    qr.make();
+    $("#judgeQr").innerHTML = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
+    box.hidden = false;
+  }
+  async function copyJudgeLink() {
+    const input = $("#judgeUrl");
+    try { await navigator.clipboard.writeText(input.value); }
+    catch { input.select(); document.execCommand && document.execCommand("copy"); }
+    $("#judgeCopy").textContent = "コピーしました";
+    setTimeout(() => { $("#judgeCopy").textContent = "リンクをコピー"; }, 1600);
+  }
+  async function saveRoster() {
+    const d = await (await api("api/admin/roster", { method: "POST", body: JSON.stringify({ text: $("#rosterText").value }) })).json();
+    rosterTouched = false;
+    $("#rosterMsg").textContent = d.ok ? `${d.count}人を保存しました` : "保存できませんでした";
+    await loadReports();
+  }
+  async function download(path, fallback) {
+    try {
+      const res = await api(path);
+      const blob = await res.blob();
+      const name = (res.headers.get("content-disposition") || "").match(/filename="([^"]+)"/);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name ? name[1] : fallback;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    } catch { $("#opMsg").textContent = "CSVを作れませんでした。"; }
+  }
+
+  function toggleRow(tr) {
+    const d = document.getElementById("d" + tr.dataset.id);
+    if (d) d.hidden = !d.hidden;
+  }
+
+  async function test() {
+    const b = $("#testBtn");
+    b.disabled = true;
+    $("#opMsg").className = "msg";
+    $("#opMsg").textContent = "テスト中…";
+    try {
+      const d = await (await api("api/admin/test", { method: "POST", body: "{}" })).json();
+      $("#opMsg").className = "msg " + (d.ok ? "good" : "bad");
+      $("#opMsg").textContent = d.ok ? `OK：${d.model}（${d.ms}ミリ秒）「${d.text}」` : `NG：${d.model || ""} ${d.status || ""} ${d.reason || ""}　${d.hint || ""}`;
+    } catch (e) {
+      $("#opMsg").className = "msg bad";
+      $("#opMsg").textContent = "テストできませんでした。";
+    } finally { b.disabled = false; }
+  }
+
+  function csv() {
+    return download("api/admin/export", "tsukuttaroka.csv");
+  }
+
+  async function toggle() {
+    const next = summary.generation === "on" ? "off" : "on";
+    const d = await (await api("api/admin/settings", { method: "POST", body: JSON.stringify({ generation: next }) })).json();
+    summary.generation = d.generation;
+    renderSummary();
+    $("#opMsg").className = "msg";
+    $("#opMsg").textContent = d.generation === "on" ? "受付を再開しました。" : "受付を止めました（参加者には「受付を止めてる」と表示されます）。";
+  }
+
+  async function wipe() {
+    await api("api/admin/wipe", { method: "POST", body: JSON.stringify({ confirm: "DELETE" }) });
+    $("#wipeConfirm").hidden = true;
+    $("#opMsg").textContent = "全データを削除しました。";
+    await loadSummary();
+    await loadRows(true);
+    await loadReports();
+  }
+
+  $("#loginBtn").addEventListener("click", login);
+  $("#pass").addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
+  $("#logoutBtn").addEventListener("click", logout);
+  $("#reloadBtn").addEventListener("click", () => { loadSummary(); loadRows(true); loadReports().catch(() => {}); });
+  $("#testBtn").addEventListener("click", test);
+  $("#csvBtn").addEventListener("click", csv);
+  $("#toggleBtn").addEventListener("click", toggle);
+  $("#moreBtn").addEventListener("click", () => loadRows(false));
+  $("#wipeBtn").addEventListener("click", () => { $("#wipeConfirm").hidden = false; });
+  $("#wipeNo").addEventListener("click", () => { $("#wipeConfirm").hidden = true; });
+  $("#wipeYes").addEventListener("click", wipe);
+  $("#rows").addEventListener("click", (e) => { const tr = e.target.closest("tr.item"); if (tr) toggleRow(tr); });
+  $("#rows").addEventListener("keydown", (e) => { const tr = e.target.closest("tr.item"); if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleRow(tr); } });
+
+  $("#judgeBtn").addEventListener("click", () => showJudgeLink().catch(() => { $("#opMsg").textContent = "パネラー用リンクを作れませんでした。"; }));
+  $("#judgeCopy").addEventListener("click", copyJudgeLink);
+  $("#repCsvBtn").addEventListener("click", () => download("api/admin/export-reports", "tsukuttaroka_reports.csv"));
+  $("#rosterSave").addEventListener("click", () => saveRoster().catch(() => { $("#rosterMsg").textContent = "保存できませんでした"; }));
+  $("#rosterText").addEventListener("input", () => { rosterTouched = true; });
+  $("#repRows").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-hide]");
+    if (b) { e.stopPropagation(); hideReport(b.dataset.hide, b.dataset.to).catch(() => {}); return; }
+    if (e.target.closest("a")) return;
+    const tr = e.target.closest("tr.item");
+    if (!tr) return;
+    const id = tr.dataset.rid;
+    const d = document.getElementById("rd-" + id);
+    if (!d) return;
+    d.hidden = !d.hidden;
+    if (d.hidden) openReps.delete(id); else openReps.add(id);
+  });
+
+  if (pass) {
+    loadSummary().then(() => { showDash(); loadRows(true); loadReports().catch(() => {}); }).catch(() => { pass = ""; });
+  }
+  setInterval(() => { if (!$("#dash").hidden) loadSummary().catch(() => {}); }, 30000);
+  setInterval(() => { if (!$("#dash").hidden && !document.hidden) loadReports().catch(() => {}); }, 10000);
+})();
+</script>
+</body>
+</html>

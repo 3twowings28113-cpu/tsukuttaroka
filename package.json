@@ -1,0 +1,16 @@
+{
+  "name": "tsukuttaroka",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "deploy": "wrangler deploy",
+    "check": "node scripts/check.mjs",
+    "local": "wrangler dev",
+    "logs": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^4.145.0"
+  }
+}

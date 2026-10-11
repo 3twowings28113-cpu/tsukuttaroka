@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>会場スクリーン用QR｜投稿、つくったろか。</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Yomogi&family=Zen+Kaku+Gothic+New:wght@700&family=Zen+Maru+Gothic:wght@900&display=swap">
+<style>
+  /* 会場スクリーン（16:9）に映す1枚。スライドと同じ黄色×雲×手書きの関西弁 */
+  :root {
+    color-scheme: light;
+    --yellow: #FFDE59; --ink: #121212; --paper: #FFFFFF; --coral: #FF7373; --blue: #0A66C2;
+    --f-display: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Noto Sans JP", sans-serif;
+    --f-body: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    --f-hand: "Yomogi", "Zen Maru Gothic", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; overflow: hidden; background: var(--yellow); color: var(--ink); font-family: var(--f-body); }
+  .stage { position: relative; width: 100vw; height: 100vh; display: grid; grid-template-columns: 1.25fr 1fr; align-items: center; gap: 3vw; padding: 5vh 6vw; }
+  .cloud { position: relative; isolation: isolate; }
+  .cloud > svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; overflow: visible; }
+  .cloud path { fill: var(--paper); stroke: var(--ink); stroke-width: 5; stroke-linejoin: round; }
+  .copy { padding: 7vh 4.5vw 6.5vh; text-align: center; }
+  .eyebrow { margin: 0 0 1.2vh; font-size: clamp(14px, 1.5vw, 26px); font-weight: 700; }
+  h1 { margin: 0; font-family: var(--f-display); font-weight: 900; font-size: clamp(34px, 4.9vw, 104px); line-height: 1.15; letter-spacing: 0.01em; }
+  .nw { white-space: nowrap; }
+  .lead { margin: 2.2vh 0 0; font-size: clamp(16px, 1.9vw, 34px); font-weight: 700; }
+  .steps { display: flex; justify-content: center; flex-wrap: wrap; gap: 1vw; margin: 3vh 0 0; padding: 0; list-style: none; font-size: clamp(14px, 1.5vw, 28px); font-weight: 700; }
+  .steps li { display: flex; align-items: center; gap: 0.6vw; padding: 0.6vh 1.1vw; border: 3px solid var(--ink); border-radius: 999px; background: var(--yellow); }
+  .steps .n { display: inline-grid; place-items: center; width: 1.9em; height: 1.9em; border-radius: 50%; border: 3px solid var(--ink); background: var(--coral); font-family: var(--f-display); font-size: 0.8em; }
+  .feedtag { margin: 2.2vh 0 0; font-size: clamp(13px, 1.4vw, 24px); font-weight: 700; }
+  .qr-side { display: grid; justify-items: center; gap: 2vh; }
+  /* QRは手書き文字より手前に（重なっても読み取れるように） */
+  .qr { position: relative; z-index: 3; width: min(32vw, 52vh); aspect-ratio: 1; max-width: 100%; padding: 1.6vw; background: var(--paper); border: 5px solid var(--ink); border-radius: 22px; box-shadow: 8px 8px 0 var(--ink); }
+  .qr svg { display: block; width: 100%; height: 100%; }
+  .url { font-size: clamp(14px, 1.4vw, 26px); font-weight: 700; word-break: break-all; text-align: center; }
+  .count { font-family: var(--f-display); font-weight: 900; font-size: clamp(18px, 2.2vw, 40px); text-align: center; line-height: 1.45; }
+  .count b { color: var(--blue); font-size: 1.3em; font-variant-numeric: tabular-nums; }
+  .ticker { max-width: min(36vw, 640px); padding: 2.4vh 2.6vw; text-align: center; font-family: var(--f-display); font-weight: 900; font-size: clamp(16px, 1.9vw, 38px); line-height: 1.35; }
+  .ticker .cloud-svg path, .ticker > svg path { stroke-width: 4; }
+  .ticker.pop { animation: pop 0.55s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
+  @keyframes pop { from { transform: scale(0.6) rotate(-5deg); opacity: 0; } to { transform: none; opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .ticker.pop { animation: none; } }
+  .sc { position: absolute; z-index: 1; font-family: var(--f-hand); font-size: clamp(22px, 3vw, 56px); line-height: 1; pointer-events: none; }
+  .sc1 { top: 3vh; left: 2.5vw; transform: rotate(-16deg); }
+  .sc2 { top: 3vh; left: 33vw; transform: rotate(9deg); }
+  .sc3 { bottom: 3vh; left: 3vw; transform: rotate(10deg); }
+  .sc4 { bottom: 3vh; right: 3vw; transform: rotate(-12deg); }
+  @media (max-aspect-ratio: 1/1) {
+    body { overflow: auto; }
+    .stage { grid-template-columns: 1fr; height: auto; min-height: 100vh; }
+    .qr { width: min(80vw, 60vh); }
+    .sc { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <section class="cloud copy" data-bump="70">
+    <p class="eyebrow">FLM主催 LinkedIn大交流会<br>「関西を、おもろくする夜。」</p>
+    <h1>投稿、<br><span class="nw">つくったろか。</span></h1>
+    <p class="lead">スマホのカメラで、右のQRを読んでな</p>
+    <ol class="steps">
+      <li><span class="n">1</span>ネタを選ぶ</li>
+      <li><span class="n">2</span>しゃべる</li>
+      <li><span class="n">3</span>コピーして投稿</li>
+      <li><span class="n">4</span>アプリで報告</li>
+    </ol>
+    <p class="feedtag" id="feedTagLine" hidden></p>
+    <p class="feedtag" id="followLine" hidden></p>
+  </section>
+  <section class="qr-side">
+    <div class="qr" id="qr" role="img" aria-label="アプリのQRコード"></div>
+    <div class="url" id="url"></div>
+    <div class="count" id="count" aria-live="polite"></div>
+    <div class="ticker cloud" id="ticker" data-bump="46" hidden><span id="tickerText"></span></div>
+  </section>
+  <span class="sc sc1" aria-hidden="true">なんやて</span>
+  <span class="sc sc2" aria-hidden="true">ほんま</span>
+  <span class="sc sc3" aria-hidden="true">そうなん</span>
+  <span class="sc sc4" aria-hidden="true">ほな</span>
+</div>
+<script src="config.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script>
+(() => {
+  const cfg = window.APP_CONFIG || {};
+  if (cfg.feedTag) {
+    const ft = document.getElementById("feedTagLine");
+    ft.textContent = `アプリを使わずに投稿する人は ${cfg.feedTag} を付けてな`;
+    ft.hidden = false;
+  }
+  if (cfg.followUrl) {
+    const ff = document.getElementById("followLine");
+    ff.textContent = "富士通ラーニングメディアのフォローもお願いします！";
+    ff.hidden = false;
+  }
+  const params = new URLSearchParams(location.search);
+  const target = params.get("url") || location.origin + "/";
+  const qr = qrcode(0, "M");
+  qr.addData(target);
+  qr.make();
+  document.getElementById("qr").innerHTML = qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true });
+  document.getElementById("url").textContent = target.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+  // 件数と「◯◯さんが投稿したで！」（本人がOKした名前だけ。?ticker=0 で出さない）
+  const useTicker = params.get("ticker") !== "0";
+  const honor = (n) => (/(さん|様|さま|くん|ちゃん)$/.test(n) ? n : `${n}さん`);
+  const seen = new Set();
+  let latest = [], idx = 0, first = true, rot = null;
+  function showName(name, pop) {
+    const el = document.getElementById("ticker");
+    document.getElementById("tickerText").textContent = `${honor(name)}が投稿したで！`;
+    el.hidden = false;
+    if (pop) { el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop"); }
+    paint();
+  }
+  function rotate() {
+    clearInterval(rot);
+    rot = setInterval(() => {
+      if (latest.length < 2) return;
+      idx = (idx + 1) % latest.length;
+      showName(latest[idx].name, false);
+    }, 5000);
+  }
+  async function refresh() {
+    try {
+      const d = await (await fetch("api/stats", { cache: "no-store" })).json();
+      const made = (d.copied || 0) + (d.later || 0);
+      const lines = [];
+      if (made > 0) lines.push(`できた投稿 <b>${made}</b>本`);
+      if (d.reported > 0) lines.push(`投稿したで！ <b>${d.reported}</b>人`);
+      document.getElementById("count").innerHTML = lines.join("<br>");
+      if (!useTicker) return;
+      latest = d.latest || [];
+      const fresh = latest.filter((x) => !seen.has(x.name + "|" + x.at));
+      latest.forEach((x) => seen.add(x.name + "|" + x.at));
+      if (!latest.length) document.getElementById("ticker").hidden = true;
+      else if (!first && fresh.length) { idx = latest.indexOf(fresh[0]); showName(fresh[0].name, true); rotate(); }
+      else if (document.getElementById("ticker").hidden) { idx = 0; showName(latest[0].name, false); rotate(); }
+      first = false;
+    } catch {}
+  }
+  refresh();
+  setInterval(refresh, 8000);
+
+  // 雲の輪郭（アプリと同じ描き方）
+  function rng(seed) { let a = seed >>> 0 || 1; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+  function cloudPath(w, h, bump, seed) {
+    const rand = rng(seed); const m = Math.round(bump * 0.34) + 4; const pts = [];
+    const edge = (ax, ay, bx, by) => { const L = Math.hypot(bx - ax, by - ay); const n = Math.max(1, Math.ceil(L / bump)); for (let i = 0; i < n; i++) { let t = i / n; if (i > 0) t += ((rand() - 0.5) * 0.35) / n; pts.push([ax + (bx - ax) * t, ay + (by - ay) * t]); } };
+    edge(m, m, w - m, m); edge(w - m, m, w - m, h - m); edge(w - m, h - m, m, h - m); edge(m, h - m, m, m);
+    let d = `M${pts[0][0]},${pts[0][1]}`;
+    for (let i = 0; i < pts.length; i++) { const [ax, ay] = pts[i]; const [bx, by] = pts[(i + 1) % pts.length]; const c = Math.hypot(bx - ax, by - ay); const r = Math.max(c * 0.52, c * 0.6 * (0.94 + rand() * 0.2)); d += ` A${r},${r} 0 0 1 ${bx},${by}`; }
+    return d + "Z";
+  }
+  function paint() {
+    document.querySelectorAll(".cloud").forEach((el, i) => {
+      const w = el.offsetWidth, h = el.offsetHeight;
+      let svg = el.querySelector(":scope > svg");
+      if (!svg) { svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); svg.setAttribute("aria-hidden", "true"); svg.appendChild(document.createElementNS("http://www.w3.org/2000/svg", "path")); el.prepend(svg); }
+      svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+      const bump = Math.max(40, Math.min(90, (Number(el.dataset.bump) || 70) * (w / 900)));
+      svg.firstChild.setAttribute("d", cloudPath(w, h, bump, 17 + i));
+    });
+  }
+  paint();
+  addEventListener("resize", paint);
+  document.fonts && document.fonts.ready.then(paint);
+})();
+</script>
+</body>
+</html>
