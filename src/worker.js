@@ -31,6 +31,12 @@ import {
   buildRefineInput,
   cleanBody,
   normalizePatterns,
+  PROFILE_PROMPT,
+  PROFILE_SCHEMA,
+  PROFILE_ACTIONS,
+  normalizeProfile,
+  buildProfileInput,
+  buildProfileRefineInput,
 } from "./ai.js";
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { extractLinkedInUrl, cleanName, nameKey } from "./report.js";
@@ -455,8 +461,18 @@ async function generate(request, env, ctx) {
   const cards = p.answers.map((a) => a.label);
   const who = cleanName(body.name);
   if (!ukey && !aiCfg && !env.GEMINI_API_KEY) {
-    logEvent(env, ctx, "generate", { cards, sample: true, name: who, mode: p.mode, followed: body.followed === true });
+    logEvent(env, ctx, "generate", { cards, sample: true, name: who, mode: p.mode, kind: p.kind, followed: body.followed === true });
     return json({ ok: true, sample: true });
+  }
+  // プロフィール文（見出し3案＋自己紹介）。写真は使わない
+  if (p.kind === "profile") {
+    const r = await callAI(env, { userKey: ukey, adv: aiCfg, system: PROFILE_PROMPT, input: buildProfileInput(p), schema: PROFILE_SCHEMA, validate: normalizeProfile });
+    if (!r.ok) {
+      logEvent(env, ctx, "error", { where: "profile", status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey });
+      return json({ ok: false, code: "failed", message: ukey ? explainFailure(r) : "生成に失敗しました" }, 502);
+    }
+    logEvent(env, ctx, "generate", { cards, model: r.model, ms: r.ms, name: who, mode: "profile", kind: "profile", followed: body.followed === true });
+    return json({ ok: true, profile: r.value, model: r.model });
   }
   const opts = (imgs) => ({
     userKey: ukey,
@@ -602,10 +618,11 @@ async function refine(request, env, ctx) {
   const body = await readAiBody(request, env, ctx, "refine");
   if (!body) return json({ ok: false, code: "input", message: "入力が読めませんでした" }, 400);
   const p = sanitizePayload(body);
-  const images = sanitizeImages(body.images);
-  const tone = TONE_IDS.includes(body.tone) ? body.tone : null;
-  const action = REFINE_ACTIONS[body.action] ? body.action : null;
-  const current = String(body.body || "").slice(0, 1500);
+  const isProfile = p.kind === "profile";
+  const images = isProfile ? [] : sanitizeImages(body.images);
+  const tone = isProfile ? "emo" : TONE_IDS.includes(body.tone) ? body.tone : null;
+  const action = (isProfile ? PROFILE_ACTIONS : REFINE_ACTIONS)[body.action] ? body.action : null;
+  const current = String(body.body || "").slice(0, isProfile ? 2600 : 1500);
   const ask = cleanRequest(body.request);
   if (!tone || !action || current.length < 10) return json({ ok: false, code: "input", message: "入力が足りません" }, 400);
   if (action === "custom" && !ask) return json({ ok: false, code: "input", message: "どう直すかを書いてください" }, 400);
@@ -620,13 +637,13 @@ async function refine(request, env, ctx) {
   const opts = (imgs) => ({
     userKey: ukey,
     adv: aiCfg,
-    system: SYSTEM_PROMPT,
-    input: buildRefineInput({ ...p, photos: imgs.length }, tone, current, action, ask),
+    system: isProfile ? PROFILE_PROMPT : SYSTEM_PROMPT,
+    input: isProfile ? buildProfileRefineInput(p, current, action, ask) : buildRefineInput({ ...p, photos: imgs.length }, tone, current, action, ask),
     images: imgs,
     schema: BODY_SCHEMA,
     validate: (j) => {
-      const b = cleanBody(j && j.body, p.style.phrase);
-      return b.length >= 20 ? b : null;
+      const b = cleanBody(j && j.body, isProfile ? "" : p.style.phrase);
+      return b.length >= (isProfile ? 60 : 20) ? b.slice(0, isProfile ? 2600 : 3000) : null;
     },
   });
   let r = await callAI(env, opts(images));
@@ -638,7 +655,7 @@ async function refine(request, env, ctx) {
     logEvent(env, ctx, "error", { where: "refine", status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey, photos: images.length });
     return json({ ok: false, code: "failed", message: ukey ? explainFailure(r) : "書き直しに失敗しました" }, 502);
   }
-  logEvent(env, ctx, "refine", { action, tone, model: r.model, name: cleanName(body.name), mode: p.mode, photos: images.length });
+  logEvent(env, ctx, "refine", { action, tone: isProfile ? "" : tone, model: r.model, name: cleanName(body.name), mode: isProfile ? "profile" : p.mode, kind: p.kind, photos: images.length });
   return json({ ok: true, body: r.value, model: r.model });
 }
 
@@ -655,7 +672,7 @@ async function submit(request, env) {
   const now = new Date().toISOString();
   const consent = body.consent === true;
   const stmts = [
-    db.prepare("INSERT INTO events (created_at, type, detail) VALUES (?, ?, ?)").bind(now, action, JSON.stringify({ tone, consent, name: cleanName(body.name), mode: p.mode })),
+    db.prepare("INSERT INTO events (created_at, type, detail) VALUES (?, ?, ?)").bind(now, action, JSON.stringify({ tone, consent, name: cleanName(body.name), mode: p.mode, kind: p.kind })),
   ];
   if (consent) {
     const patterns = {};

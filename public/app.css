@@ -765,3 +765,17 @@ body.has-dock .toast { bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
 .follow-gate.is-missing .follow-check, .follow-gate.is-missing .btn-follow { outline: 3px solid var(--coral); outline-offset: 2px; }
 .follow-gate.is-missing .name-label::after { content: "← ここ"; margin-left: 8px; font-size: 13px; color: #b3261e; }
 .follow-gate + .btn-quick { margin-top: 14px; }
+
+/* ---------- プロフィール文（見出し3案＋自己紹介） ---------- */
+.kind-switch { margin-top: 16px; }
+.kind-switch button { min-height: 52px; font-size: 15px; }
+.p-heads { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.p-head {
+  display: grid; gap: 10px; padding: 14px;
+  background: var(--paper); border: var(--line) solid var(--ink); border-radius: var(--r); box-shadow: var(--shadow);
+}
+.p-head-text { margin: 0; font-family: var(--f-li); font-weight: 700; font-size: 16px; line-height: 1.55; color: var(--li-text); overflow-wrap: anywhere; }
+.p-head-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.p-count { font-size: 13px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.btn-copy { min-height: 44px; padding: 0 14px; gap: 6px; font-size: 15px; box-shadow: var(--shadow-sm); }
+.p-about .li-body { white-space: pre-wrap; }

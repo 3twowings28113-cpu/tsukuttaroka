@@ -19,6 +19,10 @@
   const STORE_KEY = "tsukuttaroka.v1";
   const REPORT_KEY = "tsukuttaroka.report"; // 「投稿したで！」の報告（最初からつくり直しても残す）
   const CARD = Object.fromEntries(C.cards.map((c) => [c.id, c]));
+  // プロフィール文を作る（LinkedInの見出し＋自己紹介）の質問。config.js の profile
+  const PCARDS = (C.profile && C.profile.cards) || [];
+  const profileOn = () => !!(C.profile && C.profile.enabled && PCARDS.length);
+  const isProfile = () => S.kind === "profile";
   const TONES = C.tones;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
   const NS = "http://www.w3.org/2000/svg";
@@ -221,6 +225,7 @@
     return {
       v: 2,
       step: "pick",
+      kind: "post", // 作るもの：post＝投稿文／profile＝プロフィール文（見出し＋自己紹介）
       quick: false, // 「おまかせで始める」から来た（じぶん色をとばして、そのまま作る）
       mode: "", // 書き方：""＝おまかせ／first＝はじめての投稿／ishizaka＝石坂さん風
       intro: "", // はじめての投稿の、ひとこと自己紹介
@@ -341,8 +346,11 @@
     st.intro = String(st.intro || "").slice(0, 60);
     st.stylePrompt = String(st.stylePrompt || "").slice(0, 800);
     st.checks = C.checklist.map((_, i) => !!(st.checks || [])[i]);
+    st.kind = st.kind === "profile" && profileOn() ? "profile" : "post";
     const resultsOk = (r) =>
-      r && (r.single
+      r && (r.kind === "profile"
+        ? r.kind === "profile" && r.profile && Array.isArray(r.profile.headlines) && typeof r.profile.about === "string"
+        : r.single
         ? TONES.filter((t) => r[t.id] && typeof r[t.id].body === "string" && r[t.id].body).length === 1
         : TONES.every((t) => r[t.id] && typeof r[t.id].body === "string"));
     if (st.results && !resultsOk(st.results)) st.results = null;
@@ -366,6 +374,7 @@
   };
   // 聞く順番：必須 → 選んだ順（セットの順）→ 入れたいこと・気持ち。自分で足したネタは「締めのネタ」の前に入る
   function flowCards() {
+    if (isProfile()) return PCARDS;
     const sel = S.selected.map((id) => CARD[id]).filter(Boolean);
     return [...sel.filter((c) => c.required), ...sel.filter((c) => !c.required), FEEL_CARD];
   }
@@ -398,7 +407,7 @@
     // 写真のこと（えらんでたら、AIにも伝える）
     const pw = (T.photoWhat || "").trim();
     const pq = (T.photoWant || "").trim();
-    if (T.photos.length && (pw || pq)) {
+    if (!isProfile() && T.photos.length && (pw || pq)) {
       answers = answers.concat([{ id: "photo", label: "写真のこと", question: "この写真はなに？何を伝えたい？", chips: [], text: [pw && `写真（${T.photos.length}枚）：${pw}`, pq && `伝えたいこと：${pq}`].filter(Boolean).join("｜") }]);
     }
     return {
@@ -421,6 +430,7 @@
       tone: TONES.some((t) => t.id === (S.startTone || "emo")) ? (S.startTone || "emo") : "emo",
       name: myName(),
       followed: followNeeded() && FOLLOW === "done",
+      kind: S.kind || "post",
       clientId: S.clientId,
     };
   }
@@ -476,11 +486,14 @@
     const el = $("#stepper");
     if (!el) return;
     const now = STEP_INDEX[S.step] ?? 0;
-    const reachable = [true, true, true, !!S.results];
-    el.innerHTML = STEP_NAMES.map((name, i) => {
+    // 結果に飛べるのは、いま作っているもの（投稿文／プロフィール文）の結果があるときだけ
+    const reachable = [true, true, true, !!S.results && (S.results.kind === "profile") === isProfile()];
+    // プロフィール文は「じぶん色」がないので3つ
+    const steps = isProfile() ? [[0, "質問"], [1, "こたえる"], [3, "プロフィール"]] : STEP_NAMES.map((name, i) => [i, name]);
+    el.innerHTML = steps.map(([i, name], pos) => {
       const state = i < now ? "is-done" : i === now ? "is-now" : "";
       const can = i !== now && reachable[i] && S.step !== "loading" && !(i === 1 && flowCards().length === 0);
-      return `<button type="button" class="dot ${state}" ${can ? `data-act="jump" data-i="${i}"` : "disabled"} aria-label="${i + 1}. ${name}${i === now ? "（いまここ）" : ""}" ${i === now ? 'aria-current="step"' : ""}>${i < now ? ICON.check : i + 1}</button>`;
+      return `<button type="button" class="dot ${state}" ${can ? `data-act="jump" data-i="${i}"` : "disabled"} aria-label="${pos + 1}. ${name}${i === now ? "（いまここ）" : ""}" ${i === now ? 'aria-current="step"' : ""}>${i < now ? ICON.check : pos + 1}</button>`;
     }).join("");
   }
 
@@ -561,20 +574,35 @@
       <section class="hero cloud" data-bump="46" data-seed="3">
         <p class="hero-eyebrow">${esc(C.eventSub || "")}${C.eventName ? `<br>「${esc(C.eventName)}」` : ""}</p>
         <h1 class="hero-title bx" tabindex="-1">${fmt(C.appName)}</h1>
-        <p class="hero-lead bx">しゃべって答えるだけ。<br>LinkedInの投稿文が<wbr>できあがるで。</p>
+        ${
+          profileOn()
+            ? `<div class="kind-switch seg" role="group" aria-label="作るもの" style="--cols:2">
+            <button type="button" class="bx" data-act="kind" data-v="post" aria-pressed="${!isProfile()}">投稿文を<wbr>作る</button>
+            <button type="button" class="bx" data-act="kind" data-v="profile" aria-pressed="${isProfile()}">プロフィール文を<wbr>作る</button>
+          </div>`
+            : ""
+        }
+        <p class="hero-lead bx">${isProfile() ? "しゃべって答えるだけ。<br>LinkedInの見出しと<wbr>自己紹介の案が<wbr>できあがるで。" : "しゃべって答えるだけ。<br>LinkedInの投稿文が<wbr>できあがるで。"}</p>
         <div class="name-box${T.nameMissing ? " is-missing" : ""}">
           <label class="name-label" for="myName">まず、お名前<span class="req-inline">必須</span></label>
           <input id="myName" class="name-input" type="text" maxlength="40" autocomplete="name" enterkeyhint="done" placeholder="例：山下 翼" value="${esc(MYNAME)}">
           <p class="name-note bx">LinkedInと同じ名前で。<wbr>投稿の報告にも使うで</p>
         </div>
         ${followNeeded() ? followGateHtml() : ""}
-        <p class="hero-note bx">何も選ばんでOK。<wbr>質問に答えるだけで<wbr>投稿文ができるで</p>
+        <p class="hero-note bx">${isProfile() ? `${PCARDS.length}つの質問に<wbr>答えるだけ。<wbr>書いたことだけ使うで` : "何も選ばんでOK。<wbr>質問に答えるだけで<wbr>投稿文ができるで"}</p>
         <p class="key-entry"><button type="button" class="btn btn-secondary btn-block${aiReady() ? "" : " is-unset"}" data-act="openKey">${aiReady() ? "作るAIを見る・変える" : '<span class="badge-unset">未設定</span>文章を作るAIを紐づける（無料・約5分）'}</button></p>
-        <p class="key-entry"><button type="button" class="btn btn-secondary btn-block" data-act="cal">カレンダーから投稿をつくる${CALURL ? "（つないでる）" : "（まずつなぐ・1分）"}<span class="badge-opt">任意</span></button></p>
+        ${isProfile() ? "" : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block" data-act="cal">カレンダーから投稿をつくる${CALURL ? "（つないでる）" : "（まずつなぐ・1分）"}<span class="badge-opt">任意</span></button></p>`}
         ${histGet().length ? `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block" data-act="hist">マイ投稿記録（${histGet().length}件）</button></p>` : ""}
-        <p class="key-entry"><button type="button" class="btn btn-secondary btn-block" data-act="voice">じぶんの書き方をおぼえさせる${VOICE.text ? (VOICE.on ? "（適用中）" : "（おぼえてる・止まってる）") : "（一度だけでOK）"}<span class="badge-opt">任意</span></button></p>
+        ${isProfile() ? "" : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block" data-act="voice">じぶんの書き方をおぼえさせる${VOICE.text ? (VOICE.on ? "（適用中）" : "（おぼえてる・止まってる）") : "（一度だけでOK）"}<span class="badge-opt">任意</span></button></p>`}
       </section>
-      <h2 class="pick-divider"><span>自分で選ぶ人は、こちら</span></h2>
+      ${
+        isProfile()
+          ? `<section class="block">
+        <h2 class="sec-title">聞く質問（この順で聞くで）</h2>
+        <p class="flow-now">${PCARDS.map((c) => `<span class="nw">${esc(plain(c.label))}</span>`).join("／<wbr>")}</p>
+        <p class="sec-note bx">見出し（名前の下の一行）の案を3つと、<wbr>自己紹介（About）の案を1つ作るで。</p>
+      </section>`
+          : `<h2 class="pick-divider"><span>自分で選ぶ人は、こちら</span></h2>
       <section class="block has-scribble">
         <h2 class="sec-title" id="themeTitle">どんな投稿にする？</h2>
         <span class="scribble sc-nanyate" aria-hidden="true">なんやて</span>
@@ -596,14 +624,17 @@
         <h2 class="sec-title" id="sizeTitle">どれだけ書く？</h2>
         <div class="opts" role="radiogroup" aria-labelledby="sizeTitle">${sizeRows}</div>
       </section>
-      ${swap}
+      ${swap}`
+      }
       ${C.report ? `<p class="self-report">${
         REP
           ? `<button type="button" class="btn-text" data-act="reportSelf">${ICON.check}<span class="bx">投稿の報告ずみ<wbr>（直す・リンクを足す）</span></button>`
           : '<button type="button" class="btn-text bx" data-act="reportSelf">アプリを使わずに<wbr>投稿した人は、<wbr>ここから報告</button>'
       }</p>` : ""}
       ${MODE === "preview" ? '<p class="center"><button type="button" class="btn-text" data-act="demo">例文を入れて試す</button></p>' : ""}`;
-    const dockHtml = `<button type="button" class="btn btn-primary" data-act="toAnswer">このネタで始める<span class="btn-sub">${n}問</span></button>`;
+    const dockHtml = isProfile()
+      ? `<button type="button" class="btn btn-primary" data-act="toAnswer">この質問で始める<span class="btn-sub">${PCARDS.length}問</span></button>`
+      : `<button type="button" class="btn btn-primary" data-act="toAnswer">このネタで始める<span class="btn-sub">${n}問</span></button>`;
     return { html, dockHtml };
   }
 
@@ -639,7 +670,7 @@
     const dockHtml = `
       <button type="button" class="btn btn-secondary btn-icon" data-act="back" aria-label="もどる">${ICON.back}</button>
       ${c.required ? "" : '<button type="button" class="btn btn-secondary btn-skip" data-act="skip">とばす</button>'}
-      <button type="button" class="btn btn-primary" id="nextBtn" data-act="next" aria-disabled="${!canNext}">${isLast ? (S.quick ? "書き方をえらぶ" : "じぶん色へ") : "つぎへ"}</button>`;
+      <button type="button" class="btn btn-primary" id="nextBtn" data-act="next" aria-disabled="${!canNext}">${isLast ? (isProfile() ? "プロフィール文をつくる" : S.quick ? "書き方をえらぶ" : "じぶん色へ") : "つぎへ"}</button>`;
     return { html, dockHtml };
   }
 
@@ -771,8 +802,68 @@
     return { html, dockHtml: "" };
   }
 
+  // ④ プロフィール文（見出し3案＋自己紹介）。見出しと自己紹介は別々にコピーして、LinkedInのプロフィールに貼る
+  function viewProfileResult() {
+    const pr = S.results.profile;
+    const busy = !!T.refining;
+    const heads = pr.headlines
+      .map(
+        (h, i) => `<li class="p-head">
+          <p class="p-head-text bx">${esc(h)}</p>
+          <div class="p-head-foot"><span class="p-count">${count(h)}字</span><button type="button" class="btn btn-secondary btn-copy" data-act="pCopy" data-k="h${i}">${ICON.copy}<span>この見出しをコピー</span></button></div>
+        </li>`
+      )
+      .join("");
+    const about = T.editing
+      ? `<label class="edit-label" for="editBody">自己紹介を直す</label>
+         <textarea id="editBody" class="edit-body">${esc(pr.about)}</textarea>`
+      : `<article class="li-card p-about${busy ? " is-busy" : ""}" aria-label="自己紹介の案">
+          <div class="li-body" id="liBody">${esc(pr.about.trim())}</div>
+          ${busy ? '<div class="li-busy" role="status">書き直し中…</div>' : ""}
+        </article>
+        <div class="count-row"><span>${count(pr.about.trim())}字</span><span>2600字まで</span></div>
+        <p class="center"><button type="button" class="btn btn-secondary btn-copy" data-act="pCopy" data-k="about"${busy ? " disabled" : ""}>${ICON.copy}<span>自己紹介をコピー</span></button></p>
+        <div class="tweak" role="group" aria-label="自己紹介のちょい直し">
+          <button type="button" class="chip chip-edit" data-act="edit">${ICON.pen}<span>自分で直す</span></button>
+          ${(C.profile.refineActions || []).map((a) => `<button type="button" class="chip" data-act="refine" data-id="${esc(a.id)}"${busy ? " disabled" : ""}>${esc(a.label)}</button>`).join("")}
+        </div>
+        <div class="ask">
+          <label class="ask-label" for="askText">「こうしてほしい」を書いて直す</label>
+          <div class="ask-row">
+            <input id="askText" class="phrase" type="text" maxlength="120" enterkeyhint="send" autocomplete="off" placeholder="例：サークル名を入れて" value="${esc(T.ask)}">
+            <button type="button" class="btn btn-primary btn-ask" data-act="ask"${busy ? " disabled" : ""}>直す</button>
+          </div>
+          <p class="field-note bx">直すのは自己紹介だけ。<wbr>見出しを変えたいときは<wbr>「もう一回つくる」で。</p>
+        </div>`;
+    const steps = (C.profile.steps || []).map((s, i) => `<li><span class="n" aria-hidden="true">${i + 1}</span><div>${fmt(s)}</div></li>`).join("");
+    const html = `
+      <div class="stamp-row">
+        <div class="stamp cloud${T.fresh ? " is-fresh" : ""}" data-bump="24" data-seed="5"><span>できたで！</span></div>
+        <span class="scribble sc-honma" aria-hidden="true">ほんま</span>
+      </div>
+      ${S.results.sample ? `<p class="notice">いまはサンプル文を表示中（AIの準備がまだ）</p>` : ""}
+      <section class="block">
+        <h2 class="sec-title">見出し（Headline）の案</h2>
+        <p class="sec-note bx">名前のすぐ下に出る一行。<wbr>好きな案を1つ選んでな。</p>
+        <ol class="p-heads">${heads}</ol>
+      </section>
+      <section class="block">
+        <h2 class="sec-title">自己紹介（About）の案</h2>
+        ${about}
+      </section>
+      ${steps ? `<section class="block"><h2 class="sec-title">LinkedInに入れるには</h2><ol class="guide">${steps}</ol></section>` : ""}
+      <p class="center"><button type="button" class="btn-text" data-act="pRegen"${busy ? " disabled" : ""}>もう一回つくる（見出しも自己紹介も）</button></p>`;
+    const dockHtml = T.editing
+      ? `<button type="button" class="btn btn-secondary" data-act="editCancel">やめる</button>
+         <button type="button" class="btn btn-primary" data-act="editSave">この文にする</button>`
+      : `<button type="button" class="btn btn-secondary btn-icon" data-act="back" aria-label="質問にもどる">${ICON.back}</button>
+         <a class="btn btn-primary" data-act="pOpen" href="${esc(C.profile.openUrl || "https://www.linkedin.com/")}" target="_blank" rel="noopener">LinkedInをひらく</a>`;
+    return { html, dockHtml };
+  }
+
   // ④ えらんで投稿
   function viewResult() {
+    if (S.results && S.results.kind === "profile") return viewProfileResult();
     const t = S.tab;
     const r = S.results[t];
     const tone = TONES.find((x) => x.id === t) || TONES[0];
@@ -1753,7 +1844,7 @@
   }
   const photoKb = () => T.photos.reduce((n, p) => n + (p.kb || 0), 0);
   // 生成と書き直しのときだけ、写真を付けて送る（記録用の送信には付けない）
-  const withPhotos = (p) => (T.photos.length ? { ...p, images: T.photos.map((x) => ({ mime: x.mime, data: x.data })) } : p);
+  const withPhotos = (p) => (T.photos.length && p.kind !== "profile" ? { ...p, images: T.photos.map((x) => ({ mime: x.mime, data: x.data })) } : p);
 
   // ---------- 失敗の記録（運営ページの「最近のエラー」に出る） ----------
   function clientLog(where, e, extra) {
@@ -1846,6 +1937,14 @@
 
   const API = {
     async generate(p) {
+      if (p.kind === "profile") {
+        if (MODE === "preview") return { ...sampleProfile(p), sample: true };
+        const data = await postJSON("api/generate", p, 60000);
+        if (data.sample) return { ...sampleProfile(p), sample: true };
+        const pr = data.profile;
+        if (!pr || !Array.isArray(pr.headlines) || !pr.headlines.length || !pr.about) throw Object.assign(new Error("empty"), { code: "empty" });
+        return { kind: "profile", profile: { headlines: pr.headlines.map(String), about: String(pr.about) }, model: data.model || "" };
+      }
       if (MODE === "preview") return previewGenerate(p);
       const data = await postJSON("api/generate", withPhotos(p), T.photos.length ? 75000 : 60000);
       if (data.sample) return { ...sampleGenerate(p), sample: true };
@@ -1958,6 +2057,22 @@
       },
     };
   }
+  // プロフィール文のサンプル（AIが使えないとき。回答をそのまま並べるだけ）
+  function sampleProfile(p) {
+    const say = (a) => (a ? a.text || (a.chips || []).join("、") : "");
+    const by = (id) => say(p.answers.find((a) => a.id === id));
+    const now = by("p_now");
+    const focus = by("p_focus");
+    const future = by("p_future");
+    const head = (...xs) => xs.filter(Boolean).join("｜") || "学生";
+    return {
+      kind: "profile",
+      profile: {
+        headlines: [head(now, focus), head(focus, future), head(now, future)],
+        about: p.answers.map(say).filter(Boolean).join("\n\n") + "\n\nどうぞよろしくお願いします。",
+      },
+    };
+  }
   function sampleRefine(p) {
     const body = String(p.body || "");
     if (p.action === "shorter") {
@@ -2057,11 +2172,22 @@
       T.editing = false;
       T.fresh = true;
       S.step = "result";
-      histAdd({
-        at: Date.now(),
-        theme: String(S.customTheme || "").trim() || (setById(S.setId) || {}).label || "",
-        bodies: TONES.map((t) => ({ id: t.id, label: t.label, body: (S.results[t.id] && S.results[t.id].body) || "" })).filter((b) => b.body),
-      });
+      histAdd(
+        r.kind === "profile"
+          ? {
+              at: Date.now(),
+              theme: "プロフィール文",
+              bodies: [
+                { id: "headline", label: "見出し", body: r.profile.headlines.join("\n") },
+                { id: "about", label: "自己紹介", body: r.profile.about },
+              ],
+            }
+          : {
+              at: Date.now(),
+              theme: String(S.customTheme || "").trim() || (setById(S.setId) || {}).label || "",
+              bodies: TONES.map((t) => ({ id: t.id, label: t.label, body: (S.results[t.id] && S.results[t.id].body) || "" })).filter((b) => b.body),
+            }
+      );
       save();
       render();
       window.scrollTo(0, 0);
@@ -2078,6 +2204,13 @@
         S.step = "result";
         render();
         toast(T.error, 3000);
+        T.error = "";
+      } else if (isProfile()) {
+        // プロフィール文は、じぶん色の画面がないので、最後の質問にもどしてエラーを出す
+        S.step = "answer";
+        S.cursor = Math.max(0, flowCards().length - 1);
+        render();
+        toast(T.error, 4000);
         T.error = "";
       } else {
         S.step = "style";
@@ -2118,9 +2251,43 @@
   // サーバーが自分で記録している失敗（AIの失敗・連打・受付停止）以外は、端末から記録を送る
   const loggedByServer = (e) => ["failed", "rate", "stopped"].includes(e && e.code);
 
+  // プロフィール文：直すのは自己紹介（About）だけ
+  async function refineProfile(actionId, request) {
+    T.refining = "profile";
+    render();
+    try {
+      const cur = S.results.profile.about;
+      let body = cur;
+      if (MODE !== "preview") {
+        const data = await postJSON("api/refine", { ...payload(), body: cur, action: actionId, request: request || "" }, 45000);
+        if (!data.sample) body = data.body;
+      }
+      if (!body) throw Object.assign(new Error("empty"), { code: "empty" });
+      S.results.profile.about = body;
+      if (actionId === "custom") T.ask = "";
+      save();
+      toast(actionId === "custom" ? "言われたとおり直したで" : "直したで", 1400);
+    } catch (e) {
+      if (!loggedByServer(e)) clientLog("refine", e);
+      toast(errorText(e), 2600);
+    } finally {
+      T.refining = null;
+      render();
+    }
+  }
+  // プロフィール文をコピーした記録（件数だけ。プロフィールの画面には共有の確認がないので、中身は保存しない）
+  function recordProfile(what, text) {
+    const key = `profile|${what}|${count(text)}|${text.slice(0, 24)}`;
+    if (S.sent.includes(key)) return;
+    S.sent.push(key);
+    save();
+    API.submit({ ...payload(), action: "copy", tone: "", finalText: "", edited: !!(S.results.profile && S.results.profile.edited), patterns: {}, consent: false, cardIds: flowCards().map((c) => c.id) });
+  }
+
   async function refine(actionId, request) {
     if (T.refining) return;
     if (!aiReady() && MODE !== "preview") return needKey("");
+    if (S.results && S.results.kind === "profile") return refineProfile(actionId, request);
     const t = S.tab;
     T.refining = t;
     render();
@@ -2328,6 +2495,7 @@
 
   function fillDemo() {
     const demoSet = setById("basic3") || recommendedSet(3) || recommendedSet(S.size);
+    S.kind = "post"; // 例文は投稿文用
     S.size = demoSet ? demoSet.size : S.size;
     S.setId = demoSet ? demoSet.id : null;
     S.selected = demoSet ? setCards(demoSet.id) : [C.requiredCardId];
@@ -2608,7 +2776,7 @@
         if (needName()) break;
         // 「じぶんで決める」のときは、テーマを書くのが必須
         const customRow = $('[data-act=themeCustom]');
-        if (customRow && customRow.getAttribute("aria-checked") === "true" && !String(S.customTheme || "").trim()) {
+        if (!isProfile() && customRow && customRow.getAttribute("aria-checked") === "true" && !String(S.customTheme || "").trim()) {
           const box = $("#customTheme");
           if (box) {
             box.scrollIntoView({ block: "center" });
@@ -2766,7 +2934,8 @@
         if (S.cursor < list.length - 1) {
           S.cursor += 1;
           go("answer");
-        } else if (S.quick) openModeSheet("gen");
+        } else if (isProfile()) generate();
+        else if (S.quick) openModeSheet("gen");
         else go("style");
         break;
       }
@@ -2775,8 +2944,18 @@
         if (S.cursor < list.length - 1) {
           S.cursor += 1;
           go("answer");
-        } else if (S.quick) openModeSheet("gen");
+        } else if (isProfile()) generate();
+        else if (S.quick) openModeSheet("gen");
         else go("style");
+        break;
+      }
+      case "kind": {
+        const k = el.dataset.v === "profile" && profileOn() ? "profile" : "post";
+        if (S.kind === k) break;
+        S.kind = k;
+        S.cursor = 0;
+        save();
+        keepScroll(render);
         break;
       }
       case "mode": {
@@ -2879,7 +3058,12 @@
         } else if (S.step === "style") {
           S.cursor = Math.max(0, flowCards().length - 1);
           go("answer");
-        } else if (S.step === "result") go("style");
+        } else if (S.step === "result") {
+          if (isProfile()) {
+            S.cursor = Math.max(0, flowCards().length - 1);
+            go("answer");
+          } else go("style");
+        }
         break;
       case "style": {
         const k = el.dataset.k;
@@ -2937,8 +3121,13 @@
           toast("空っぽにはできへんで");
           break;
         }
-        const prev = S.results[S.tab].body;
-        S.results[S.tab] = { body: v, edited: S.results[S.tab].edited || v !== prev };
+        if (S.results.kind === "profile") {
+          S.results.profile.edited = S.results.profile.edited || v !== S.results.profile.about;
+          S.results.profile.about = v;
+        } else {
+          const prev = S.results[S.tab].body;
+          S.results[S.tab] = { body: v, edited: S.results[S.tab].edited || v !== prev };
+        }
         T.editing = false;
         save();
         render();
@@ -2947,6 +3136,25 @@
       }
       case "refine":
         refine(el.dataset.id);
+        break;
+      case "pCopy": {
+        const pr = S.results && S.results.profile;
+        if (!pr) break;
+        const k = el.dataset.k || "";
+        const text = k === "about" ? pr.about.trim() : pr.headlines[Number(k.slice(1))] || "";
+        if (!text) break;
+        if (copyNow(text)) {
+          toast(k === "about" ? "自己紹介をコピーしたで。LinkedInの「概要（About）」に貼り付けてな" : "見出しをコピーしたで。LinkedInの「見出し」に貼り付けてな", 3200);
+          recordProfile(k === "about" ? "about" : "headline", text);
+        } else toast("コピーできへんかった。文字を長押しして、コピーしてな", 3000);
+        break;
+      }
+      case "pOpen":
+        // リンクはそのまま別のタブで開かせる（この画面は残る。もどってきて、もう片方をコピーできる）
+        break;
+      case "pRegen":
+        if (T.refining || T.busy) break;
+        generate();
         break;
       case "choose":
         if (disabled) break;

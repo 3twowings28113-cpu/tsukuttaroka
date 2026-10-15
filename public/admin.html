@@ -305,7 +305,7 @@
     $("#errPanel").hidden = !errs.length;
     $("#errs").innerHTML = errs.map((e) => `<div><b>${esc(e.at)}</b>　${esc(e.where || "")}　${esc(e.model || "")}　${esc(e.status || "")} ${esc(e.reason || "")}${e.photos ? `　写真${esc(e.photos)}枚${e.kb ? `（${esc(e.kb)}KB）` : ""}` : ""}${e.name ? `　${esc(e.name)}` : ""}<br>${esc(e.hint || "")}${e.ua ? `<br><small>${esc(e.ua)}</small>` : ""}</div>`).join("");
     $("#postCount").textContent = `　${s.posts}件`;
-    const MODE_NAME = { "": "おまかせ", first: "はじめての投稿", ishizaka: "石坂さん風" };
+    const MODE_NAME = { "": "おまかせ", first: "はじめての投稿", ishizaka: "石坂さん風", custom: "じぶんの書き方", profile: "プロフィール文" };
     const modes = s.modes || {};
     $("#modes").innerHTML = bars(Object.keys(MODE_NAME).map((k) => ({ label: MODE_NAME[k], n: modes[k] || 0 })).filter(() => Object.keys(modes).length));
     const people = s.people || [];

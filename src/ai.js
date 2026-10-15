@@ -103,6 +103,90 @@ const ISHIZAKA_STYLE = `【型】
 ・LinkedIn本文では、太字記号、見出し用の#、行頭のハイフンを使わない。区切りは【】、「〇」、「・」、空行を使う。
 ・入力内容と完成文の間で、人名、企業名、日付、数値、URL、募集条件が変わっていないか、出力前に必ず照合する。`;
 
+// ---------- プロフィール文（LinkedInの見出し＋自己紹介）。学生向け ----------
+export const PROFILE_PROMPT = `あなたは、学生のLinkedInプロフィールづくりを手伝う編集者です。
+回答だけを材料に、LinkedInの「見出し（Headline）」の案を3つと、「自己紹介（About）」の案を1つ書きます。どちらも本人が一人称で書くプロフィールです。
+
+# 必ず守ること
+1. 事実は回答から取る。回答にない大学名・学部・学年・団体名・役職・数字・実績・資格・受賞・スキル・人名を作らない。材料が少ないときは、盛らずに短くまとめる。
+2. 本人の言葉を活かす。回答の言い回しは、できるだけそのまま使う。
+3. 見出しは1案40〜70字を目安にする。「所属｜力を入れていること｜目指していること」のように「｜」で区切ってよい。3案は主役を変える（所属が主役／取り組みが主役／これからが主役 など）。回答に所属がなければ所属は書かない。
+4. 自己紹介は250〜500字。です・ます調。1〜2文ごとに改行し、段落の間に空行を1つ入れる。流れは「いま何をしている人か → 力を入れていること（具体的に）→ 強み・大切にしていること → これから挑戦したいこと → つながりたい人への一言」。回答にない段落は書かない。
+5. 書き出しの1〜2行で、どんな人かが分かるようにする（スマホでは最初の数行しか見えない）。
+6. 学生らしく、背伸びしすぎない。専門用語やカタカナのビジネス語を並べない。「〜と思います」を続けない。
+7. 最後は、つながりを歓迎する一文で締める（回答に合わせて。例：「〇〇に関心のある方と、ぜひつながりたいです」）。
+8. マークダウン、ハッシュタグ（#）、メンション（@）、絵文字は使わない。
+
+# 出力
+次のJSONだけを返す。前後に説明を書かない。
+{"headlines":["…","…","…"],"about":"…"}`;
+
+export const PROFILE_SCHEMA = {
+  type: "object",
+  properties: {
+    headlines: { type: "array", minItems: 3, maxItems: 3, items: { type: "string" } },
+    about: { type: "string" },
+  },
+  required: ["headlines", "about"],
+};
+
+// 見出しは1行（LinkedInの見出しは220字まで）
+const cleanHeadline = (s) =>
+  cleanBody(String(s || "").replace(/\s*\n+\s*/g, " "), "")
+    .replace(/^[「『"]+|[」』"]+$/g, "")
+    .trim()
+    .slice(0, 220);
+
+export function normalizeProfile(json) {
+  if (!json || typeof json !== "object") return null;
+  const headlines = (Array.isArray(json.headlines) ? json.headlines : []).map(cleanHeadline).filter((h) => h.length >= 4).slice(0, 3);
+  const about = cleanBody(json.about, "").slice(0, 2600); // 自己紹介は2600字まで
+  if (!headlines.length || about.length < 60) return null;
+  return { headlines, about };
+}
+
+export function buildProfileInput(p) {
+  const lines = ["【学生の回答】"];
+  for (const a of p.answers) {
+    lines.push(`■${a.label}（質問：${a.question || a.label}）`);
+    if (a.chips.length) lines.push(`・選んだ候補：${a.chips.join("／")}`);
+    if (a.text) lines.push(`・本人のことば：${a.text}`);
+  }
+  if (p.prefs && p.prefs.length) {
+    lines.push("");
+    lines.push("【本人の好み（過去に本人が頼んだ直し指示）】");
+    for (const s of p.prefs) lines.push(`・${s}`);
+  }
+  return lines.join("\n");
+}
+
+export const PROFILE_ACTIONS = {
+  shorter: "今の7割くらいの長さに縮める。いちばん伝えたいことと、最後の一文は残す。",
+  concrete: "回答にある具体的な言葉・場面・行動を増やして、具体的にする。回答にない事実は足さない。",
+  another: "同じ材料のまま、書き出しと構成を変えて書き直す。",
+  custom: "本人の希望どおりに書き直す。",
+};
+
+export function buildProfileRefineInput(p, about, action, request) {
+  return [
+    buildProfileInput(p),
+    "",
+    "【いまの自己紹介（About）】",
+    about,
+    "",
+    "【やってほしいこと】",
+    action === "custom"
+      ? [
+          `この自己紹介を、本人の希望どおりに書き直す。本人の希望：「${cleanRequest(request)}」`,
+          "希望に書かれていない部分は、できるだけ今の文を残す。",
+          "希望の中で本人が書いた事実（学校名・団体名・数字など）は使ってよい。それ以外の事実は足さない。",
+        ].join("\n")
+      : `この自己紹介を書き直す：${PROFILE_ACTIONS[action] || PROFILE_ACTIONS.another}`,
+    "ルールはシステムの指示と同じ。見出しは書かない。",
+    '出力は {"body":"…"} のJSONだけ。',
+  ].join("\n");
+}
+
 // 「書き方」（作る前に選ぶ）。空はおまかせ
 export const MODES = ["", "first", "ishizaka", "custom"];
 const MODE_RULE = {
@@ -201,7 +285,8 @@ export function sanitizePayload(raw) {
     .slice(0, 8)
     .map((s) => clean(s, 80))
     .filter(Boolean);
-  return { answers, style, profile: { role }, name: who, theme, voice, mode, intro, stylePrompt, prefs, tone, photos: 0 };
+  const kind = src.kind === "profile" ? "profile" : "post";
+  return { answers, style, profile: { role }, name: who, theme, voice, mode, intro, stylePrompt, prefs, tone, photos: 0, kind };
 }
 
 // 写真（端末で長辺1024pxのJPEGにしてから届く）。形と大きさだけ確かめる。中身の確認はAI側に任せる

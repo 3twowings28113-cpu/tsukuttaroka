@@ -161,6 +161,63 @@ window.APP_CONFIG = {
     },
   ],
 
+  // プロフィール文を作る（LinkedInの見出し3案＋自己紹介）。学生向け。enabled: false で入口を出さない
+  // cards の id は「p_」で始める（上の cards と重ねない）。required: true は答えないと進めない
+  profile: {
+    enabled: true,
+    openUrl: "https://www.linkedin.com/",
+    cards: [
+      {
+        id: "p_now",
+        label: "いまの所属",
+        question: "いまの所属は？/（大学・学部・学年など）",
+        placeholder: "例：〇〇大学 経済学部の2年生",
+        note: "書いたことだけ使うで。出したくないことは書かんでOK",
+      },
+      {
+        id: "p_focus",
+        label: "力を入れて/いること",
+        question: "いま、/力を入れてることは？",
+        placeholder: "例：ゼミでマーケティングを学びながら、学園祭の広報を担当している",
+        chips: ["ゼミ・研究", "部活・サークル", "アルバイト", "インターン", "学外の活動"],
+        required: true,
+      },
+      {
+        id: "p_strength",
+        label: "強み・/よく言われること",
+        question: "まわりから/よく言われることや、/得意なことは？",
+        placeholder: "例：人の話を最後まで聞くところ、とよく言われる",
+        chips: ["話を聞くのが得意", "段取りが得意", "人前で話せる", "コツコツ続けられる", "アイデアを出せる"],
+      },
+      {
+        id: "p_future",
+        label: "これから/挑戦したいこと",
+        question: "これから挑戦したいことや、/興味のある仕事・業界は？",
+        placeholder: "例：人と人をつなぐ仕事に興味がある。まずはインターンに挑戦したい",
+      },
+      {
+        id: "p_connect",
+        label: "つながりたい人",
+        question: "LinkedInで、/どんな人と/つながりたい？",
+        placeholder: "例：同じ業界を目指す学生や、社会人の先輩",
+        chips: ["同じ目標の学生", "社会人の先輩", "興味のある業界の人", "海外に関心のある人"],
+      },
+    ],
+    // 自己紹介のちょい直し（id は src/ai.js の PROFILE_ACTIONS と合わせる）
+    refineActions: [
+      { id: "shorter", label: "もっと短く" },
+      { id: "concrete", label: "もっと具体的に" },
+      { id: "another", label: "別の言い回し" },
+    ],
+    // 結果の画面の「LinkedInに入れるには」
+    steps: [
+      "使いたい見出しの/「コピー」を押す",
+      "下の「LinkedInをひらく」→/自分の写真のアイコン→/「プロフィールを表示」",
+      "名前の横の鉛筆マークから/「見出し」に貼り付けて保存",
+      "この画面にもどって/「自己紹介をコピー」→/「概要（About）」の/鉛筆マークから貼り付けて保存",
+    ],
+  },
+
   // 何問にするか。who は「どんな人に向いているか」。選んだ問数が、選べるネタの上限になる
   sizes: [
     { n: 1, name: "ひとことだけ", who: "とにかく早く投稿したい人に", minutes: "約1分" },
