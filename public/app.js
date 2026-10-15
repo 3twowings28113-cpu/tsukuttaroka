@@ -114,7 +114,7 @@
     MYKEY = localStorage.getItem(KEY_KEY) || "";
   } catch {}
   function saveApiKey(v) {
-    MYKEY = String(v || "").trim().slice(0, 200);
+    MYKEY = String(v || "").trim().slice(0, 300);
     try {
       if (MYKEY) localStorage.setItem(KEY_KEY, MYKEY);
       else localStorage.removeItem(KEY_KEY);
@@ -1175,13 +1175,13 @@
       <ol class="key-steps">
         <li class="bx">下の「Google AI Studioをひらく」を押して、いつもGmailで使ってる自分のGoogleアカウントでログインする</li>
         <li class="bx">開いたページに<b>「APIキーを作成」</b>（英語なら「Create API key」）というボタンがあるので押す。「プロジェクトを選んで」みたいなの出たら、一番上のままでOK</li>
-        <li class="bx"><b>「AIza」で始まる長い文字</b>が出てくる。これがキーや。右横の<b>コピーマーク</b>（四角が2つ重なったマーク）を押して、まるごとコピーする</li>
-        <li class="bx">この画面にもどって、下の入力欄を<b>長押しして「貼り付け」</b>。「AIza」ではじまってたらOK</li>
-        <li class="bx">最後に<b>「これで紐づける」</b>を押す。ずみの表示が出たら完成</li>
+        <li class="bx">長い文字（<b>「AIza」か「AQ.」で始まる</b>）が出てくる。これがキーや。右横の<b>コピーマーク</b>（四角が2つ重なったマーク）を押して、まるごとコピーする</li>
+        <li class="bx">この画面にもどって、下の「<b>貼り付け</b>」ボタンを押す（長押し貼り付けでもOK）</li>
+        <li class="bx">最後に<b>「これで紐づける」</b>を押す。確認がとれて「つながった！」が出たら完成</li>
       </ol>
       <div class="key-box">
         <label class="key-label" for="apiKeyInput">Gemini APIキー${MYKEY ? '<span class="key-ok">紐づけずみ（この端末）</span>' : '<span class="key-ng">未設定</span>'}</label>
-        <input id="apiKeyInput" class="name-input" type="password" autocomplete="off" inputmode="text" maxlength="200" placeholder="AIza ではじまるキーを貼り付け" value="${esc(MYKEY)}">
+        <input id="apiKeyInput" class="name-input" type="password" autocomplete="off" inputmode="text" maxlength="300" placeholder="キーをまるごと貼り付け" value="${esc(MYKEY)}">
         <div class="key-actions">
           <button type="button" class="btn btn-secondary" data-act="pasteKey">貼り付け</button>
           <a class="btn btn-secondary" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studioをひらく</a>
@@ -1232,7 +1232,7 @@
         <summary>うまくいかへんときは</summary>
         <ul>
           <li class="bx">コピーマークが見当たらへんときは、キーの文字を長押し →「すべて選択」→「コピー」でもOK</li>
-          <li class="bx">「AIza」で始まってへんときは、コピーが途中で切れてるかも。もう一度、最初からコピーし直してみて</li>
+          <li class="bx">キーは「AIza」か「AQ.」ではじまる長い文字や。それ以外の形のときは、コピーが途中で切れてるかも。もう一度、最初からコピーし直してみて</li>
           <li class="bx">「課金」という言葉が出ても怖がらなくて大丈夫。ふだんの使い方なら、無料のままで足りる</li>
           <li class="bx">キーは人に見せたり、SNSに載せたりせえへん。この端末に保存して終わり</li>
         </ul>

@@ -372,12 +372,15 @@ const userKeyOf = (request) => (String(request.headers.get("x-user-key") || "").
 // ---------- キーのお試し確認（紐づけの前に、キーが使えるかだけ確かめる。無料の一覧取得） ----------
 async function checkKey(request) {
   const body = await readJson(request);
-  const key = String(body && body.key || "").trim().slice(0, 200);
-  if (!key.startsWith("AIza")) return json({ ok: false, code: "format", message: "キーが「AIza」で始まってへんみたい。コピーしなおしてみて" }, 400);
+  const key = String((body && body.key) || "").trim().slice(0, 300);
+  if (!key) return json({ ok: false, code: "format", message: "キーが空のままや。貼り付けしなおしてみて" }, 400);
   try {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 10000);
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?pageSize=1&key=${encodeURIComponent(key)}`, { signal: ctl.signal });
+    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1", {
+      headers: { "x-goog-api-key": key },
+      signal: ctl.signal,
+    });
     clearTimeout(timer);
     if (res.ok) return json({ ok: true });
     if (res.status === 400 || res.status === 403) return json({ ok: false, code: "bad_key", message: "キーがちがうみたいや。「APIキーを作成」から作り直すか、もう一度まるごとコピーしてみて" }, 400);
