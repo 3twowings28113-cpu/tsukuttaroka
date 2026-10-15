@@ -5,6 +5,11 @@
 
 export const TONE_IDS = ["emo", "humor", "straight"];
 
+// 表記と出典のルール（投稿文とプロフィール文の両方に入れる）
+const NOTATION_RULES = `・「LinkedIn」は、LとIだけ大文字で書く（Linkedin、linkedin、Linked In、リンクトイン とは書かない）。
+・「LinkedIn Learning」は、LinkedIn と Learning の間に半角スペースを入れて書く。
+・出典のない数字や情報は書かない。統計・調査結果・割合・利用者数・ランキング・「〇割の人が」のような一般論の数字は、回答に書かれていなければ使わない。LinkedInの機能や評判の説明も、回答にないものは書かない。`;
+
 // 作るのは常に1本。トーン（エモい・ユーモア・学び）は書き方の選択で決める
 export const patternCount = () => 1;
 
@@ -61,6 +66,8 @@ export const SYSTEM_PROMPT = `あなたは、LinkedInの投稿づくりを手伝
 22. 【この人の書き方のくせ】があるときは、そこに書かれた一人前・口ぐせ・組み立て・温度感を最優先でまねる（トーン3パターンの型は守りつつ、言葉選びはくせを優先）。長さと絵文字の指定だけは従う。事実は回答から取るルールは変わらない。
 23. 【写真】が付いているときは、写真を見て確かに分かること（写っている物、場の様子や雰囲気）だけを材料に足してよい。写っている人の名前・所属、場所、日付、数字、写真の中の文字の意味は、回答に書かれていなければ推測しない。写真の説明を長々と書かず、回答の話を主役にする。写真と回答が食い違うときは回答を優先する。
 24. 【好み】の「LinkedInの一文」が「入れる」のときは、終わりのほうに、LinkedInを使うことへの前向きな気持ちを1文だけ、本人の言葉として自然に入れる（例：「LinkedInで発信してみると、新しい自分の可能性が見つかりそうでワクワクします」）。言い回しは投稿の流れに合わせて変えてよい。本人が選んだ一文なので、決まり1の例外としてよい。宣伝口調にせず、LinkedInの機能・数字・評判は書かない。「なし」のときは入れない。
+25. 表記と出典は、次のとおりにする。
+${NOTATION_RULES}
 
 # トーン（【トーン】の指定どおり、1本だけ書く）
 - emo（エモい）：その場の空気や、気持ちが動いた瞬間から書き出す。読み終わると少し温かくなる。
@@ -118,6 +125,8 @@ export const PROFILE_PROMPT = `あなたは、学生のLinkedInプロフィー�
 6. 学生らしく、背伸びしすぎない。専門用語やカタカナのビジネス語を並べない。「〜と思います」を続けない。
 7. 最後は、つながりを歓迎する一文で締める（回答に合わせて。例：「〇〇に関心のある方と、ぜひつながりたいです」）。
 8. マークダウン、ハッシュタグ（#）、メンション（@）、絵文字は使わない。
+9. 表記と出典は、次のとおりにする。
+${NOTATION_RULES}
 
 # 出力
 次のJSONだけを返す。前後に説明を書かない。
@@ -246,6 +255,17 @@ export const BODY_SCHEMA = {
   required: ["body"],
 };
 
+// ---------- LinkedInの表記 ----------
+// 「LinkedIn」（LとIだけ大文字）、「LinkedIn Learning」（間に半角スペース）にそろえる。
+// 音声入力で「リンクトイン」になったものも直す。URL（linkedin.com など）とハッシュタグの中は触らない
+export function fixLinkedIn(text) {
+  return String(text ?? "")
+    .replace(/リンク[トド]イン\s*ラーニング/g, "LinkedIn Learning")
+    .replace(/リンク[トド]イン/g, "LinkedIn")
+    .replace(/(?<![A-Za-z0-9_./@#＃:-])linked[ 　]?in(?![A-Za-z0-9_/-])(?!\.[A-Za-z])/gi, "LinkedIn")
+    .replace(/LinkedIn[ 　]*(?:learning|ラーニング)(?![A-Za-z])/gi, "LinkedIn Learning");
+}
+
 // ---------- 入力のチェック ----------
 const clean = (v, max) =>
   String(v ?? "")
@@ -261,8 +281,8 @@ export function sanitizePayload(raw) {
       id: clean(a && a.id, 40),
       label: clean(a && a.label, 40),
       question: clean(a && a.question, 120),
-      chips: (Array.isArray(a && a.chips) ? a.chips : []).slice(0, 10).map((c) => clean(c, 40)).filter(Boolean),
-      text: clean(a && a.text, 400),
+      chips: (Array.isArray(a && a.chips) ? a.chips : []).slice(0, 10).map((c) => fixLinkedIn(clean(c, 40))).filter(Boolean),
+      text: fixLinkedIn(clean(a && a.text, 400)),
     }))
     .filter((a) => a.label && (a.text || a.chips.length));
   const st = src.style && typeof src.style === "object" ? src.style : {};
@@ -274,14 +294,14 @@ export function sanitizePayload(raw) {
     emoji: pickAllowed("emoji", st.emoji, "ちょっと"),
     sign: pickAllowed("sign", st.sign, "なし"),
     cheer: pickAllowed("cheer", st.cheer, "なし"),
-    phrase: clean(st.phrase, 40),
+    phrase: fixLinkedIn(clean(st.phrase, 40)),
   };
   const role = pickAllowed("role", clean(src.profile && src.profile.role, 20), "");
   const who = clean(src.name, 40).replace(/\s+/g, " ");
-  const theme = clean(src.theme, 60);
+  const theme = fixLinkedIn(clean(src.theme, 60));
   const voice = clean(src.voice, 2000);
   const mode = MODES.includes(src.mode) ? src.mode : "";
-  const intro = mode === "first" ? clean(src.intro, 60).replace(/\s+/g, " ") : "";
+  const intro = mode === "first" ? fixLinkedIn(clean(src.intro, 60)).replace(/\s+/g, " ") : "";
   const stylePrompt = mode === "custom" ? clean(src.stylePrompt, 800) : "";
   const tone = TONE_IDS.includes(src.tone) ? src.tone : "emo";
   const prefs = (Array.isArray(src.prefs) ? src.prefs : [])
@@ -402,7 +422,7 @@ export function refinePrompt(raw) {
 
 // ---------- AIの出力の後始末 ----------
 export function cleanBody(text, phrase) {
-  let s = String(text || "").replace(/\r\n?/g, "\n");
+  let s = fixLinkedIn(String(text || "").replace(/\r\n?/g, "\n"));
   s = s.replace(/\*\*|__|~~|`/g, "");
   s = s.replace(/^\s{0,3}#{1,6}\s+/gm, "");
   s = s.replace(/^\s*[-*・]\s+/gm, "・");
