@@ -10,8 +10,9 @@
  *           POST /api/report    「投稿したで！」の報告（名前・投稿のリンク・本文）。端末ごとに1件、送り直すと上書き
  *           GET  /api/stats     件数と、スクリーンに名前を出してOKな人（/qr の表示用）
  *           GET  /api/health    動作確認（version で、いま公開中の版が分かる）
- *           GET  /api/event     イベント（?e=ID）の名前・ハッシュタグ。POST /api/event/unlock であいことばを確かめる
+ *           GET  /api/event     イベント（?e=ID）の名前・ハッシュタグ・メンション・タイムスケジュールなど。POST /api/event/unlock であいことばを確かめる
  *           POST /api/clientlog 端末で起きた失敗の記録（運営ページの「最近のエラー」に出る）
+ *           POST /api/hit       ページを開いた回数（運営ページの「利用状況」に出る。中身は送らない）
  * パネラー用 /api/judge/*        ヘッダー x-judge-key にパネラー用の鍵（合言葉から自動で作る）が必要
  *           GET  /api/judge/feed  報告された投稿（since 以降に増えた・変わったものだけ）
  *           POST /api/judge/star  ★を付ける・外す
@@ -39,11 +40,13 @@ import {
   normalizeProfile,
   buildProfileInput,
   buildProfileRefineInput,
+  PROMPT_DEFAULTS,
+  PROMPT_KEYS,
 } from "./ai.js";
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { extractLinkedInUrl, cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-15.lscw-1";
+const VERSION = "2026-10-16.lscw-2";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -64,10 +67,11 @@ async function route(request, env, ctx, url) {
   const p = url.pathname;
   const m = request.method;
   if (p === "/api/health" && m === "GET") return health(env);
-  if (p === "/api/stats" && m === "GET") return stats(env);
+  if (p === "/api/stats" && m === "GET") return stats(env, url);
   if (p === "/api/generate" && m === "POST") return generate(request, env, ctx);
   if (p === "/api/checkkey" && m === "POST") return checkKey(request);
   if (p === "/api/clientlog" && m === "POST") return clientLog(request, env, ctx);
+  if (p === "/api/hit" && m === "POST") return hit(request, env, ctx);
   if (p === "/api/event" && m === "GET") return eventPublic(env, url);
   if (p === "/api/event/unlock" && m === "POST") return eventUnlock(request, env);
   if (p === "/api/cal" && m === "POST") return calEvents(request, env);
@@ -98,6 +102,10 @@ async function route(request, env, ctx, url) {
     if (p === "/api/admin/events" && m === "GET") return adminEvents(env);
     if (p === "/api/admin/event" && m === "POST") return adminEventSave(request, env);
     if (p === "/api/admin/event-delete" && m === "POST") return adminEventDelete(request, env);
+    if (p === "/api/admin/stats" && m === "GET") return adminStats(env, url);
+    if (p === "/api/admin/prompts" && m === "GET") return adminPrompts(env);
+    if (p === "/api/admin/prompt" && m === "POST") return adminPromptSave(request, env);
+    if (p === "/api/admin/prompt-test" && m === "POST") return adminPromptTest(request, env);
   }
   return json({ ok: false, code: "not_found" }, 404);
 }
@@ -163,9 +171,27 @@ async function getDb(env) {
       console.error("schema", e);
       return null;
     }
+    await seedEvents(env.DB).catch((e) => console.error("seed", e));
   }
   return env.DB;
 }
+
+// 最初の1回だけ、LSCW のイベント（/lscw のページが使う）を作っておく。あいことばなし＝URLを開いた人はサーバーのキーで作れる
+// 運営ページで消したり直したりしたら、それが優先（もう作り直さない）
+const LSCW_NOTE = `この投稿は、学生向けのキャリアイベント「LinkedIn Student Career Week 2026 Autumn」（略してLSCW。オンラインは10/26〜10/30、会場は10/31 東京・日比谷）に参加した学生が書くものです。
+・イベント名は「LinkedIn Student Career Week」と正しく書く。略すときは「LSCW」。
+・企業名・登壇者名・セッション名は、回答に書かれたものだけを使う。
+・選考や内定の結果、企業の評判、イベントの規模（参加人数・社数）は書かない。
+・学生らしい等身大の言葉で書く。就活の不安や迷いがあれば、正直に書きつつ、前向きな次の一歩につなげる。
+・「私の夢」の回答があれば、夢と今日の学びや出会いを、無理なくつなげて書く。`;
+async function seedEvents(db) {
+  const r = await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('seed.lscw', ?)").bind(String(Date.now())).run();
+  if (!(r && r.meta && r.meta.changes)) return;
+  const data = { name: "LinkedIn Student Career Week 2026 Autumn", hashtags: [], pass: "", key: "", cheerAlways: true, active: true, preset: "lscw", aiNote: LSCW_NOTE };
+  await db.prepare("INSERT OR IGNORE INTO event_settings (id, data, updated_at) VALUES ('lscw', ?, ?)").bind(JSON.stringify(data), Date.now()).run();
+}
+// 利用状況のための、端末の目印（端末IDの先頭だけ。名前などは入れない）
+const uidOf = (v) => String(v || "").replace(/[^A-Za-z0-9-]/g, "").slice(0, 16);
 function logEvent(env, ctx, type, detail) {
   const task = (async () => {
     const db = await getDb(env);
@@ -361,11 +387,12 @@ async function callAI(env, { system, input, schema, validate, userKey, adv, imag
     return r;
   }
   const styleName = env.GEMINI_API_STYLE === "generateContent" ? "generateContent" : "interactions";
-  const primary = { model: env.GEMINI_MODEL || "gemini-3.8-flash", style: styleName, timeoutMs: 22000 };
+  // 写真が多いほど、AIの返事に時間がかかる。その分だけ待つ
+  const primary = { model: env.GEMINI_MODEL || "gemini-3.8-flash", style: styleName, timeoutMs: Math.min(45000, 22000 + images.length * 2500) };
   const fallback = {
     model: env.GEMINI_FALLBACK_MODEL || "gemini-flash-lite-latest",
     style: env.GEMINI_FALLBACK_STYLE || styleName,
-    timeoutMs: 16000,
+    timeoutMs: Math.min(35000, 16000 + images.length * 2000),
   };
   const plan = Date.now() < primaryCoolUntil ? [fallback, primary] : [primary, fallback];
   const thinking = env.GEMINI_THINKING === undefined ? "low" : env.GEMINI_THINKING || null;
@@ -397,6 +424,26 @@ async function callAI(env, { system, input, schema, validate, userKey, adv, imag
   return last || { ok: false, status: 0, reason: "NO_MODEL", message: "モデルが未設定" };
 }
 
+// ---------- AIへの指示文（運営ページで書きかえられる。settings の prompt.system など） ----------
+const PROMPT_MAX = 20000;
+// 出力の形（JSON）の説明が消されていたら、最後に足す（書きかえで生成が止まらないように）
+const OUTPUT_TAIL = {
+  system: '\n\n# 出力\n次のJSONだけを返す。前後に説明を書かない。\n{"patterns":[{"tone":"emo","body":"…"}]}',
+  profile: '\n\n# 出力\n次のJSONだけを返す。前後に説明を書かない。\n{"headlines":["…","…","…"],"about":"…"}',
+};
+const OUTPUT_MARK = { system: '"patterns"', profile: '"headlines"' };
+function finishPrompt(key, text) {
+  const t = String(text || "").trim();
+  if (!t) return PROMPT_DEFAULTS[key];
+  return OUTPUT_MARK[key] && !t.includes(OUTPUT_MARK[key]) ? t + OUTPUT_TAIL[key] : t;
+}
+async function promptsOf(env) {
+  const s = await readSettings(env);
+  const out = {};
+  for (const k of PROMPT_KEYS) out[k] = finishPrompt(k, s[`prompt.${k}`]);
+  return out;
+}
+
 // ---------- 参加者用 ----------
 // 端末で入れた自分のキーや、上級者設定（Gemini以外のAI）を受け取る
 const userKeyOf = (request) => (String(request.headers.get("x-user-key") || "").trim().slice(0, 300) || null);
@@ -422,7 +469,10 @@ async function checkKey(request) {
   }
 }
 
-// 写真つきのとき、生成と書き直しは本文が大きくなる（写真4枚まで＋回答）
+// キーを決める。サーバーのキー（GEMINI_API_KEY）は、イベント（あいことばが合う・あいことばなし）経由のときだけ使う
+// （キーなしで直接たたかれても、サーバーのキーは使わせない。どこにもキーがないときだけサンプル文）
+const NO_KEY_MSG = "作るには、イベントのページ（QR）から開くか、じぶんのAIのキーを紐づけてな";
+// 写真つきのとき、生成と書き直しは本文が大きくなる（写真10枚まで＋回答）
 const AI_BODY_MAX = IMAGE_MAX * IMAGE_MAX_CHARS + 60000;
 const imagesKb = (images) => Math.round((images.reduce((n, im) => n + im.data.length, 0) * 3) / 4 / 1024);
 // 写真が原因になりやすい失敗（400・413・返事の形の崩れ）なら、写真なしでもう一度だけ作る
@@ -450,12 +500,26 @@ async function clientLog(request, env, ctx) {
     kb: Math.max(0, Math.min(100000, Number(body.kb) || 0)),
     ua: str(request.headers.get("user-agent"), 160),
     name: cleanName(body.name),
+    u: uidOf(cid),
+    event: cleanEventId(body.event),
   });
   return json({ ok: true });
 }
 
-// ---------- イベント（運営ページで作る。参加者は ?e=イベントID で開く） ----------
-// あいことばが合えば、イベントのAIキー（なければサーバーのキー）で作れる。参加者がキーを作らなくていい
+// ページを開いた記録（利用状況。端末の目印・ページ・イベントだけ）
+async function hit(request, env, ctx) {
+  const body = await readJson(request, 2000);
+  if (!body) return json({ ok: false, code: "input" }, 400);
+  const cid = String(body.clientId || "").slice(0, 64);
+  const ip = request.headers.get("cf-connecting-ip") || "local";
+  if (limited(`h:${cid}`, 10, 60000) || limited(`hi:${ip}`, 1200, 60000)) return json({ ok: false, code: "rate" }, 429);
+  logEvent(env, ctx, "view", { u: uidOf(cid), page: oneLine(body.page, 20), preset: oneLine(body.preset, 20), event: cleanEventId(body.event) });
+  return json({ ok: true });
+}
+
+// ---------- イベント（運営ページで作る。参加者は ?e=イベントID か、専用ページ（/lscw など）で開く） ----------
+// あいことばのあるイベント：あいことばが合えば、イベントのAIキー（なければサーバーのキー）で作れる。参加者がキーを作らなくていい
+// あいことばのないイベント：URLを開いた人は、だれでもイベントのAIキー（なければサーバーのキー）で作れる
 const NO_EVENT = { key: null, id: "" };
 const cleanEventId = (v) => {
   const s = String(v || "").trim().toLowerCase();
@@ -468,6 +532,74 @@ function cleanHashtags(v) {
     const t = String(raw || "").replace(/^[#＃]+/, "").replace(/[\s#＃]/g, "").slice(0, 40);
     if (t && !out.includes(`#${t}`)) out.push(`#${t}`);
     if (out.length >= 10) break;
+  }
+  return out;
+}
+const oneLine = (v, n) => String(v ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
+const multiLine = (v, n) => String(v ?? "").replace(/\r\n?/g, "\n").replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, " ").trim().slice(0, n);
+const httpsUrl = (v) => {
+  try {
+    const u = new URL(String(v || "").trim());
+    return u.protocol === "https:" ? u.toString().slice(0, 500) : "";
+  } catch {
+    return "";
+  }
+};
+const hexColor = (v) => (/^#[0-9A-Fa-f]{6}$/.test(String(v || "").trim()) ? String(v).trim().toUpperCase() : "");
+// メンション：1行に1つ「表示名」か「表示名 | 打つ文字」（例：LinkedIn | @LinkedIn）。5つまで
+function cleanMentions(v) {
+  const lines = Array.isArray(v) ? v.map((m) => (m && typeof m === "object" ? `${m.name || ""}|${m.typeHint || ""}` : m)) : String(v || "").split(/\r?\n/);
+  const out = [];
+  for (const line of lines) {
+    const [a, b] = String(line || "").split(/[|｜]/);
+    const name = oneLine(a, 40).replace(/^[@＠]+/, "");
+    if (!name || out.some((m) => m.name === name)) continue;
+    const hint = oneLine(b, 40);
+    out.push({ name, typeHint: hint ? (/^[@＠]/.test(hint) ? hint : `@${hint}`) : `@${name}` });
+    if (out.length >= 5) break;
+  }
+  return out;
+}
+// タイムスケジュール：「## 日の見出し」の行と、「時間 | タイトル | 補足」の行。40行まで
+function parseSchedule(v) {
+  if (Array.isArray(v)) return v.slice(0, 40).map((x) => ({ day: oneLine(x && x.day, 40), time: oneLine(x && x.time, 20), title: oneLine(x && x.title, 60), note: oneLine(x && x.note, 120) })).filter((x) => x.title);
+  const out = [];
+  let day = "";
+  for (const raw of String(v || "").split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const h = line.match(/^[#＃]{1,3}\s*(.+)$/);
+    if (h) {
+      day = oneLine(h[1], 40);
+      continue;
+    }
+    const parts = line.split(/[|｜]/).map((x) => x.trim());
+    const [time, title, note] = parts.length >= 2 ? parts : ["", parts[0], ""];
+    if (!title) continue;
+    out.push({ day, time: oneLine(time, 20), title: oneLine(title, 60), note: oneLine(note, 120) });
+    if (out.length >= 40) break;
+  }
+  return out;
+}
+const scheduleText = (list) => {
+  let day = null;
+  const lines = [];
+  for (const it of list || []) {
+    if (it.day !== day) {
+      day = it.day;
+      if (day) lines.push(`## ${day}`);
+    }
+    lines.push([it.time, it.title, it.note].filter((x, i) => x || i < 2).join(" | "));
+  }
+  return lines.join("\n");
+};
+const INFO_KEYS = ["title", "when", "place", "mapUrl", "siteUrl", "siteLabel", "note"];
+function cleanInfo(v) {
+  const src = v && typeof v === "object" ? v : {};
+  const out = {};
+  for (const k of INFO_KEYS) {
+    const val = /Url$/.test(k) ? httpsUrl(src[k]) : oneLine(src[k], k === "note" ? 200 : 120);
+    if (val) out[k] = val;
   }
   return out;
 }
@@ -484,12 +616,13 @@ async function readEvent(env, id, fresh = false) {
   if (eventCache.size > 200) eventCache.clear();
   return ev;
 }
+const eventActive = (ev) => !!ev && ev.active !== false;
 const passError = () => json({ ok: false, code: "pass", message: "あいことばが変わったみたい。もう一度入れてな" }, 403);
 // 生成のヘッダー（x-event と x-event-pass）から、使うキーを決める。あいことばがちがうときは bad
 async function eventKeyOf(request, env) {
   const id = cleanEventId(request.headers.get("x-event"));
-  const raw = request.headers.get("x-event-pass");
-  if (!id || !raw) return NO_EVENT;
+  if (!id) return NO_EVENT;
+  const raw = request.headers.get("x-event-pass") || "";
   let pass = "";
   try {
     pass = decodeURIComponent(raw).trim();
@@ -497,16 +630,40 @@ async function eventKeyOf(request, env) {
     return { ...NO_EVENT, bad: true };
   }
   const ev = await readEvent(env, id);
-  if (!ev || !ev.active || !ev.pass || !safeEqual(ev.pass, pass)) return { ...NO_EVENT, id, bad: true };
+  if (!eventActive(ev)) return { ...NO_EVENT, id, bad: true };
+  if (ev.pass && !safeEqual(ev.pass, pass)) return { ...NO_EVENT, id, bad: true };
   return { key: ev.key || env.GEMINI_API_KEY || null, id };
+}
+// イベントごとのAIへの追加の指示（自分のキーで作る人にも効く。本文の event で受け取る）
+async function eventNoteOf(env, id) {
+  const ev = await readEvent(env, cleanEventId(id)).catch(() => null);
+  return eventActive(ev) ? multiLine(ev.aiNote, 1500) : "";
 }
 // 参加者の画面用（あいことばとキーは返さない）
 async function eventPublic(env, url) {
   const ev = await readEvent(env, cleanEventId(url.searchParams.get("e")));
-  if (!ev || !ev.active) return json({ ok: false, code: "no_event", message: "このイベントは、いまは使えません" }, 404);
+  if (!eventActive(ev)) return json({ ok: false, code: "no_event", message: "このイベントは、いまは使えません" }, 404);
+  const hasKey = !!(ev.key || env.GEMINI_API_KEY);
   return json({
     ok: true,
-    event: { id: ev.id, name: ev.name || "", hashtags: ev.hashtags || [], cheerAlways: !!ev.cheerAlways, preset: ev.preset || "", needsPass: !!ev.pass, hasKey: !!(ev.pass && (ev.key || env.GEMINI_API_KEY)) },
+    event: {
+      id: ev.id,
+      name: ev.name || "",
+      hashtags: ev.hashtags || [],
+      cheerAlways: !!ev.cheerAlways,
+      preset: ev.preset || "",
+      needsPass: !!ev.pass,
+      hasKey,
+      open: !ev.pass && hasKey,
+      mentions: ev.mentions || [],
+      mentionInText: ev.mentionInText !== false,
+      followUrl: ev.followUrl || "",
+      followName: ev.followName || "",
+      followRequired: ev.followRequired === true,
+      info: ev.info || {},
+      schedule: ev.schedule || [],
+      theme: ev.theme || null,
+    },
   });
 }
 async function eventUnlock(request, env) {
@@ -518,30 +675,55 @@ async function eventUnlock(request, env) {
   const pass = String((body && body.pass) || "").trim().slice(0, 60);
   if (!id || !pass) return json({ ok: false, code: "input", message: "あいことばを入れてな" }, 400);
   const ev = await readEvent(env, id);
-  if (!ev || !ev.active) return json({ ok: false, code: "no_event", message: "このイベントは、いまは使えません" }, 404);
-  if (!ev.pass || !safeEqual(ev.pass, pass)) return json({ ok: false, code: "pass", message: "あいことばがちがうみたい。スタッフに聞いてな" }, 403);
+  if (!eventActive(ev)) return json({ ok: false, code: "no_event", message: "このイベントは、いまは使えません" }, 404);
+  if (ev.pass && !safeEqual(ev.pass, pass)) return json({ ok: false, code: "pass", message: "あいことばがちがうみたい。スタッフに聞いてな" }, 403);
   if (!ev.key && !env.GEMINI_API_KEY) return json({ ok: false, code: "no_key", message: "イベントのAIキーがまだ設定されてへん。スタッフに声かけてな" }, 503);
   return json({ ok: true });
 }
 // 運営ページ：イベントの一覧・作成・変更・削除（キーは末尾4文字だけ見せる）
+function eventForAdmin(id, d, updatedAt) {
+  return {
+    id,
+    name: d.name || "",
+    hashtags: d.hashtags || [],
+    pass: d.pass || "",
+    keySet: !!d.key,
+    keyTail: d.key ? String(d.key).slice(-4) : "",
+    cheerAlways: !!d.cheerAlways,
+    active: d.active !== false,
+    preset: d.preset || "",
+    mentions: d.mentions || [],
+    mentionInText: d.mentionInText !== false,
+    followUrl: d.followUrl || "",
+    followName: d.followName || "",
+    followRequired: d.followRequired === true,
+    aiNote: d.aiNote || "",
+    info: d.info || {},
+    schedule: d.schedule || [],
+    scheduleText: scheduleText(d.schedule || []),
+    theme: d.theme || null,
+    updatedAt,
+  };
+}
 async function adminEvents(env) {
   const db = await getDb(env);
   if (!db) return json({ ok: false, code: "db", message: "データベースがありません" }, 503);
   const { results } = await db.prepare("SELECT id, data, updated_at FROM event_settings ORDER BY updated_at DESC").all();
-  const events = (results || []).map((r) => {
-    const d = safeParse(r.data);
-    return { id: r.id, name: d.name || "", hashtags: d.hashtags || [], pass: d.pass || "", keySet: !!d.key, keyTail: d.key ? String(d.key).slice(-4) : "", cheerAlways: !!d.cheerAlways, active: d.active !== false, preset: d.preset || "", updatedAt: r.updated_at };
-  });
+  const events = (results || []).map((r) => eventForAdmin(r.id, safeParse(r.data), r.updated_at));
   return json({ ok: true, events, serverKey: !!env.GEMINI_API_KEY });
 }
 async function adminEventSave(request, env) {
-  const body = await readJson(request, 8000);
+  const body = await readJson(request, 40000);
   const id = cleanEventId(body && body.id);
   if (!id) return json({ ok: false, code: "input", message: "イベントIDは、英小文字・数字・ハイフンで40字まで（例：lscw2026）" }, 400);
   const db = await getDb(env);
   if (!db) return json({ ok: false, code: "db", message: "データベースがありません" }, 503);
   const prev = (await readEvent(env, id, true)) || {};
   const str = (v, n) => String(v ?? "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, n);
+  const followUrl = httpsUrl(body.followUrl);
+  if (String(body.followUrl || "").trim() && !followUrl) return json({ ok: false, code: "input", message: "フォローしてほしいページのURLは https:// から始まるURLにしてください" }, 400);
+  const ground = hexColor(body.theme && body.theme.ground);
+  const accent = hexColor(body.theme && body.theme.accent);
   const data = {
     name: str(body.name, 60),
     hashtags: cleanHashtags(body.hashtags),
@@ -550,10 +732,29 @@ async function adminEventSave(request, env) {
     cheerAlways: body.cheerAlways === true,
     active: body.active !== false,
     preset: str(body.preset, 20),
+    mentions: cleanMentions(body.mentions),
+    mentionInText: body.mentionInText !== false,
+    followUrl,
+    followName: oneLine(body.followName, 40),
+    followRequired: !!followUrl && body.followRequired === true,
+    aiNote: multiLine(body.aiNote, 1500),
+    info: cleanInfo(body.info),
+    schedule: parseSchedule(body.schedule),
+    theme: ground || accent ? { ...(ground ? { ground, onGround: onColor(ground), onGroundSoft: onColor(ground) } : {}), ...(accent ? { accent, check: accent } : {}) } : null,
   };
   await db.prepare("INSERT INTO event_settings (id, data, updated_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at").bind(id, JSON.stringify(data), Date.now()).run();
   eventCache.delete(id);
-  return json({ ok: true });
+  return json({ ok: true, event: eventForAdmin(id, data, Date.now()) });
+}
+// 地の色に合わせて、地の上の文字を白か黒にする（明るい地なら黒）
+function onColor(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  const lin = (c) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  const L = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  return (1.05 / (L + 0.05)) >= ((L + 0.05) / 0.0573) ? "#FFFFFF" : "#121212";
 }
 async function adminEventDelete(request, env) {
   const body = await readJson(request, 2000);
@@ -583,24 +784,30 @@ async function generate(request, env, ctx) {
 
   const cards = p.answers.map((a) => a.label);
   const who = cleanName(body.name);
-  if (!key && !aiCfg && !env.GEMINI_API_KEY) {
-    logEvent(env, ctx, "generate", { cards, sample: true, name: who, mode: p.mode, kind: p.kind, followed: body.followed === true });
+  const evId = ev.id || cleanEventId(body.event);
+  const base = { u: uidOf(cid), event: evId, page: oneLine(body.page, 20), name: who, kind: p.kind, followed: body.followed === true };
+  if (!key && !aiCfg) {
+    if (env.GEMINI_API_KEY) return json({ ok: false, code: "no_key", message: NO_KEY_MSG }, 403);
+    logEvent(env, ctx, "generate", { ...base, cards, sample: true, mode: p.mode });
     return json({ ok: true, sample: true });
   }
+  const prompts = await promptsOf(env);
+  p.eventNote = await eventNoteOf(env, evId);
+  p.ishizakaStyle = prompts.ishizaka;
   // プロフィール文（見出し3案＋自己紹介）。写真は使わない
   if (p.kind === "profile") {
-    const r = await callAI(env, { userKey: key, adv: aiCfg, system: PROFILE_PROMPT, input: buildProfileInput(p), schema: PROFILE_SCHEMA, validate: normalizeProfile });
+    const r = await callAI(env, { userKey: key, adv: aiCfg, system: prompts.profile, input: buildProfileInput(p), schema: PROFILE_SCHEMA, validate: normalizeProfile });
     if (!r.ok) {
-      logEvent(env, ctx, "error", { where: "profile", status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey });
+      logEvent(env, ctx, "error", { where: "profile", status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey, u: base.u, event: evId });
       return json({ ok: false, code: "failed", message: ukey ? explainFailure(r) : "生成に失敗しました" }, 502);
     }
-    logEvent(env, ctx, "generate", { cards, model: r.model, ms: r.ms, name: who, mode: "profile", kind: "profile", followed: body.followed === true, event: ev.id || "" });
+    logEvent(env, ctx, "generate", { ...base, cards, model: r.model, ms: r.ms, mode: "profile", ownKey: !!(ukey || aiCfg) });
     return json({ ok: true, profile: r.value, model: r.model });
   }
   const opts = (imgs) => ({
     userKey: key,
     adv: aiCfg,
-    system: SYSTEM_PROMPT,
+    system: prompts.system,
     input: buildUserInput({ ...p, photos: imgs.length }),
     images: imgs,
     schema: patternsSchema(patternCount(p.mode), p.tone),
@@ -609,15 +816,15 @@ async function generate(request, env, ctx) {
   let r = await callAI(env, opts(images));
   let photoSkipped = false;
   if (!r.ok && images.length && photoRetryable(r)) {
-    logEvent(env, ctx, "error", { where: "generate:photo", status: r.status, reason: r.reason, model: r.model, photos: images.length, kb: imagesKb(images), message: String(r.message || "").slice(0, 160) });
+    logEvent(env, ctx, "error", { where: "generate:photo", status: r.status, reason: r.reason, model: r.model, photos: images.length, kb: imagesKb(images), message: String(r.message || "").slice(0, 160), u: base.u, event: evId });
     r = await callAI(env, opts([]));
     photoSkipped = r.ok;
   }
   if (!r.ok) {
-    logEvent(env, ctx, "error", { where: "generate", status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey, photos: images.length, kb: imagesKb(images) });
+    logEvent(env, ctx, "error", { where: "generate", status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey, photos: images.length, kb: imagesKb(images), u: base.u, event: evId });
     return json({ ok: false, code: "failed", message: ukey ? explainFailure(r) : "生成に失敗しました" }, 502);
   }
-  logEvent(env, ctx, "generate", { cards, model: r.model, ms: r.ms, name: who, mode: p.mode, followed: body.followed === true, photos: images.length, photoSkipped, event: ev.id || "" });
+  logEvent(env, ctx, "generate", { ...base, cards, model: r.model, ms: r.ms, mode: p.mode, photos: images.length, photoSkipped, ownKey: !!(ukey || aiCfg) });
   return json({ ok: true, patterns: r.value, model: r.model, photoSkipped });
 }
 
@@ -720,7 +927,7 @@ async function styleProfile(request, env) {
   const ev = ukey ? NO_EVENT : await eventKeyOf(request, env);
   if (ev.bad) return passError();
   const key = ukey || ev.key;
-  if (!key && !env.GEMINI_API_KEY) return json({ ok: false, code: "no_key", message: "先に、AIのキーを入れてな" }, 403);
+  if (!key) return json({ ok: false, code: "no_key", message: "先に、AIのキーを入れてな" }, 403);
   const ip = request.headers.get("cf-connecting-ip") || "local";
   if (limited(`st:${ip}`, 15, 60000)) return json({ ok: false, code: "rate" }, 429);
   const r = await callAI(env, {
@@ -761,12 +968,19 @@ async function refine(request, env, ctx) {
   const ev = ukey || aiCfg ? NO_EVENT : await eventKeyOf(request, env);
   if (ev.bad) return passError();
   const key = ukey || ev.key;
-  if (!key && !aiCfg && !env.GEMINI_API_KEY) return json({ ok: true, sample: true });
+  if (!key && !aiCfg) {
+    if (env.GEMINI_API_KEY) return json({ ok: false, code: "no_key", message: NO_KEY_MSG }, 403);
+    return json({ ok: true, sample: true });
+  }
+  const evId = ev.id || cleanEventId(body.event);
+  const prompts = await promptsOf(env);
+  p.eventNote = await eventNoteOf(env, evId);
+  p.ishizakaStyle = prompts.ishizaka;
 
   const opts = (imgs) => ({
     userKey: key,
     adv: aiCfg,
-    system: isProfile ? PROFILE_PROMPT : SYSTEM_PROMPT,
+    system: isProfile ? prompts.profile : prompts.system,
     input: isProfile ? buildProfileRefineInput(p, current, action, ask) : buildRefineInput({ ...p, photos: imgs.length }, tone, current, action, ask),
     images: imgs,
     schema: BODY_SCHEMA,
@@ -777,14 +991,14 @@ async function refine(request, env, ctx) {
   });
   let r = await callAI(env, opts(images));
   if (!r.ok && images.length && photoRetryable(r)) {
-    logEvent(env, ctx, "error", { where: "refine:photo", status: r.status, reason: r.reason, model: r.model, photos: images.length, kb: imagesKb(images), message: String(r.message || "").slice(0, 160) });
+    logEvent(env, ctx, "error", { where: "refine:photo", status: r.status, reason: r.reason, model: r.model, photos: images.length, kb: imagesKb(images), message: String(r.message || "").slice(0, 160), u: uidOf(cid), event: evId });
     r = await callAI(env, opts([]));
   }
   if (!r.ok) {
-    logEvent(env, ctx, "error", { where: "refine", status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey, photos: images.length });
+    logEvent(env, ctx, "error", { where: "refine", status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey, photos: images.length, u: uidOf(cid), event: evId });
     return json({ ok: false, code: "failed", message: ukey ? explainFailure(r) : "書き直しに失敗しました" }, 502);
   }
-  logEvent(env, ctx, "refine", { action, tone: isProfile ? "" : tone, model: r.model, name: cleanName(body.name), mode: isProfile ? "profile" : p.mode, kind: p.kind, photos: images.length });
+  logEvent(env, ctx, "refine", { action, tone: isProfile ? "" : tone, model: r.model, name: cleanName(body.name), mode: isProfile ? "profile" : p.mode, kind: p.kind, photos: images.length, u: uidOf(cid), event: evId, page: oneLine(body.page, 20) });
   return json({ ok: true, body: r.value, model: r.model });
 }
 
@@ -801,7 +1015,7 @@ async function submit(request, env) {
   const now = new Date().toISOString();
   const consent = body.consent === true;
   const stmts = [
-    db.prepare("INSERT INTO events (created_at, type, detail) VALUES (?, ?, ?)").bind(now, action, JSON.stringify({ tone, consent, name: cleanName(body.name), mode: p.mode, kind: p.kind })),
+    db.prepare("INSERT INTO events (created_at, type, detail) VALUES (?, ?, ?)").bind(now, action, JSON.stringify({ tone, consent, name: cleanName(body.name), mode: p.mode, kind: p.kind, u: uidOf(cid), event: cleanEventId(body.event), page: oneLine(body.page, 20) })),
   ];
   if (consent) {
     const patterns = {};
@@ -830,14 +1044,18 @@ async function submit(request, env) {
   return json({ ok: true, stored: consent });
 }
 
-let statsCache = { at: 0, data: null };
-async function stats(env) {
-  if (statsCache.data && Date.now() - statsCache.at < 5000) return json(statsCache.data);
+let statsCache = { at: 0, data: null, e: "" };
+async function stats(env, url) {
+  // ?e=イベントID のときは、そのイベントで作られた件数だけ（報告の人数は全体）
+  const e = cleanEventId(url && url.searchParams.get("e"));
+  if (statsCache.data && statsCache.e === e && Date.now() - statsCache.at < 5000) return json(statsCache.data);
   const db = await getDb(env);
   const data = { ok: true, generated: 0, copied: 0, later: 0, reported: 0, latest: [] };
   if (db) {
     const [ev, rc, latest] = await db.batch([
-      db.prepare("SELECT type, COUNT(*) AS n FROM events GROUP BY type"),
+      e
+        ? db.prepare("SELECT type, COUNT(*) AS n FROM events WHERE json_extract(detail, '$.event') = ? GROUP BY type").bind(e)
+        : db.prepare("SELECT type, COUNT(*) AS n FROM events GROUP BY type"),
       db.prepare("SELECT COUNT(*) AS n FROM reports WHERE hidden = 0"),
       // 会場スクリーンに出すのは「名前を出してOK」の人の名前だけ（本文は出さない）
       db.prepare("SELECT name, created_at FROM reports WHERE hidden = 0 AND screen_ok = 1 ORDER BY created_at DESC LIMIT 8"),
@@ -850,7 +1068,7 @@ async function stats(env) {
     data.reported = (rc.results && rc.results[0] && rc.results[0].n) || 0;
     data.latest = (latest.results || []).map((r) => ({ name: r.name, at: r.created_at }));
   }
-  statsCache = { at: Date.now(), data };
+  statsCache = { at: Date.now(), data, e };
   return json(data);
 }
 
@@ -884,7 +1102,7 @@ async function report(request, env, ctx) {
     .bind(crypto.randomUUID(), now, now, cid, name, u.url || "", text, source, tone, screenOk)
     .run();
   const row = await db.prepare("SELECT id, created_at FROM reports WHERE client_id = ?").bind(cid).first();
-  if (row && row.created_at === now) logEvent(env, ctx, "report", { source, hasUrl: !!u.url });
+  if (row && row.created_at === now) logEvent(env, ctx, "report", { source, hasUrl: !!u.url, u: uidOf(cid), event: cleanEventId(body.event) });
   statsCache = { at: 0, data: null };
   return json({ ok: true, id: row ? row.id : "", createdAt: row ? row.created_at : now, url: u.url || "" });
 }
@@ -1166,6 +1384,181 @@ async function adminWipe(request, env) {
   await db.batch([db.prepare("DELETE FROM posts"), db.prepare("DELETE FROM events"), db.prepare("DELETE FROM reports"), db.prepare("DELETE FROM stars")]);
   statsCache = { at: 0, data: null };
   return json({ ok: true });
+}
+
+// ---------- 運営用：利用状況（どれくらい使われているか） ----------
+// events の detail に入れている u（端末の目印）・event（イベントID）で数える。u はこの版（2026-10-16）から入れはじめた
+const jstDay = (t) => new Date(t + 9 * 3600 * 1000).toISOString().slice(0, 10);
+async function adminStats(env, url) {
+  const db = await getDb(env);
+  if (!db) return json({ ok: false, code: "no_db", message: "データベースがありません" }, 503);
+  const days = Math.min(60, Math.max(1, Number(url.searchParams.get("days")) || 14));
+  const eRaw = String(url.searchParams.get("e") || "");
+  const e = eRaw === "-" ? "-" : cleanEventId(eRaw); // "-" はイベントなし（普段使い）
+  const now = Date.now();
+  const today = jstDay(now);
+  const firstDay = jstDay(now - (days - 1) * 86400000);
+  const since = new Date(Date.parse(`${firstDay}T00:00:00+09:00`)).toISOString();
+  const todayStart = new Date(Date.parse(`${today}T00:00:00+09:00`)).toISOString();
+  const EV = "COALESCE(json_extract(detail, '$.event'), '')";
+  const U = "json_extract(detail, '$.u')";
+  const cond = e === "-" ? ` AND ${EV} = ''` : e ? ` AND ${EV} = ?` : "";
+  const b = (first) => (e && e !== "-" ? [first, e] : [first]);
+  const q = (sql, first) => db.prepare(sql).bind(...b(first));
+  const [totals, users, daily, dailyU, hourly, gens, convU, byEv, byEvU, names] = await db.batch([
+    q(`SELECT type, COUNT(*) AS n, COUNT(DISTINCT ${U}) AS u FROM events WHERE created_at >= ?${cond} GROUP BY type`, since),
+    q(`SELECT COUNT(DISTINCT ${U}) AS u FROM events WHERE created_at >= ?${cond} AND COALESCE(${U}, '') != ''`, since),
+    q(`SELECT strftime('%Y-%m-%d', created_at, '+9 hours') AS d, type, COUNT(*) AS n FROM events WHERE created_at >= ?${cond} GROUP BY d, type`, since),
+    q(`SELECT strftime('%Y-%m-%d', created_at, '+9 hours') AS d, COUNT(DISTINCT ${U}) AS u FROM events WHERE created_at >= ?${cond} AND COALESCE(${U}, '') != '' GROUP BY d`, since),
+    q(`SELECT CAST(strftime('%H', created_at, '+9 hours') AS INTEGER) AS h, type, COUNT(*) AS n FROM events WHERE created_at >= ?${cond} GROUP BY h, type`, todayStart),
+    q(`SELECT COALESCE(json_extract(detail, '$.kind'), 'post') AS k, COUNT(*) AS n,
+         SUM(CASE WHEN COALESCE(json_extract(detail, '$.photos'), 0) > 0 THEN 1 ELSE 0 END) AS wp,
+         SUM(COALESCE(json_extract(detail, '$.photos'), 0)) AS ph,
+         SUM(CASE WHEN json_extract(detail, '$.ownKey') = 1 THEN 1 ELSE 0 END) AS own,
+         AVG(json_extract(detail, '$.ms')) AS ms
+       FROM events WHERE type = 'generate' AND created_at >= ?${cond} GROUP BY k`, since),
+    q(`SELECT COUNT(DISTINCT ${U}) AS u FROM events WHERE type IN ('copy', 'later') AND created_at >= ?${cond} AND COALESCE(${U}, '') != ''`, since),
+    db.prepare(`SELECT ${EV} AS ev, type, COUNT(*) AS n FROM events WHERE created_at >= ? GROUP BY ev, type`).bind(since),
+    db.prepare(`SELECT ${EV} AS ev, COUNT(DISTINCT ${U}) AS u FROM events WHERE created_at >= ? AND COALESCE(${U}, '') != '' GROUP BY ev`).bind(since),
+    db.prepare("SELECT id, data FROM event_settings"),
+  ]);
+  const TYPES = ["view", "generate", "refine", "copy", "later", "report", "error"];
+  const zero = () => Object.fromEntries(TYPES.map((t) => [t, 0]));
+  const total = zero();
+  const totalU = zero();
+  for (const r of totals.results || []) {
+    if (r.type in total) {
+      total[r.type] = r.n;
+      totalU[r.type] = r.u;
+    }
+  }
+  const dayList = [];
+  for (let i = days - 1; i >= 0; i--) dayList.push({ d: jstDay(now - i * 86400000), ...zero(), users: 0 });
+  const dayMap = new Map(dayList.map((x) => [x.d, x]));
+  for (const r of daily.results || []) {
+    const x = dayMap.get(r.d);
+    if (x && r.type in x) x[r.type] = r.n;
+  }
+  for (const r of dailyU.results || []) {
+    const x = dayMap.get(r.d);
+    if (x) x.users = r.u;
+  }
+  const hours = Array.from({ length: 24 }, (_, h) => ({ h, ...zero() }));
+  for (const r of hourly.results || []) if (hours[r.h] && r.type in hours[r.h]) hours[r.h][r.type] = r.n;
+  const kinds = {};
+  let photosUsed = 0;
+  let photosTotal = 0;
+  let ownKey = 0;
+  let msSum = 0;
+  let msN = 0;
+  for (const r of gens.results || []) {
+    kinds[r.k] = r.n;
+    photosUsed += r.wp || 0;
+    photosTotal += r.ph || 0;
+    ownKey += r.own || 0;
+    if (r.ms) {
+      msSum += r.ms * r.n;
+      msN += r.n;
+    }
+  }
+  const evName = {};
+  for (const r of names.results || []) evName[r.id] = safeParse(r.data).name || r.id;
+  const byEvent = new Map();
+  const evRow = (id) => {
+    if (!byEvent.has(id)) byEvent.set(id, { id, name: id ? evName[id] || id : "イベントなし（普段使い）", users: 0, ...zero() });
+    return byEvent.get(id);
+  };
+  for (const r of byEv.results || []) if (TYPES.includes(r.type)) evRow(r.ev)[r.type] = r.n;
+  for (const r of byEvU.results || []) evRow(r.ev).users = r.u;
+  const todayRow = dayMap.get(today) || { ...zero(), users: 0 };
+  return json({
+    ok: true,
+    days,
+    event: e,
+    today: { ...todayRow },
+    total,
+    users: (users.results && users.results[0] && users.results[0].u) || 0,
+    funnel: {
+      viewed: totalU.view,
+      made: totalU.generate,
+      copied: (convU.results && convU.results[0] && convU.results[0].u) || 0,
+      reported: totalU.report,
+    },
+    daily: dayList,
+    hourly: hours,
+    kinds,
+    photos: { used: photosUsed, total: photosTotal },
+    ownKey,
+    avgMs: msN ? Math.round(msSum / msN) : 0,
+    byEvent: [...byEvent.values()].sort((a, b2) => b2.users - a.users || b2.generate - a.generate),
+  });
+}
+
+// ---------- 運営用：AIへの指示文（書きかえ・元に戻す・ためしに作る） ----------
+const PROMPT_LABEL = { system: "投稿文の指示文", profile: "プロフィール文の指示文", ishizaka: "石坂さん風の型" };
+async function adminPrompts(env) {
+  const s = await readSettings(env, true);
+  const prompts = {};
+  for (const k of PROMPT_KEYS) {
+    const custom = String(s[`prompt.${k}`] || "");
+    prompts[k] = { label: PROMPT_LABEL[k] || k, current: custom || PROMPT_DEFAULTS[k], default: PROMPT_DEFAULTS[k], custom: !!custom, hasPrev: !!s[`prompt.${k}.prev`], updatedAt: Number(s[`prompt.${k}.at`]) || 0 };
+  }
+  return json({ ok: true, prompts, serverKey: !!env.GEMINI_API_KEY });
+}
+async function adminPromptSave(request, env) {
+  const body = await readJson(request, PROMPT_MAX * 4 + 2000);
+  const key = body && PROMPT_KEYS.includes(body.key) ? body.key : "";
+  if (!key) return json({ ok: false, code: "input", message: "どの指示文かが分かりません" }, 400);
+  const db = await getDb(env);
+  if (!db) return json({ ok: false, code: "no_db", message: "データベースがありません" }, 503);
+  const s = await readSettings(env, true);
+  const cur = String(s[`prompt.${key}`] || "");
+  let next;
+  if (body.restore === "default") next = "";
+  else if (body.restore === "prev") next = String(s[`prompt.${key}.prev`] || "");
+  else {
+    next = String(body.text || "").replace(/\r\n?/g, "\n").trim();
+    if (next.length > PROMPT_MAX) return json({ ok: false, code: "input", message: `長すぎます（${PROMPT_MAX}字まで）` }, 400);
+    if (next.length < 20) return json({ ok: false, code: "input", message: "短すぎます。元に戻すときは「初期の文に戻す」を押してください" }, 400);
+    if (next === PROMPT_DEFAULTS[key]) next = "";
+  }
+  const up = (k, v) => db.prepare("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(k, v);
+  const del = (k) => db.prepare("DELETE FROM settings WHERE key = ?").bind(k);
+  const stmts = [next ? up(`prompt.${key}`, next) : del(`prompt.${key}`), up(`prompt.${key}.at`, String(Date.now()))];
+  // ひとつ前の文を覚えておく（「ひとつ前に戻す」用）。同じ文のときは覚えない
+  if (cur !== next) stmts.push(cur ? up(`prompt.${key}.prev`, cur) : del(`prompt.${key}.prev`));
+  await db.batch(stmts);
+  settingsCache.at = 0;
+  return adminPrompts(env);
+}
+// 保存する前に、書きかけの指示文で1本作ってみる（サーバーのキーを使う。記録には残さない）
+async function adminPromptTest(request, env) {
+  const body = await readJson(request, PROMPT_MAX * 4 + 8000);
+  if (!body) return json({ ok: false, code: "input" }, 400);
+  if (!env.GEMINI_API_KEY) return json({ ok: false, code: "no_key", message: "サーバーのキー（GEMINI_API_KEY）がないので、ためせません" }, 400);
+  if (limited("admin:ptest", 20, 60000)) return json({ ok: false, code: "rate", message: "ちょっと待ってから、もう一回" }, 429);
+  const prompts = await promptsOf(env);
+  const key = PROMPT_KEYS.includes(body.key) ? body.key : "system";
+  const text = String(body.text || "").trim().slice(0, PROMPT_MAX);
+  if (text) prompts[key] = finishPrompt(key, text);
+  const kind = key === "profile" ? "profile" : "post";
+  const sample = String(body.sample || "").trim().slice(0, 400) || (kind === "profile" ? "経済学部の2年生。ゼミでマーケティングを学びながら、学園祭の広報を担当している" : "企業のブースで、若手社員さんの「失敗してもいいから手を挙げる」という話を聞いて、まず一歩やってみようと思えた");
+  const p = sanitizePayload({
+    answers: kind === "profile" ? [{ id: "p_focus", label: "力を入れていること", question: "いま、力を入れてることは？", text: sample }] : [{ id: "learn", label: "今日の学び・気づき", question: "今日、「これは学びやわ」って思ったことは？", text: sample }],
+    mode: key === "ishizaka" ? "ishizaka" : body.mode === "first" ? "first" : "",
+    kind,
+    tone: "emo",
+    style: { formality: "おまかせ", kansai: "なし", length: "短め", emoji: "ちょっと", cheer: "なし", sign: "なし" },
+  });
+  p.eventNote = await eventNoteOf(env, body.event);
+  p.ishizakaStyle = prompts.ishizaka;
+  const r =
+    kind === "profile"
+      ? await callAI(env, { system: prompts.profile, input: buildProfileInput(p), schema: PROFILE_SCHEMA, validate: normalizeProfile })
+      : await callAI(env, { system: prompts.system, input: buildUserInput(p), schema: patternsSchema(1, "emo"), validate: (j) => normalizePatterns(j, "", 1, "emo") });
+  if (!r.ok) return json({ ok: false, code: "failed", message: explainFailure(r), model: r.model, reason: r.reason });
+  const out = kind === "profile" ? `【見出し】\n${r.value.headlines.join("\n")}\n\n【自己紹介】\n${r.value.about}` : r.value[0].body;
+  return json({ ok: true, text: out, model: r.model, ms: r.ms, sample });
 }
 
 // ---------- 運営用：投稿報告 ----------

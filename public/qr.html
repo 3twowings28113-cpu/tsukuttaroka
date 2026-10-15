@@ -13,7 +13,8 @@
   /* 会場スクリーン（16:9）に映す1枚。地の色は config.js の theme（雲×手書きの関西弁） */
   :root {
     color-scheme: light;
-    --ground: #B4D0F0; --ink: #121212; --paper: #FFFFFF; --coral: #FF7373; --blue: #004182;
+    --ground: #0A66C2; --ink: #121212; --paper: #FFFFFF; --coral: #FF7373; --blue: #004182;
+    --on-ground: #FFFFFF; --pill: #EAF2FB; /* 地の上にじかに置く文字／雲の中の手順の丸 */
     --f-display: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Noto Sans JP", sans-serif;
     --f-body: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", sans-serif;
     --f-hand: "Yomogi", "Zen Maru Gothic", sans-serif;
@@ -22,6 +23,7 @@
   [hidden] { display: none !important; }
   html, body { height: 100%; }
   body { margin: 0; overflow: hidden; background: var(--ground); color: var(--ink); font-family: var(--f-body); }
+  .url, .count, .sc { color: var(--on-ground); }
   .stage { position: relative; width: 100vw; height: 100vh; display: grid; grid-template-columns: 1.25fr 1fr; align-items: center; gap: 3vw; padding: 5vh 6vw; }
   .cloud { position: relative; isolation: isolate; }
   .cloud > svg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; overflow: visible; }
@@ -32,7 +34,7 @@
   .nw { white-space: nowrap; }
   .lead { margin: 2.2vh 0 0; font-size: clamp(16px, 1.9vw, 34px); font-weight: 700; }
   .steps { display: flex; justify-content: center; flex-wrap: wrap; gap: 1vw; margin: 3vh 0 0; padding: 0; list-style: none; font-size: clamp(14px, 1.5vw, 28px); font-weight: 700; }
-  .steps li { display: flex; align-items: center; gap: 0.6vw; padding: 0.6vh 1.1vw; border: 3px solid var(--ink); border-radius: 999px; background: var(--ground); }
+  .steps li { display: flex; align-items: center; gap: 0.6vw; padding: 0.6vh 1.1vw; border: 3px solid var(--ink); border-radius: 999px; background: var(--pill); }
   .steps .n { display: inline-grid; place-items: center; width: 1.9em; height: 1.9em; border-radius: 50%; border: 3px solid var(--ink); background: var(--coral); font-family: var(--f-display); font-size: 0.8em; }
   .feedtag { margin: 2.2vh 0 0; font-size: clamp(13px, 1.4vw, 24px); font-weight: 700; }
   .qr-side { display: grid; justify-items: center; gap: 2vh; }
@@ -41,7 +43,7 @@
   .qr svg { display: block; width: 100%; height: 100%; }
   .url { font-size: clamp(14px, 1.4vw, 26px); font-weight: 700; word-break: break-all; text-align: center; }
   .count { font-family: var(--f-display); font-weight: 900; font-size: clamp(18px, 2.2vw, 40px); text-align: center; line-height: 1.45; }
-  .count b { color: var(--blue); font-size: 1.3em; font-variant-numeric: tabular-nums; }
+  .count b { color: var(--on-ground); font-size: 1.3em; font-variant-numeric: tabular-nums; }
   .ticker { max-width: min(36vw, 640px); padding: 2.4vh 2.6vw; text-align: center; font-family: var(--f-display); font-weight: 900; font-size: clamp(16px, 1.9vw, 38px); line-height: 1.35; }
   .ticker .cloud-svg path, .ticker > svg path { stroke-width: 4; }
   .ticker.pop { animation: pop 0.55s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
@@ -92,8 +94,11 @@
 (() => {
   const cfg = window.APP_CONFIG || {};
   if (cfg.theme) {
-    if (cfg.theme.ground) document.documentElement.style.setProperty("--ground", cfg.theme.ground);
-    if (cfg.theme.mark) document.documentElement.style.setProperty("--coral", cfg.theme.mark);
+    const set = (v, c) => c && document.documentElement.style.setProperty(v, c);
+    set("--ground", cfg.theme.ground);
+    set("--coral", cfg.theme.mark);
+    set("--on-ground", cfg.theme.onGround);
+    set("--pill", cfg.theme.sheet);
   }
   // 上の小さな文字（イベント名）と、報告の手順は、config.js の設定に合わせる
   const eb = document.getElementById("eyebrow");
@@ -108,7 +113,8 @@
   }
   if (cfg.followUrl) {
     const ff = document.getElementById("followLine");
-    ff.textContent = `${cfg.mention && cfg.mention.name ? `${cfg.mention.name}の` : ""}フォローもお願いします！`;
+    const fname = cfg.followName || (cfg.mention && cfg.mention.name) || "";
+    ff.textContent = `${fname ? `${fname}の` : ""}フォローもお願いします！`;
     ff.hidden = false;
   }
   const params = new URLSearchParams(location.search);
@@ -122,7 +128,7 @@
   let evId = "";
   try {
     const t = new URL(target);
-    evId = t.searchParams.get("e") || "";
+    evId = t.searchParams.get("e") || (t.pathname === "/lscw" ? "lscw" : "");
     t.searchParams.delete("p");
     t.searchParams.delete("preset");
     shown = t.toString();
@@ -135,9 +141,13 @@
       .then((d) => {
         if (!d.ok || !d.event) return;
         if (d.event.name) {
-          eb.textContent = cfg.eventSub || "";
-          if (cfg.eventSub) eb.append(document.createElement("br"));
-          eb.append(`「${d.event.name}」`);
+          // イベント名が上の小さな文字と同じなら、1回だけ出す
+          const same = d.event.name === cfg.eventSub;
+          eb.textContent = same ? d.event.name : cfg.eventSub || "";
+          if (!same) {
+            if (cfg.eventSub) eb.append(document.createElement("br"));
+            eb.append(`「${d.event.name}」`);
+          }
           eb.hidden = false;
         }
         const tags = d.event.hashtags || [];
@@ -173,7 +183,7 @@
   }
   async function refresh() {
     try {
-      const d = await (await fetch("api/stats", { cache: "no-store" })).json();
+      const d = await (await fetch(evId ? `api/stats?e=${encodeURIComponent(evId)}` : "api/stats", { cache: "no-store" })).json();
       const made = (d.copied || 0) + (d.later || 0);
       const lines = [];
       if (made > 0) lines.push(`できた投稿 <b>${made}</b>本`);

@@ -9,15 +9,21 @@
   const C = window.APP_CONFIG;
   const MODE = window.APP_MODE === "preview" ? "preview" : "live";
 
-  // イベントごとの色（config.js の theme）。書いていない色は app.css の初期値のまま
-  const THEME_VARS = { ground: "--ground", note: "--note", ink: "--ink", groundText: "--ink-soft", subText: "--muted", accent: "--blue", accentPress: "--blue-press", accentTint: "--blue-tint", mark: "--coral", check: "--check" };
-  if (C.theme) {
-    for (const [k, v] of Object.entries(THEME_VARS)) if (C.theme[k]) document.documentElement.style.setProperty(v, C.theme[k]);
+  // イベントごとの色（config.js の theme。運営ページのイベントの色でも上書きできる）。書いていない色は app.css の初期値のまま
+  const THEME_VARS = { ground: "--ground", onGround: "--on-ground", onGroundSoft: "--on-ground-soft", onInk: "--on-ink", sheet: "--sheet", focus: "--focus", note: "--note", ink: "--ink", groundText: "--ink-soft", subText: "--muted", accent: "--blue", accentPress: "--blue-press", accentTint: "--blue-tint", mark: "--coral", check: "--check" };
+  const HEX = /^#[0-9A-Fa-f]{6}$/;
+  function applyTheme(theme) {
+    if (!theme) return;
+    for (const [k, v] of Object.entries(THEME_VARS)) if (theme[k] && HEX.test(theme[k])) document.documentElement.style.setProperty(v, theme[k]);
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta && C.theme.ground) meta.setAttribute("content", C.theme.ground);
+    if (meta && theme.ground && HEX.test(theme.ground)) meta.setAttribute("content", theme.ground);
   }
-  const STORE_KEY = "tsukuttaroka.v1";
-  const REPORT_KEY = "tsukuttaroka.report"; // 「投稿したで！」の報告（最初からつくり直しても残す）
+  applyTheme(C.theme);
+  // イベント専用ページ（public/lscw.html など）。端末に覚えるもの（途中の回答・報告・イベント）は、ページごとに分ける
+  const PAGE = window.APP_PAGE && window.APP_PAGE.preset === C.presetId ? window.APP_PAGE : null;
+  const PAGE_NS = PAGE ? `.${PAGE.id}` : "";
+  const STORE_KEY = "tsukuttaroka.v1" + PAGE_NS;
+  const REPORT_KEY = "tsukuttaroka.report" + PAGE_NS; // 「投稿したで！」の報告（最初からつくり直しても残す）
   const CARD = Object.fromEntries(C.cards.map((c) => [c.id, c]));
   // プロフィール文を作る（LinkedInの見出し＋自己紹介）の質問。config.js の profile
   const PCARDS = (C.profile && C.profile.cards) || [];
@@ -38,6 +44,8 @@
     const t = String(s ?? "");
     return t.includes("/") ? esc(t).replace(/\//g, "<wbr>") : esc(t).replace(/([、・])/g, "$1<wbr>");
   };
+  // 運営ページで入れた文（日付の「10/31」などの / をそのまま出す）。、・｜ の後ろで改行できる
+  const txt = (s) => esc(s).replace(/([、・｜])/g, "$1<wbr>");
   const pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)];
   const count = (s) => Array.from(s || "").length;
   const rid = () =>
@@ -96,14 +104,23 @@
     } catch {}
   }
 
-  // 主催（富士通ラーニングメディア）のフォロー：「開く」を押した＝opened、「フォローした」にチェック＝done（端末に覚えておく）
-  const FOLLOW_KEY = "tsukuttaroka.follow";
+  // 主催のフォロー：「開く」を押した＝opened、「フォローした」にチェック＝done（端末に覚えておく）
+  // followRequired が false のときは「おすすめ」だけ（始める前に必須にしない）
+  const FOLLOW_KEY = "tsukuttaroka.follow" + PAGE_NS;
   let FOLLOW = "";
   try {
     FOLLOW = localStorage.getItem(FOLLOW_KEY) || "";
   } catch {}
-  const followNeeded = () => !!C.followUrl;
+  const followNeeded = () => !!C.followUrl && C.followRequired !== false;
   const followed = () => !followNeeded() || FOLLOW === "done";
+  const followSuggest = () => !!C.followUrl && C.followRequired === false && FOLLOW !== "done";
+  // メンション（1つ：config の mention ／ 2つ以上：mentions。運営ページのイベントでも決められる）
+  const mentionList = () => {
+    const list = Array.isArray(C.mentions) && C.mentions.length ? C.mentions : C.mention && C.mention.name ? [C.mention] : [];
+    return list.filter((m) => m && m.name).slice(0, 5);
+  };
+  const mentionInText = () => (Array.isArray(C.mentions) && C.mentions.length ? C.mentionInText !== false : !!(C.mention && C.mention.inText));
+  const followName = () => C.followName || (mentionList()[0] || {}).name || "主催";
   function setFollow(v) {
     FOLLOW = v;
     try {
@@ -134,11 +151,11 @@
   }
 
   // イベント（運営ページで作る。?e=イベントID で開く）。あいことばが合えば、主催のAIキーで作れる（参加者はキーを作らなくていい）
-  const EV_KEY = "tsukuttaroka.event";
+  const EV_KEY = "tsukuttaroka.event" + PAGE_NS;
   const QS = new URLSearchParams(location.search);
   let EVID = "";
   let EVPASS = "";
-  let EVENT = null; // サーバーから読んだもの {id, name, hashtags, cheerAlways, preset, needsPass, hasKey}
+  let EVENT = null; // サーバーから読んだもの {id, name, hashtags, cheerAlways, preset, needsPass, hasKey, open, mentions, followUrl, info, schedule, theme}
   try {
     const v = JSON.parse(localStorage.getItem(EV_KEY) || "null");
     if (v && v.id) {
@@ -150,7 +167,7 @@
     const id = String(QS.get("e") || "").trim().toLowerCase().slice(0, 40);
     if (id !== EVID) EVPASS = "";
     EVID = id; // ?e= を空で開くと、イベントから外れる
-  }
+  } else if (!EVID && PAGE && PAGE.event) EVID = PAGE.event; // イベント専用ページは、そのページのイベントで動く
   // QRに入れたあいことば（?p=）は、読んだらアドレス欄から消す（スクショや共有で広がらないように）
   const URL_PASS = String(QS.get("p") || "").trim().slice(0, 60);
   if (QS.has("p")) {
@@ -166,7 +183,8 @@
     } catch {}
   }
   const eventNeedsPass = () => !!(EVENT && EVENT.needsPass);
-  const eventKeyReady = () => !!(EVENT && EVENT.hasKey && EVPASS);
+  // あいことばのないイベントは、URLを開いただけで、イベントのAIキー（なければサーバーのキー）で作れる
+  const eventKeyReady = () => !!(EVENT && EVENT.hasKey && (!EVENT.needsPass || EVPASS));
 
   // Googleカレンダー（秘密のiCalアドレス）。URLはこの端末にだけ保存する
   const CAL_KEY = "tsukuttaroka.cal";
@@ -466,13 +484,15 @@
       prefs: prefsTop(8),
       tone: TONES.some((t) => t.id === (S.startTone || "emo")) ? (S.startTone || "emo") : "emo",
       name: myName(),
-      followed: followNeeded() && FOLLOW === "done",
+      followed: !!C.followUrl && FOLLOW === "done",
       kind: S.kind || "post",
+      event: EVENT ? EVENT.id : "",
+      page: PAGE ? PAGE.id : "",
       clientId: S.clientId,
     };
   }
   // 投稿文の最後：主催のメンション（文字）とハッシュタグ
-  const mentionText = () => (C.mention && C.mention.inText && C.mention.name ? `@${C.mention.name}` : "");
+  const mentionText = () => (mentionInText() ? mentionList().map((m) => `@${m.name}`).join(" ") : "");
   const tailText = () => [mentionText(), C.hashtags.join(" ")].filter(Boolean).join("\n");
   const finalText = (tone) => `${(S.results[tone].body || "").trim()}\n\n${tailText()}`;
   function composeUrl(text) {
@@ -558,10 +578,10 @@
             <span class="opt-who bx">聞きたいネタを、いくつでもえらぶ（15まで）</span>
           </span>
         </button>`;
-    // どんな投稿にする？（テーマ。size=3のセットを代表に出す）
+    // どんな投稿にする？（テーマ。size=3のセットを代表に出す。3問のセットがないテーマは最初のセット）
     const customOn = !!String(S.customTheme || "").trim();
     const themeReps = [];
-    for (const s of C.sets) if (!themeReps.some((t) => t.theme === s.theme)) themeReps.push(s);
+    for (const s of C.sets) if (!themeReps.some((t) => t.theme === s.theme)) themeReps.push(C.sets.find((x) => x.theme === s.theme && x.size === 3) || s);
     const curTheme = (setById(S.setId) || {}).theme || "";
     const themeRows =
       themeReps
@@ -607,9 +627,10 @@
     const quickSize = C.sizes.find((z) => quickSet && z.n === quickSet.size);
     const html = `
       <div class="big-row"><button type="button" class="big-toggle" data-act="bigText" aria-pressed="${isBig()}"><span class="big-a" aria-hidden="true">あ</span>${isBig() ? "文字を元にもどす" : "文字を大きくする"}</button></div>
-      ${aiReady() ? `<p class="key-on bx">${advOn() ? `じぶんのAI（${esc(AISET.model)}）で文章を作るで` : MYKEY ? "じぶんのGeminiで文章を作るで" : "イベントのあいことばで作るで"}</p>` : ""}
+      ${eventHeadHtml()}
+      ${aiReady() && (MYKEY || advOn() || EVENT.needsPass) ? `<p class="key-on bx">${advOn() ? `じぶんのAI（${esc(AISET.model)}）で文章を作るで` : MYKEY ? "じぶんのGeminiで文章を作るで" : "イベントのあいことばで作るで"}</p>` : ""}
       <section class="hero cloud" data-bump="46" data-seed="3">
-        <p class="hero-eyebrow">${esc(C.eventSub || "")}${C.eventName ? `<br>「${esc(C.eventName)}」` : ""}</p>
+        ${C.eventPage || !(C.eventSub || C.eventName) ? "" : `<p class="hero-eyebrow">${esc(C.eventSub || "")}${C.eventName ? `<br>「${esc(C.eventName)}」` : ""}</p>`}
         <h1 class="hero-title bx" tabindex="-1">${fmt(C.appName)}</h1>
         ${
           profileOn()
@@ -643,7 +664,12 @@
         <p class="flow-now">${PCARDS.map((c) => `<span class="nw">${esc(plain(c.label))}</span>`).join("／<wbr>")}</p>
         <p class="sec-note bx">見出し（名前の下の一行）の案を3つと、<wbr>自己紹介（About）の案を1つ作るで。</p>
       </section>`
-          : `<h2 class="pick-divider"><span>自分で選ぶ人は、こちら</span></h2>
+          : `<section class="block photo-block">
+        <h2 class="sec-title">写真から作る<span class="badge-opt">任意</span></h2>
+        <p class="sec-note bx">写真を入れると、<wbr>AIが写真も見て書くで（${PHOTO_LIMIT}枚まで）。<wbr>入れんでもOK。</p>
+        ${photoFieldHtml()}
+      </section>
+      <h2 class="pick-divider"><span>自分で選ぶ人は、こちら</span></h2>
       <section class="block has-scribble">
         <h2 class="sec-title" id="themeTitle">どんな投稿にする？</h2>
         <span class="scribble sc-nanyate" aria-hidden="true">なんやて</span>
@@ -677,6 +703,97 @@
       ? `<button type="button" class="btn btn-primary" data-act="toAnswer">この質問で始める<span class="btn-sub">${PCARDS.length}問</span></button>`
       : `<button type="button" class="btn btn-primary" data-act="toAnswer">このネタで始める<span class="btn-sub">${n}問</span></button>`;
     return { html, dockHtml };
+  }
+
+  // 写真の欄（最初の画面と、じぶん色の画面の両方で同じものを出す。写真は端末で小さくしてから持つ）
+  function photoFieldHtml() {
+    const n = T.photos.length;
+    const grid = n
+      ? `<div class="photo-grid">${T.photos
+          .map((p, i) => `<div class="photo-cell"><img src="${esc(p.url)}" alt="選んだ写真${i + 1}枚目"><button type="button" class="photo-x" data-act="photoClear" data-i="${i}" aria-label="${i + 1}枚目の写真をやめる">×</button></div>`)
+          .join("")}</div><p class="photo-count bx">${n}枚 / ${PHOTO_LIMIT}枚<wbr>${n > 1 ? "（全部まとめてAIが見るで）" : ""}</p>`
+      : "";
+    const pickBtn = T.photoBusy
+      ? `<p class="photo-busy" role="status">写真を読みこんでるで…</p>`
+      : n < PHOTO_LIMIT
+      ? `<label class="btn btn-secondary btn-block photo-pick" for="photoInput">${n ? `写真を足す（あと${PHOTO_LIMIT - n}枚）` : `写真をえらぶ（何枚でも・${PHOTO_LIMIT}枚まで）`}</label><input id="photoInput" type="file" accept="image/*" multiple class="sr-only">`
+      : "";
+    const extra = n
+      ? `<input id="photoWhat" class="phrase" type="text" maxlength="60" autocomplete="off" placeholder="写真は何？（例：ブースで社員さんと話してるところ）" value="${esc(T.photoWhat || "")}" aria-label="写真は何？">
+        <input id="photoWant" class="phrase" type="text" maxlength="60" autocomplete="off" placeholder="伝えたいこと（例：会場の熱気）" value="${esc(T.photoWant || "")}" aria-label="写真で伝えたいこと">
+        ${n > 1 ? '<button type="button" class="btn-text photo-clear-all" data-act="photoClear" data-i="all">写真を全部やめる</button>' : ""}`
+      : "";
+    return `<div class="photo-field">${grid}${pickBtn}${extra}<p class="photo-note bx">写真は小さくしてAIに見せるだけ。<wbr>このアプリには保存せえへん。<wbr>写真そのものは、<wbr>投稿のときにLinkedInで添付してな。</p></div>`;
+  }
+
+  // イベント専用ページの上に出す案内（イベント名・日時・会場・タイムスケジュール）
+  function eventHeadHtml() {
+    const ep = C.eventPage;
+    if (!ep) return "";
+    const hasSchedule = Array.isArray(ep.schedule) && ep.schedule.length;
+    return `<section class="ev-head" aria-label="イベントの案内">
+        <h2 class="ev-head-title bx">${txt(C.eventName || ep.title || "")}</h2>
+        ${ep.when ? `<p class="ev-head-line bx"><span class="ev-head-k">日時</span>${txt(ep.when)}</p>` : ""}
+        ${ep.place ? `<p class="ev-head-line bx"><span class="ev-head-k">会場</span>${ep.mapUrl ? `<a href="${esc(ep.mapUrl)}" target="_blank" rel="noopener">${txt(ep.place)}</a>` : txt(ep.place)}</p>` : ""}
+        <div class="ev-head-links${hasSchedule && ep.siteUrl ? " is-two" : ""}">
+          ${hasSchedule ? '<button type="button" class="btn btn-primary" data-act="schedule">タイムスケジュール</button>' : ""}
+          ${ep.siteUrl ? `<a class="btn btn-secondary" href="${esc(ep.siteUrl)}" target="_blank" rel="noopener">公式サイト</a>` : ""}
+        </div>
+      </section>`;
+  }
+  // タイムスケジュール（日ごとにまとめる。今日の日付なら「きょう」、いまの時間の行に「いまここ」）
+  function jstNow() {
+    const d = new Date(Date.now() + 9 * 3600 * 1000);
+    return { m: d.getUTCMonth() + 1, d: d.getUTCDate(), min: d.getUTCHours() * 60 + d.getUTCMinutes() };
+  }
+  const startMin = (t) => {
+    const m = String(t || "").match(/(\d{1,2})[:：](\d{2})/);
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  function scheduleHtml() {
+    const ep = C.eventPage || {};
+    const groups = [];
+    for (const it of ep.schedule || []) {
+      if (!it || !it.title) continue;
+      let g = groups.find((x) => x.day === (it.day || ""));
+      if (!g) groups.push((g = { day: it.day || "", items: [] }));
+      g.items.push(it);
+    }
+    const now = jstNow();
+    const isToday = (day) => {
+      const m = String(day).match(/(\d{1,2})\/(\d{1,2})/);
+      return !!m && Number(m[1]) === now.m && Number(m[2]) === now.d;
+    };
+    const body = groups
+      .map((g) => {
+        const today = isToday(g.day);
+        // いまの行：始まりの時刻がいまより前で、いちばん遅いもの（「終日」などの時刻なしは対象外）
+        let cur = -1;
+        if (today) g.items.forEach((it, i) => {
+          const s = startMin(it.time);
+          if (s != null && s <= now.min && (cur === -1 || s >= startMin(g.items[cur].time))) cur = i;
+        });
+        return `<section class="sch-day">
+          <h3 class="sch-day-title bx">${txt(g.day || "スケジュール")}${today ? '<span class="sch-today">きょう</span>' : ""}</h3>
+          <ol class="sch-list">${g.items
+            .map((it, i) => `<li class="sch-item${i === cur ? " is-now" : ""}">
+              <span class="sch-time">${esc(it.time || "")}</span>
+              <span class="sch-main"><b class="bx">${txt(it.title)}</b>${i === cur ? '<span class="sch-now">いまここ</span>' : ""}${it.note ? `<span class="sch-note bx">${txt(it.note)}</span>` : ""}</span>
+            </li>`)
+            .join("")}</ol>
+        </section>`;
+      })
+      .join("");
+    return `
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <h2 class="sheet-title" id="sheetTitle">タイムスケジュール</h2>
+      <p class="sheet-lead bx">${txt(C.eventName || ep.title || "")}</p>
+      ${body || '<p class="key-on">まだスケジュールは入ってへん。</p>'}
+      ${ep.note ? `<p class="sch-foot bx">${txt(ep.note)}</p>` : ""}
+      <div class="stack">
+        ${ep.siteUrl ? `<a class="btn btn-secondary btn-block" href="${esc(ep.siteUrl)}" target="_blank" rel="noopener">${esc(ep.siteLabel || "公式サイト")}</a>` : ""}
+        <button type="button" class="btn btn-primary btn-block" data-act="closeSheet">とじる</button>
+      </div>`;
   }
 
   // ② こたえる
@@ -797,21 +914,7 @@
         ${field("role")}${field("formality")}${field("kansai")}${field("length")}${field("emoji")}${C.style.sign ? field("sign") : ""}${C.style.cheer && !C.cheerAlways ? field("cheer") : ""}
         <div class="field">
           <div class="field-label">写真（任意・${PHOTO_LIMIT}枚まで）</div>
-          ${
-            T.photos.length
-              ? `<div class="photo-prev">${T.photos.map((p, i) => `<div class="photo-item"><img src="${esc(p.url)}" alt="選んだ写真のプレビュー${i + 1}"><button type="button" class="btn-text" data-act="photoClear" data-i="${i}">この写真をやめる</button></div>`).join("")}</div>`
-              : ""
-          }
-          ${
-            T.photoBusy
-              ? `<p class="field-note" role="status">写真を読みこんでるで…</p>`
-              : T.photos.length < PHOTO_LIMIT
-              ? `<label class="btn btn-secondary btn-block" for="photoInput">${T.photos.length ? "写真を足す" : "写真をえらぶ"}</label><input id="photoInput" type="file" accept="image/*" multiple class="sr-only">`
-              : ""
-          }
-          <input id="photoWhat" class="phrase" type="text" maxlength="60" autocomplete="off" placeholder="この写真は何？（例：できたてのパンの山）" value="${esc(T.photoWhat || "")}">
-          <input id="photoWant" class="phrase" type="text" maxlength="60" autocomplete="off" placeholder="伝えたいこと（例：焼きたての温度感）" value="${esc(T.photoWant || "")}">
-          <p class="field-note">写真は小さくしてAIに見せて、文章に反映させるで（このアプリには保存せえへん）。写真そのものは、投稿のときにLinkedInで添付してな（案内も出るで）。</p>
+          ${photoFieldHtml()}
         </div>
         <div class="field">
           <label class="field-label" for="phrase">入れたい一言（任意）</label>
@@ -991,14 +1094,16 @@
       `<b>LinkedInがひらいたら、下の「投稿」をタップ</b><span class="sub">パソコンは、ホーム上の「投稿を開始」</span>`,
       `<b>入力欄を長押しして「貼り付け」</b><span class="sub">もう文章が入ってたら、そのままでOK</span>`,
     ];
-    if (C.mention && C.mention.name) {
+    const ms = mentionList();
+    if (ms.length) {
+      const how = ms.map((m) => `<span class="key">${esc(m.typeHint || `@${m.name}`)}</span> と打って<span class="nw">「${esc(m.name)}」</span>をタップ`).join("／");
       steps.push(
         mentionText()
-          ? `<b>（できる人だけ）最後の <span class="key">${esc(mentionText())}</span> をメンションにする</b><span class="sub">貼っただけでは青い名前にならへん。その行を消して <span class="key">${esc(C.mention.typeHint)}</span> と打ち、出てきた<span class="nw">「${esc(C.mention.name)}」</span>をタップ</span>`
-          : `<b>本文の最後で <span class="key">${esc(C.mention.typeHint)}</span> と打って、<span class="nw">「${esc(C.mention.name)}」</span>をタップ</b><span class="sub">コピペの@はメンションにならへんから、ここだけ手で打ってな</span>`
+          ? `<b>（できる人だけ）最後の <span class="key">${esc(mentionText())}</span> をメンションにする</b><span class="sub">貼っただけでは青い名前にならへん。その行を消して、${how}</span>`
+          : `<b>本文の最後で、${how}</b><span class="sub">コピペの@はメンションにならへんから、ここだけ手で打ってな</span>`
       );
     }
-    if (T.photos.length) steps.push(`<b>えらんだ写真（${T.photos.length}枚）を添付する</b><span class="sub">入力欄の下の写真マークから。添付わすれに注意やで</span>`);
+    if (T.photos.length) steps.push(`<b>えらんだ写真（${T.photos.length}枚）を添付する</b><span class="sub">入力欄の下の写真マークから、まとめて選べるで。添付わすれに注意やで</span>`);
     else steps.push(`<b>写真を1枚つけると、見てもらいやすい</b><span class="sub">写ってる人には一声かけてな</span>`);
     steps.push(`<b>右上の「投稿」をタップ</b><span class="sub">${lastNote}</span>`);
     return `<ol class="guide">${steps.map((s, i) => `<li><span class="n" aria-hidden="true">${i + 1}</span><div>${s}</div></li>`).join("")}</ol>`;
@@ -1010,7 +1115,7 @@
         <h1 class="done-title" tabindex="-1">あとは投稿するだけ！</h1>
         <p class="done-lead bx">先に、この順番を見てな。<wbr>見たら、いちばん下の<wbr>青いボタンを押すと、<wbr>文章をコピーして<wbr>LinkedInがひらくで。</p>
       </div>
-      ${C.followUrl && !followed() ? `<div class="follow-first"><p class="follow-lead"><b>投稿の前に、まずフォロー</b><span class="sub">主催の${esc(C.mention.name)}をフォローしてから投稿してな</span></p><a class="btn btn-secondary btn-block" href="${esc(C.followUrl)}" target="_blank" rel="noopener">${esc(C.mention.name)}をフォローする</a></div>` : ""}
+      ${C.followUrl && (!followed() || followSuggest()) ? `<div class="follow-first"><p class="follow-lead"><b>${followSuggest() ? "よかったら、フォローも" : "投稿の前に、まずフォロー"}</b><span class="sub">${esc(followName())}の<wbr>LinkedInページを<wbr>フォローしておくと、<wbr>最新の情報が届くで</span></p><a class="btn btn-secondary btn-block" href="${esc(C.followUrl)}" target="_blank" rel="noopener" data-act="followOpen">${esc(followName())}をフォローする</a></div>` : ""}
       ${guideSteps(false)}
       <details class="copied">
         <summary>コピーする文章を見る</summary>
@@ -1048,6 +1153,8 @@
       <div class="stack">
         <a class="btn btn-primary btn-block" href="${esc(composeUrl(d.text))}" target="_blank" rel="noopener">LinkedInをもう一回ひらく</a>
         <button type="button" class="btn btn-secondary btn-block" data-act="recopy">${ICON.copy}<span>もう一回コピー</span></button>
+        ${C.eventPage && (C.eventPage.schedule || []).length ? '<button type="button" class="btn btn-secondary btn-block" data-act="schedule">つぎは何がある？（タイムスケジュール）</button>' : ""}
+        ${followSuggest() ? `<a class="btn btn-secondary btn-block" href="${esc(C.followUrl)}" target="_blank" rel="noopener" data-act="followOpen">${esc(followName())}をフォローする</a>` : ""}
       </div>
       <details class="copied"${d.action === "later" ? " open" : ""}>
         <summary>投稿のしかたを見る</summary>
@@ -1265,7 +1372,7 @@
     const opened = !!FOLLOW;
     return `<div class="follow-gate${T.followMissing && !done ? " is-missing" : ""}${done ? " is-done" : ""}">
           <p class="name-label">つぎに、主催をフォロー<span class="req-inline">必須</span></p>
-          <p class="name-note bx">${esc(C.mention.name)}の<wbr>LinkedInページを開いて<wbr>「フォロー」を押してな。<wbr>終わったら、<wbr>この画面にもどって<wbr>チェック。</p>
+          <p class="name-note bx">${esc(followName())}の<wbr>LinkedInページを開いて<wbr>「フォロー」を押してな。<wbr>終わったら、<wbr>この画面にもどって<wbr>チェック。</p>
           <a class="btn btn-secondary btn-block btn-follow" href="${esc(C.followUrl)}" target="_blank" rel="noopener" data-act="followOpen">${opened ? "もう一回ひらく" : "LinkedInページをひらく"}<span class="btn-sub">別のタブで開くで</span></a>
           <button type="button" class="check follow-check" role="checkbox" aria-checked="${done}" data-act="followCheck"><span class="box" aria-hidden="true">${done ? ICON.check : ""}</span><span>フォローした</span></button>
         </div>`;
@@ -1304,7 +1411,8 @@
       <h2 class="sheet-title" id="sheetTitle">困ったら</h2>
       <div class="help-staff cloud" data-bump="26" data-seed="21"><b class="bx">${fmt(H.staff || "")}</b><span>${esc(H.staffSub || "")}</span></div>
       ${tips.length ? `<ul class="help-tips">${tips.map((t) => `<li class="bx">${fmt(t)}</li>`).join("")}</ul>` : ""}
-      <button type="button" class="btn btn-secondary btn-block" data-act="openKey">文章を作るAIを紐づける${aiReady() ? "（紐づけずみ）" : ""}</button>
+      ${C.eventPage && (C.eventPage.schedule || []).length ? '<button type="button" class="btn btn-secondary btn-block" data-act="schedule">タイムスケジュールを見る</button>' : ""}
+      ${eventKeyReady() && !MYKEY && !advOn() ? "" : `<button type="button" class="btn btn-secondary btn-block" data-act="openKey">文章を作るAIを紐づける${aiReady() ? "（紐づけずみ）" : ""}</button>`}
       <button type="button" class="btn btn-secondary btn-block" data-act="bigText"><span class="big-a" aria-hidden="true">あ</span>${isBig() ? "文字を元の大きさにもどす" : "文字を大きくする"}</button>
       <div class="stack">
         <button type="button" class="btn btn-primary btn-block" data-act="closeSheet">とじる</button>
@@ -1707,6 +1815,7 @@
       source: self ? "self" : "app",
       tone: self ? "" : r.tone,
       screenOk: r.screenOk,
+      event: EVENT ? EVENT.id : "",
     };
     try {
       const res =
@@ -1764,6 +1873,7 @@
       source: "app",
       tone: S.tab,
       screenOk: REP ? REP.screenOk !== false : RC.screenDefault !== false,
+      event: EVENT ? EVENT.id : "",
     };
     postJSON("api/report", payload, 15000)
       .then((res) => {
@@ -1810,10 +1920,11 @@
 
   // ---------- 写真 ----------
   // えらんだ写真は、すぐ端末で長辺1024pxのJPEGにする。大きい元の写真は持ち続けない（iPhoneで画面が落ちる対策）
-  const PHOTO_LIMIT = 4;
+  const PHOTO_LIMIT = 10;
   const PHOTO_MAX_PX = 1024;
+  const PHOTO_MANY_PX = 768; // 5枚目からは少し小さくする（送る量を抑えて、会場のWi-Fiでも届くように）
   const PHOTO_MAX_CHARS = 650000; // サーバーの上限（700000）より少し小さく
-  function shrinkPhoto(file) {
+  function shrinkPhoto(file, maxPx = PHOTO_MAX_PX) {
     return new Promise((resolve, reject) => {
       const src = URL.createObjectURL(file);
       const img = new Image();
@@ -1834,7 +1945,7 @@
           const w0 = img.naturalWidth;
           const h0 = img.naturalHeight;
           if (!w0 || !h0) throw Object.assign(new Error("写真の大きさが読めへんかった"), { code: "photo_size" });
-          const k = Math.min(1, PHOTO_MAX_PX / Math.max(w0, h0));
+          const k = Math.min(1, maxPx / Math.max(w0, h0));
           const cv = document.createElement("canvas");
           cv.width = Math.max(1, Math.round(w0 * k));
           cv.height = Math.max(1, Math.round(h0 * k));
@@ -1864,7 +1975,7 @@
   async function addPhotos(files) {
     if (T.photoBusy) return;
     T.photoBusy = true;
-    if (S.step === "style") keepScroll(render);
+    if (S.step === "style" || S.step === "pick") keepScroll(render);
     let failed = 0;
     let over = false;
     for (const f of files) {
@@ -1873,18 +1984,20 @@
         break;
       }
       try {
-        T.photos.push(await shrinkPhoto(f));
+        T.photos.push(await shrinkPhoto(f, T.photos.length >= 4 ? PHOTO_MANY_PX : PHOTO_MAX_PX));
       } catch (e) {
         failed += 1;
         clientLog("photo", e, { kb: Math.round((f.size || 0) / 1024), message: `${(e && e.message) || e}（${f.type || "形式不明"}）` });
       }
     }
     T.photoBusy = false;
-    if (S.step === "style") keepScroll(render);
+    if (S.step === "style" || S.step === "pick") keepScroll(render);
     if (failed) toast(`写真${failed}枚が読みこめへんかった。別の写真にするか、写真なしで進めてな`, 3600);
     else if (over) toast(`写真は${PHOTO_LIMIT}枚までやで`, 2400);
   }
   const photoKb = () => T.photos.reduce((n, p) => n + (p.kb || 0), 0);
+  // 写真が多いほど、AIの返事を長く待つ（サーバーは、写真で失敗したら写真なしで作り直すので、その分も見込む）
+  const photoTimeout = (base) => (T.photos.length ? Math.min(150000, base + 30000 + T.photos.length * 6000) : base);
   // 生成と書き直しのときだけ、写真を付けて送る（記録用の送信には付けない）
   const withPhotos = (p) => (T.photos.length && p.kind !== "profile" ? { ...p, images: T.photos.map((x) => ({ mime: x.mime, data: x.data })) } : p);
 
@@ -1899,6 +2012,7 @@
       kb: (extra && extra.kb) || photoKb(),
       clientId: S.clientId,
       name: myName(),
+      event: EVENT ? EVENT.id : "",
     };
     try {
       fetch("api/clientlog", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), keepalive: true }).catch(() => {});
@@ -1930,10 +2044,10 @@
     if (/api\/(generate|refine|style)/.test(url)) {
       if (MYKEY) headers["x-user-key"] = MYKEY;
       if (advOn()) headers["x-ai-config"] = b64utf8(JSON.stringify(AISET));
-      // イベントのあいことば（日本語でも送れるように、ヘッダーでは文字をエスケープする）
+      // イベントのあいことば（日本語でも送れるように、ヘッダーでは文字をエスケープする）。あいことばのないイベントは、イベントIDだけ
       if (!MYKEY && !advOn() && eventKeyReady()) {
         headers["x-event"] = EVENT.id;
-        headers["x-event-pass"] = encodeURIComponent(EVPASS);
+        if (EVPASS) headers["x-event-pass"] = encodeURIComponent(EVPASS);
       }
     }
     try {
@@ -1993,7 +2107,7 @@
         return { kind: "profile", profile: { headlines: pr.headlines.map(String), about: String(pr.about) }, model: data.model || "" };
       }
       if (MODE === "preview") return previewGenerate(p);
-      const data = await postJSON("api/generate", withPhotos(p), T.photos.length ? 75000 : 60000);
+      const data = await postJSON("api/generate", withPhotos(p), photoTimeout(60000));
       if (data.sample) return { ...sampleGenerate(p), sample: true };
       const r = toResults(data.patterns);
       if (!r) throw Object.assign(new Error("empty"), { code: "empty" });
@@ -2001,7 +2115,7 @@
     },
     async refine(p) {
       if (MODE === "preview") return previewRefine(p);
-      const data = await postJSON("api/refine", withPhotos(p), T.photos.length ? 60000 : 45000);
+      const data = await postJSON("api/refine", withPhotos(p), photoTimeout(45000));
       if (data.sample) return { body: sampleRefine(p) };
       if (!data.body) throw Object.assign(new Error("empty"), { code: "empty" });
       return { body: data.body };
@@ -2074,8 +2188,7 @@
     return {
       emo: {
         body: para([
-          `23階の窓の外で、大阪の夜がきらきらしていました。`,
-          `「${C.eventName}」で、いちばん心に残ったのは「${learn}」ということ。`,
+          `${C.eventName ? `「${C.eventName}」` : "今日"}で、いちばん心に残ったのは「${learn}」ということ。`,
           extra,
           thanks,
           `明日からは、${next || "今日つながった人の投稿にコメントするところ"}からはじめます。${phrase}`,
@@ -2085,7 +2198,7 @@
       humor: {
         body: para([
           `「発信？ ちゃんとした人がやるもんやろ」と思ってた昨日の自分に、ツッコミを入れたい夜でした。`,
-          `「${C.eventName}」で気づいたのは「${learn}」。`,
+          `${C.eventName ? `「${C.eventName}」` : "今日"}気づいたのは「${learn}」。`,
           extra,
           thanks,
           `というわけで、${next || "まずは誰かの投稿にコメント"}。宣言したから、もう逃げられへん。${phrase}`,
@@ -2094,7 +2207,7 @@
       straight: {
         body: para([
           `今日の学びは「${learn}」です。`,
-          `「${C.eventName}」に参加して、発信とつながりについて考えました。`,
+          C.eventName ? `「${C.eventName}」に参加して、考えたことを残しておきます。` : "",
           extra,
           thanks,
           `明日からやること：${next || "今日つながった人の投稿にコメントする"}。${phrase}`,
@@ -2157,21 +2270,51 @@
       }
       EVENT = d.event;
       // 運営ページで決めた「質問セット・色」（プリセット）とちがうときは、そのプリセットで開き直す（最初の1回だけ）
-      if (EVENT.preset && EVENT.preset !== C.presetId && !QS.has("preset") && (window.APP_PRESETS || []).some((p) => p.id === EVENT.preset)) {
-        QS.set("preset", EVENT.preset);
+      // 専用ページのあるプリセット（LSCW → /lscw）は、そのページで開き直す。専用ページの中では開き直さない
+      const target = (window.APP_PRESETS || []).find((p) => p.id === EVENT.preset);
+      if (!PAGE && target && EVENT.preset !== C.presetId && !QS.has("preset")) {
         if (URL_PASS) QS.set("p", URL_PASS);
-        location.replace(`${location.pathname}?${QS}`);
+        if (target.pagePath) {
+          QS.set("e", EVENT.id);
+          location.replace(`${target.pagePath}?${QS}`);
+        } else {
+          QS.set("preset", EVENT.preset);
+          location.replace(`${location.pathname}?${QS}`);
+        }
         return new Promise(() => {}); // 開き直すまで待つ
       }
-      if (EVENT.name) C.eventName = EVENT.name;
-      if (EVENT.hashtags && EVENT.hashtags.length) {
-        C.hashtags = EVENT.hashtags;
-        C.feedTag = EVENT.hashtags.find((h) => h.toLowerCase() !== "#linkedin") || EVENT.hashtags[0];
-      }
-      if (EVENT.cheerAlways) C.cheerAlways = true;
+      applyEvent(EVENT);
       saveEvent();
       if (URL_PASS && !MYKEY && !advOn()) await unlockEvent(URL_PASS, true).catch(() => {});
     } catch {}
+  }
+  // 運営ページで決めたイベントの中身を、画面の設定に重ねる（空の項目は config.js のまま）
+  function applyEvent(ev) {
+    if (ev.name) C.eventName = ev.name;
+    if (ev.hashtags && ev.hashtags.length) {
+      C.hashtags = ev.hashtags;
+      C.feedTag = ev.hashtags.find((h) => h.toLowerCase() !== "#linkedin") || ev.hashtags[0];
+    }
+    if (ev.cheerAlways) C.cheerAlways = true;
+    if (Array.isArray(ev.mentions) && ev.mentions.length) {
+      C.mentions = ev.mentions;
+      C.mentionInText = ev.mentionInText !== false;
+    }
+    if (ev.followUrl) {
+      C.followUrl = ev.followUrl;
+      C.followName = ev.followName || "";
+      C.followRequired = ev.followRequired === true;
+    }
+    const info = ev.info || {};
+    const hasInfo = Object.keys(info).some((k) => info[k]);
+    const hasSchedule = Array.isArray(ev.schedule) && ev.schedule.length;
+    if (hasInfo || hasSchedule) {
+      const ep = { ...(C.eventPage || {}) };
+      for (const k of ["title", "when", "place", "mapUrl", "siteUrl", "siteLabel", "note"]) if (info[k]) ep[k] = info[k];
+      if (hasSchedule) ep.schedule = ev.schedule;
+      C.eventPage = ep;
+    }
+    if (ev.theme) applyTheme(ev.theme);
   }
   // あいことばを確かめて、この端末に覚える（ちがうときは、サーバーの説明つきのエラーを投げる）
   async function unlockEvent(pass, silent) {
@@ -2281,6 +2424,8 @@
   // ---------- 生成 ----------
   async function generate(payloadOverride) {
     if (T.busy) return;
+    // イベントの読みこみが間に合っていなかったら（電波が弱いとき）、もう一度だけ読んでから確かめる
+    if (!aiReady() && MODE !== "preview" && EVID && !EVENT) await loadEvent();
     if (!aiReady() && MODE !== "preview") return needKey("generate");
     T.busy = true;
     T.error = "";
@@ -2935,6 +3080,9 @@
       case "help":
         openSheet(helpHtml(), "[data-act=closeSheet]");
         break;
+      case "schedule":
+        openSheet(scheduleHtml(), "[data-act=closeSheet]");
+        break;
       case "openKey":
         openSheet(keyHtml(), eventNeedsPass() && !MYKEY ? "#evPass" : "#apiKeyInput");
         break;
@@ -3130,8 +3278,9 @@
         generate();
         break;
       case "followOpen":
-        // リンクはそのまま別のタブで開かせる（この画面は残る）
-        if (!FOLLOW) setFollow("opened");
+        // リンクはそのまま別のタブで開かせる（この画面は残る）。おすすめだけのときは、開いたらもう出さない
+        if (C.followRequired === false) setFollow("done");
+        else if (!FOLLOW) setFollow("opened");
         setTimeout(() => keepScroll(render), 300);
         break;
       case "followCheck":
@@ -3599,6 +3748,18 @@
     setTimeout(() => toast(wasPending.photos ? "さっきは作ってる途中で画面が閉じてしもたみたい。写真を減らして、もう一回押してみて" : "さっきは作ってる途中で画面が閉じてしもたみたい。もう一回押してみて", 5000), 600);
   }
   // イベント（?e=）は、名前とハッシュタグを読んでから最初の画面を出す（遅いときは2.5秒で先に出して、あとで描き直す）
+  // 利用状況（運営ページの「どれくらい使われてるか」）：開いた回数だけ数える。中身は送らない。同じタブでは1回だけ
+  function sendHit() {
+    if (MODE === "preview") return;
+    try {
+      const k = `tsukuttaroka.hit${PAGE_NS}`;
+      if (sessionStorage.getItem(k)) return;
+      sessionStorage.setItem(k, "1");
+    } catch {}
+    try {
+      fetch("api/hit", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ clientId: S.clientId, page: PAGE ? PAGE.id : "", preset: C.presetId || "", event: EVID || "" }), keepalive: true }).catch(() => {});
+    } catch {}
+  }
   async function start() {
     const evLoad = loadEvent();
     if (EVID) await Promise.race([evLoad, new Promise((r) => setTimeout(r, 2500))]);
@@ -3622,6 +3783,7 @@
       render();
     }
     shown = true;
+    sendHit();
     evLoad.then(() => {
       if (shown && S.step === "pick") keepScroll(render);
     });

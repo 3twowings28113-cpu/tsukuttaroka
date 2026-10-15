@@ -78,7 +78,7 @@ ${NOTATION_RULES}
 次のJSONだけを返す。前後に説明を書かない。
 {"patterns":[{"tone":"emo","body":"…"}]}`;
 
-const ISHIZAKA_STYLE = `【型】上から順に。材料（回答）にない段は省いてよい
+export const ISHIZAKA_STYLE = `【型】上から順に。材料（回答）にない段は省いてよい
 1. 1行目：「」のセリフで始める。回答の中に誰かの言葉（言われたこと・聞いた話）があれば、それを言い回しを変えずに「」で引用する。なければ、本人の回答の言葉をそのまま使って、本人の心の叫びとして「」に入れる（例：回答が「先輩とつながれてうれしかった」なら「先輩とつながれた…！」）。回答にない言葉をセリフにしない。セリフの後ろに絵文字を1〜2個。
 2. 2行目：【】で囲んだ見出し（20〜60字）。【祝】【ついに】【今日の学び】【はじめての〇〇】のような分類語＋中身の予告＋絵文字。回答にない重要性やニュース性を作らない。
 3. 体験：場面を具体的に、回答の言葉で書く。心の声を（　）で1〜2回入れる（例：（え、ほんまに？）（ドキドキ…）（笑））。心の声は、回答に書かれた気持ちや驚きを短く言い換えたものにし、回答にない出来事や事実は入れない。
@@ -156,8 +156,14 @@ export function buildProfileInput(p) {
     lines.push("【本人の好み（過去に本人が頼んだ直し指示）】");
     for (const s of p.prefs) lines.push(`・${s}`);
   }
+  if (p.eventNote) {
+    lines.push("");
+    lines.push(eventNoteBlock(p.eventNote));
+  }
   return lines.join("\n");
 }
+// イベントごとの追加の指示（運営ページの「イベント」で書く）。システムの決まり（事実は回答から取る など）は変えない
+const eventNoteBlock = (note) => `【このイベントについて（運営からの指示。システムの決まりを守れる範囲で従う。回答にない事実は、ここに書かれていても本文に足さない）】\n${note}`;
 
 export const PROFILE_ACTIONS = {
   shorter: "今の7割くらいの長さに縮める。いちばん伝えたいことと、最後の一文は残す。",
@@ -200,6 +206,21 @@ const MODE_RULE = {
 
 ${ISHIZAKA_STYLE}`,
 };
+// 石坂さん風の型は、運営ページで書きかえられる（p.ishizakaStyle）。書きかえがなければ上の型
+const ishizakaRule = (style) => `文章は、次の「石坂さん風」の型で書く。トーンは【トーン】のとおりで、見出しの言葉選びと後段の意味づけに出す。
+
+${style}`;
+const ishizakaRefine = (style) => `石坂さん風（「」のセリフで始まり、【】の見出し、（心の声）、絵文字多め）の投稿スタイルで書き直す。中身は本人の回答だけ。書き方の型だけをまねる。トーン（エモい・ユーモア・学び）の書き出しの決まりより、この型を優先する。
+
+${style}`;
+
+// 運営ページで書きかえられる指示文の初期値（書きかえを消すと、これに戻る）
+export const PROMPT_DEFAULTS = {
+  system: SYSTEM_PROMPT,
+  profile: PROFILE_PROMPT,
+  ishizaka: ISHIZAKA_STYLE,
+};
+export const PROMPT_KEYS = Object.keys(PROMPT_DEFAULTS);
 
 // 自分で入れた書き方の指示（customモード）。毎回変わるので文を組み立てる
 const CUSTOM_RULE_HEAD = `次の【書き方の指定】（本人が入れた指示）の型とふるまいに従って書く。ただし、事実は回答から取ること、ハッシュタグ（#）は書かないこと、この文のほかの決まりは守る。指示が「〜風の誰か」のときも、実在の人物になりすますのでなく型だけをまねる。`;
@@ -210,9 +231,7 @@ export const REFINE_ACTIONS = {
   hotter: "気持ちの熱量を上げる。言い切りを増やし、感情が伝わる言葉を選ぶ。大げさな作り話はしない。",
   concrete: "回答にある具体的な言葉・場面・行動を増やして、具体的にする。回答にない事実は足さない。",
   another: "同じトーンのまま、書き出しと構成を変えて書き直す。",
-  ishizaka: `石坂さん風（「」のセリフで始まり、【】の見出し、（心の声）、絵文字多め）の投稿スタイルで書き直す。中身は本人の回答だけ。書き方の型だけをまねる。トーン（エモい・ユーモア・学び）の書き出しの決まりより、この型を優先する。
-
-${ISHIZAKA_STYLE}`,
+  ishizaka: ishizakaRefine(ISHIZAKA_STYLE),
   custom: "本人の希望どおりに書き直す。",
 };
 
@@ -297,12 +316,13 @@ export function sanitizePayload(raw) {
     .map((s) => clean(s, 80))
     .filter(Boolean);
   const kind = src.kind === "profile" ? "profile" : "post";
-  return { answers, style, profile: { role }, name: who, theme, voice, mode, intro, stylePrompt, prefs, tone, photos: 0, kind };
+  // eventNote（イベントごとのAIへの追加の指示）と ishizakaStyle（石坂さん風の型の書きかえ）は、サーバーが入れる。端末からは受け取らない
+  return { answers, style, profile: { role }, name: who, theme, voice, mode, intro, stylePrompt, prefs, tone, photos: 0, kind, eventNote: "", ishizakaStyle: "" };
 }
 
 // 写真（端末で長辺1024pxのJPEGにしてから届く）。形と大きさだけ確かめる。中身の確認はAI側に任せる
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
-export const IMAGE_MAX = 4;
+export const IMAGE_MAX = 10;
 export const IMAGE_MAX_CHARS = 700000; // 1枚あたりのbase64の長さ（約500KB）
 export function sanitizeImages(raw) {
   return (Array.isArray(raw) ? raw : [])
@@ -361,7 +381,11 @@ export function buildUserInput(p) {
   if (MODE_RULE[p.mode]) {
     lines.push("");
     lines.push("【書き方の指定】（トーンの書き出しの決まりより、こちらを優先する）");
-    lines.push(MODE_RULE[p.mode]);
+    lines.push(p.mode === "ishizaka" && p.ishizakaStyle ? ishizakaRule(p.ishizakaStyle) : MODE_RULE[p.mode]);
+  }
+  if (p.eventNote) {
+    lines.push("");
+    lines.push(eventNoteBlock(p.eventNote));
   }
   return lines.join("\n");
 }
@@ -387,7 +411,7 @@ export function buildRefineInput(p, tone, body, action, request) {
           "希望の中で本人が書いた事実（会社名・名前・数字など）は使ってよい。それ以外の事実は足さない。",
           "希望がハッシュタグやメンションでも、#と@は書かない（あとで自動で付く）。希望がルールに反するときは、ルールを守れる範囲で近づける。",
         ].join("\n")
-      : `この投稿文を書き直す：${REFINE_ACTIONS[action] || REFINE_ACTIONS.another}`,
+      : `この投稿文を書き直す：${action === "ishizaka" && p.ishizakaStyle ? ishizakaRefine(p.ishizakaStyle) : REFINE_ACTIONS[action] || REFINE_ACTIONS.another}`,
     action === "ishizaka"
       ? "ルールはシステムの指示と同じ。ただし書き方は上の型を優先する。"
       : action === "custom"

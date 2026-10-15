@@ -8,13 +8,18 @@
 window.APP_CONFIG = {
   appName: "投稿、つくったろか。",
 
-  // 画面の色（書いていない色は app.css の初期値）。LinkedInの青と黒が基調。ロゴは使わない
+  // 画面の色（書いていない色は app.css の初期値）。LinkedInの青（#0A66C2）と黒が基調。ロゴは使わない
   theme: {
-    ground: "#B4D0F0", // 画面の地
-    groundText: "#26313D", // 地の上の補足文字
+    ground: "#0A66C2", // 画面の地（LinkedInの青）
+    onGround: "#FFFFFF", // 地の上の文字（地が濃いので白）
+    onGroundSoft: "#E3EEFA", // 地の上の補足文字
+    onInk: "#FFFFFF", // 黒い丸の中の文字
+    sheet: "#EAF2FB", // 下から出るシートの地（読みやすいように明るく）
+    groundText: "#26313D", // 白い囲みの中の補足文字
     note: "#F1F7FE", // 補足の囲み
     accent: "#004182", // 押せるもの・選択中（LinkedInの濃い青）
     accentPress: "#00315F",
+    focus: "#121212", // キーボードで選んだときの枠
     mark: "#FF7373", // 小さな強調（進み具合・必須）
     check: "#004182", // 投稿前チェックの印
   },
@@ -27,9 +32,11 @@ window.APP_CONFIG = {
 
   // メンション先（ 使うときだけ設定。name を空にすると、メンションは出ない）
   // inText：true なら、投稿文の最後（ハッシュタグの上）に「@◯◯」を文字で入れる
+  // 2つ以上のときは mentions: [{ name, typeHint }, …] に並べる（運営ページのイベントでも設定できる）
   mention: { name: "", typeHint: "", inText: false },
 
   // 主催のLinkedInページURL。空のままならフォローボタンは出ない
+  // followRequired：false にすると、フォローは「おすすめ」になり、始める前に必須にしない
   followUrl: "",
 
   signupUrl: "https://www.linkedin.com/signup",
@@ -337,25 +344,49 @@ window.APP_CONFIG = {
  * ---------- イベントごとのまとまり（プリセット） ----------
  * 質問セット・色・文言をイベントごとにまとめたもの。上の設定（普段使い）に上書きされる。
  * いま使うのは DEFAULT_PRESET。URLに ?preset=fujitsu のように付けると、そのページだけ切り替わる。
- * イベント名・ハッシュタグ・あいことば（主催のAIキーを使う合言葉）は、運営ページ（/admin）の「イベント」で作る。
+ * イベント専用ページ（例：/lscw ＝ public/lscw.html）は、ページの中で window.APP_PAGE を決めていて、そのプリセットに固定される。
+ * イベント名・ハッシュタグ・メンション・あいことば・AIキー・タイムスケジュールは、運営ページ（/admin）の「イベント」で変えられる。
  */
 (() => {
-  const DEFAULT_PRESET = "lscw";
+  const DEFAULT_PRESET = "everyday";
   const B = window.APP_CONFIG;
   const PRESETS = {
     // 普段使い（上の設定そのまま）
     everyday: { label: "普段使い" },
 
-    // LinkedIn Student Career Week（2026/10/31）の学生向けブース
+    // LinkedIn Student Career Week 2026 Autumn（オンライン10/26〜30、会場10/31）の学生向けブース。専用ページは /lscw
     lscw: {
-      label: "LSCW（2026/10/31 学生向けブース）",
-      eventSub: "LinkedIn Student Career Week",
+      label: "LSCW 2026 Autumn（10/31 学生向けブース）",
+      pagePath: "/lscw", // このプリセット専用のページ（運営ページのQRは、このページのURLになる）
+      eventSub: "LinkedIn Student Career Week 2026 Autumn",
       eventName: "",
       // 運営ページのイベントで上書きできる（イベントのハッシュタグが空のときは、これが付く）
-      hashtags: ["#LinkedIn"],
-      feedTag: "#LinkedIn",
+      // 主催がイベントの告知で使っているタグ（#LSCW2026・#LinkedInStudentCareerWeek）に合わせた
+      hashtags: ["#LSCW2026", "#LinkedInStudentCareerWeek", "#LinkedIn"],
+      feedTag: "#LSCW2026",
       // 投稿の終わりのほうに「LinkedInを使うとワクワクする／新しい自分の可能性が見つかる」という一文を、すべての投稿に入れる
       cheerAlways: true,
+      // イベント専用ページ（/lscw）の上に出す案内と、タイムスケジュール。運営ページのイベントで上書きできる
+      // schedule の day が同じものは1つの日にまとまる。時間はまだ公式に細かく出ていないところがあるので「予定」
+      eventPage: {
+        title: "LinkedIn Student Career Week 2026 Autumn",
+        when: "会場 10/31(土) 9:30〜18:00（予定・入退室自由）｜オンライン 10/26(月)〜10/30(金)",
+        place: "WeWork 日比谷FORT TOWER（東京都港区西新橋1-1-1）",
+        mapUrl: "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent("日比谷フォートタワー 東京都港区西新橋1-1-1"),
+        siteUrl: "https://lscw.scoutalia.com/",
+        siteLabel: "公式サイト（最新のタイムテーブル）",
+        note: "時間は予定です。変わることがあるので、最新は公式サイトで確かめてな。",
+        schedule: [
+          { day: "10/31(土) 会場（日比谷）", time: "9:30", title: "開場（予定）", note: "18:00まで入退室自由" },
+          { day: "10/31(土) 会場（日比谷）", time: "終日", title: "企業ブース", note: "企業の人と話せる・相談できる・インターンに応募できる" },
+          { day: "10/31(土) 会場（日比谷）", time: "終日", title: "特別セミナー", note: "パネルトーク・ワークショップ・業界別の講演など。時間は公式サイトで" },
+          { day: "10/31(土) 会場（日比谷）", time: "終日", title: "このブース：投稿、つくったろか。", note: "しゃべるだけで、LinkedInの投稿文とプロフィール文ができる" },
+          { day: "10/31(土) 会場（日比谷）", time: "18:00", title: "終了（予定）" },
+          { day: "10/26(月)〜10/30(金) オンライン", time: "8:00〜9:30", title: "モーニングセッション", note: "企業の登壇（1社45分）" },
+          { day: "10/26(月)〜10/30(金) オンライン", time: "12:00〜13:30", title: "ランチセッション", note: "企業の登壇（1社45分）" },
+          { day: "10/26(月)〜10/30(金) オンライン", time: "18:00〜", title: "イブニングセッション", note: "企業の登壇" },
+        ],
+      },
       style: {
         ...B.style,
         role: { ...B.style.role, default: "学生" },
@@ -380,6 +411,23 @@ window.APP_CONFIG = {
           note: "人の名前は、出してOKな人だけにしてな",
         },
         {
+          id: "company",
+          label: "気になった/企業・ブース",
+          caption: "話を聞いて/刺さったこと",
+          question: "話を聞いて/気になった企業や/ブースは？",
+          placeholder: "例：若手社員さんの「失敗してもいいから手を挙げる」という話が刺さった",
+          chips: ["ブースで話して", "セミナーで聞いて", "パネルトークで", "オンラインで"],
+          note: "企業や人の名前は、出してOKなものだけにしてな",
+        },
+        {
+          id: "dream",
+          label: "私の夢・/やりたいこと",
+          caption: "LSCWで/話題のテーマ",
+          question: "あなたの夢や、/将来やってみたい/ことは？",
+          placeholder: "例：地元の会社の魅力を、世界に届けられる人になりたい",
+          chips: ["こんな働き方がしたい", "社会をこう変えたい", "海外で挑戦したい", "まだ探してる途中"],
+        },
+        {
           id: "career",
           label: "就活・キャリアで/考えてること",
           caption: "いまの悩みも/そのままでOK",
@@ -401,6 +449,14 @@ window.APP_CONFIG = {
           caption: "出会いの話",
           question: "今日話した人や、/つながった人で、/印象に残った人は？",
           placeholder: "例：同じ業界を目指す他大学の学生と話せて、刺激になった",
+          note: "名前は、出してOKな人だけにしてな",
+        },
+        {
+          id: "thanks",
+          label: "お礼を/伝えたい人",
+          caption: "感謝を入れると/伝わる",
+          question: "お礼を伝えたい人や/企業は？",
+          placeholder: "例：ブースで就活の悩みを聞いてくれた社員さん、ありがとうございました",
           note: "名前は、出してOKな人だけにしてな",
         },
         {
@@ -430,9 +486,13 @@ window.APP_CONFIG = {
       sets: [
         { id: "one", size: 1, theme: "basic", label: "学び・気づきだけ", who: "いちばん大事なところだけ、ぎゅっと書く", cards: ["learn"], recommended: true },
         { id: "basic3", size: 3, theme: "basic", label: "今日の3つ", who: "迷ったらこれ。今日の流れのまま書ける", cards: ["learn", "session", "next"], recommended: true },
+        { id: "dream3", size: 3, theme: "dream", label: "私の夢を書く", who: "LSCWで話題の「私の夢」。将来やりたいことと、今日の学びをつなげる", cards: ["dream", "learn", "next"] },
+        { id: "company3", size: 3, theme: "company", label: "企業との出会い", who: "ブースやセミナーで話した企業のこと、お礼も込めて残したい人に", cards: ["company", "learn", "thanks"] },
         { id: "career3", size: 3, theme: "career", label: "就活・キャリア", who: "いま考えてることも、正直に残したい人に", cards: ["learn", "career", "next"] },
         { id: "self3", size: 3, theme: "self", label: "自己紹介も", who: "はじめて投稿する人に。自分のことも知ってほしい人に", cards: ["focus", "learn", "next"] },
-        { id: "basic5", size: 5, theme: "basic", label: "今日をじっくり", who: "今日の流れが、まるごと伝わる", cards: ["learn", "session", "person", "career", "next"], recommended: true },
+        { id: "basic5", size: 5, theme: "basic", label: "今日をじっくり", who: "今日の流れが、まるごと伝わる", cards: ["learn", "session", "company", "career", "next"], recommended: true },
+        { id: "dream5", size: 5, theme: "dream", label: "私の夢をじっくり", who: "夢と、いま力を入れていることと、今日の学びをつなげたい人に", cards: ["dream", "focus", "learn", "career", "next"] },
+        { id: "company5", size: 5, theme: "company", label: "企業との出会いをじっくり", who: "話した企業・人のことを、感謝と一緒にしっかり残したい人に", cards: ["company", "session", "learn", "thanks", "next"] },
         { id: "career5", size: 5, theme: "career", label: "就活・キャリアじっくり", who: "考えてることと、今日の学びをつなげたい人に", cards: ["career", "learn", "session", "focus", "next"] },
         { id: "self5", size: 5, theme: "self", label: "自己紹介もじっくり", who: "はじめて読む人に、自分のことをしっかり伝えたい人に", cards: ["focus", "learn", "person", "career", "next"] },
       ],
@@ -443,7 +503,8 @@ window.APP_CONFIG = {
         staffSub: "いっしょにやります。",
         tips: {
           ...B.help.tips,
-          pick: ["最初に、お名前を入れてください", "「投稿文を作る」か「プロフィール文を作る」を選んでください", "ネタは何も選ばんでOK。下の青いボタンで始められます", "質問に答えると、LinkedInの文章ができます"],
+          pick: ["最初に、お名前を入れてください", "「投稿文を作る」か「プロフィール文を作る」を選んでください", "ネタは何も選ばんでOK。下のボタンで始められます", "写真があれば「写真から作る」で入れてな（10枚まで）", "イベントの時間は「タイムスケジュールを見る」で見られます"],
+          done: ["LinkedInアプリの入力欄を長押しして「貼り付け」", "選んだ写真は、LinkedInの投稿画面で添付してな", "ほかのセッションの時間は「タイムスケジュールを見る」で"],
         },
       },
     },
@@ -451,7 +512,7 @@ window.APP_CONFIG = {
     // 2026/10/6「関西を、おもろくする夜。」（FLM主催 LinkedIn大交流会）。当日の設定をそのまま残したもの
     fujitsu: {
       label: "関西を、おもろくする夜。（2026/10/6 富士通ラーニングメディア）",
-      theme: { ground: "#FFDE59", groundText: "#3B372E", note: "#FBFFD3", subText: "#6A6456", accent: "#0A66C2", accentPress: "#004182", mark: "#FF7373", check: "#FF5A6F" },
+      theme: { ground: "#FFDE59", onGround: "#121212", onGroundSoft: "#3B372E", onInk: "#FFDE59", sheet: "#FFDE59", groundText: "#3B372E", note: "#FBFFD3", subText: "#6A6456", accent: "#0A66C2", accentPress: "#004182", focus: "#0A66C2", mark: "#FF7373", check: "#FF5A6F" },
       profile: { ...B.profile, enabled: false },
       cheerAlways: false,
       eventName: "関西を、おもろくする夜。",
@@ -627,12 +688,14 @@ window.APP_CONFIG = {
     },
   };
 
-  let id = DEFAULT_PRESET;
+  // イベント専用ページ（window.APP_PAGE があるページ）は、そのプリセットに固定。ほかは ?preset= → DEFAULT_PRESET
+  const PAGE = window.APP_PAGE && PRESETS[window.APP_PAGE.preset] ? window.APP_PAGE : null;
+  let id = PAGE ? PAGE.preset : DEFAULT_PRESET;
   try {
     const q = new URLSearchParams(location.search).get("preset");
-    if (q && PRESETS[q]) id = q;
+    if (!PAGE && q && PRESETS[q]) id = q;
   } catch {}
   if (!PRESETS[id]) id = "everyday";
-  window.APP_PRESETS = Object.keys(PRESETS).map((k) => ({ id: k, label: PRESETS[k].label || k, default: k === DEFAULT_PRESET }));
+  window.APP_PRESETS = Object.keys(PRESETS).map((k) => ({ id: k, label: PRESETS[k].label || k, default: k === DEFAULT_PRESET, pagePath: PRESETS[k].pagePath || "" }));
   Object.assign(B, PRESETS[id], { presetId: id });
 })();

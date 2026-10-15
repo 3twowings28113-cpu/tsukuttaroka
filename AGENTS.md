@@ -1,6 +1,9 @@
 # このプロジェクトのルール（GenCode が毎回読む）
 
-イベント参加者が、スマホでLinkedIn投稿文（とプロフィール文）を作るWebアプリ「投稿、つくったろか。」。いまは LinkedIn Student Career Week（2026/10/31）の学生向けブース版（`public/config.js` の DEFAULT_PRESET = "lscw"）。10/6「関西を、おもろくする夜。」の設定はプリセット fujitsu に残っている。
+イベント参加者が、スマホでLinkedIn投稿文（とプロフィール文）を作るWebアプリ「投稿、つくったろか。」。
+- LinkedIn Student Career Week 2026 Autumn（会場 10/31）の学生向けブース版は、専用ページ **/lscw**（`public/lscw.html`。プリセット lscw・イベントID lscw に固定。URLを知っている人だけが開く）
+- トップ（/）は普段使い（`public/config.js` の DEFAULT_PRESET = "everyday"。各自のAIキーで作る）
+- 10/6「関西を、おもろくする夜。」の設定はプリセット fujitsu に残っている（/?preset=fujitsu）
 **アプリは完成済み。** あなたの仕事は「公開する」「動作確認する」「頼まれた小さな修正」だけ。
 
 ## 最初の公開（頼まれたら、これだけやる）
@@ -26,10 +29,12 @@
 - 報告は短く：変えたファイル／やったこと／結果の3点だけ
 
 ## どこに何があるか
-- 文言・ネタカード・ハッシュタグ・メンション先・フォローURL・色 → `public/config.js`（いちばん下の PRESETS がイベントごとのまとまり。DEFAULT_PRESET で切り替え、URLの ?preset= でも切り替わる）
-- イベント名・ハッシュタグ・あいことば・イベント用のAIキー → 運営ページ（/admin）の「イベント」。参加者は ?e=イベントID のURL（QR）で開く
+- 文言・ネタカード・ハッシュタグ・メンション先・フォローURL・色・イベントページの案内とタイムスケジュールの初期値 → `public/config.js`（いちばん下の PRESETS がイベントごとのまとまり。DEFAULT_PRESET で切り替え、URLの ?preset= でも切り替わる。LSCWは eventPage）
+- イベント名・ハッシュタグ・メンション・フォロー・あいことば・イベント用のAIキー・AIへの追加の指示・タイムスケジュール・色 → 運営ページ（/admin）の「イベント」。参加者は専用ページ（/lscw）か ?e=イベントID のURL（QR）で開く。あいことばが空のイベントは、URLを開いた人だれでもイベントのキー（なければサーバーのキー）で作れる
+- AIへの指示文の書きかえ（投稿文・プロフィール文・石坂さん風）→ 運営ページの「AIへの指示文」（D1 の settings に保存。初期の文は `src/ai.js`）
+- 利用状況（使った人・作った回数・日ごと・イベントごと）→ 運営ページの「利用状況」
 - AIへの指示文（文章の書き方） → `src/ai.js` の `SYSTEM_PROMPT`（投稿文）・`PROFILE_PROMPT`（プロフィール文）・`ISHIZAKA_STYLE`（石坂さん風）
-- 画面の動き → `public/app.js`／見た目 → `public/app.css`
+- 画面の動き → `public/app.js`／見た目 → `public/app.css`／LSCW専用ページ → `public/lscw.html`（中身は app.js と同じ。window.APP_PAGE でプリセットとイベントを固定）
 - パネラー用ページ → `public/judge.html`／運営ページ → `public/admin.html`／会場スクリーン → `public/qr.html`
 - 「投稿したで！」の報告 → 画面は `public/app.js`、サーバーは `src/worker.js` と `src/report.js`
 - サーバー → `src/worker.js`／Gemini の呼び出し → `src/gemini.js`
@@ -42,7 +47,7 @@
 
 ## やってはいけないこと
 - APIキーを public/ の中や画面のコードに書かない（ブラウザから見えてしまう）
-- デザインのルールを崩さない：地の色は config.js の theme（LSCWは青 #B4D0F0、富士通は黄色 #FFDE59）、押せるものは LinkedIn の濃い青 #004182（LSCW・普段使い。富士通は #0A66C2）、文字と線は #121212、黒い太線の雲フキダシが見せ場。LinkedInのロゴは使わない。紫〜青のグラデーション、ガラス風、キラキラのAIアイコン、絵文字のアイコン、Inter フォントは使わない
+- デザインのルールを崩さない：地の色は config.js の theme（LSCW・普段使いは LinkedIn の青 #0A66C2 で、地の上の文字は白。富士通は黄色 #FFDE59 で文字は黒）、押せるものは LinkedIn の濃い青 #004182（富士通は #0A66C2）、カード・雲は白で文字と線は #121212、黒い太線の雲フキダシが見せ場。LinkedInのロゴは使わない。紫〜青のグラデーション、ガラス風、キラキラのAIアイコン、絵文字のアイコン、Inter フォントは使わない
 
 ## よく使うコマンド（Windows。`&&` でつながず、1つずつ実行）
 - 公開まで全部：`npm run setup`

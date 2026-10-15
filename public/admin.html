@@ -23,7 +23,8 @@
   button, input { font: inherit; color: inherit; }
   :focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
   [hidden] { display: none !important; }
-  header { position: sticky; top: 0; z-index: 5; background: var(--yellow); border-bottom: 2px solid var(--ink); }
+  header { position: sticky; top: 0; z-index: 5; background: var(--blue); color: #fff; border-bottom: 2px solid var(--ink); }
+  header .btn { color: var(--ink); }
   .bar { max-width: 1100px; margin: 0 auto; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   .title { font-family: var(--f-display); font-weight: 900; font-size: 18px; margin: 0; }
   .title small { font-family: var(--f-body); font-weight: 700; font-size: 12px; margin-left: 8px; }
@@ -115,7 +116,43 @@
   .ev-form label.chk { display: flex; align-items: center; gap: 8px; }
   .ev-form input[type=text], .ev-form input[type=password], .ev-form select { min-height: 42px; padding: 0 10px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; font: inherit; font-size: 15px; font-weight: 500; }
   .ev-form small { font-weight: 500; color: var(--sub); }
+  .ev-form fieldset { display: grid; gap: 10px; margin: 0; padding: 10px 12px 12px; border: 1px solid var(--rule); border-radius: 10px; }
+  .ev-form legend { padding: 0 6px; font-weight: 700; font-size: 14px; }
+  .ev-form textarea, .pr-text { width: 100%; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; font: inherit; font-size: 14px; font-weight: 500; line-height: 1.6; resize: vertical; }
+  .ev-form .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+  .swatch { display: inline-block; width: 18px; height: 18px; border: 1px solid var(--ink); border-radius: 4px; vertical-align: -4px; margin-left: 6px; }
+  .ev-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+  /* 利用状況：数字のタイル → 流れ（開いた→作った→コピー→報告）→ 日ごと・時間ごとの棒 → イベントごとの表 */
+  .st-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .st-filters select { min-height: 38px; padding: 0 8px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; font: inherit; font-size: 14px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .tile { border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; background: #FBFAF7; }
+  .tile b { display: block; font-size: 28px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .tile span { font-size: 12px; color: var(--sub); font-weight: 700; }
+  .tile small { display: block; font-size: 12px; color: var(--sub); }
+  .st-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; margin-top: 14px; }
+  .st-grid h3 { margin: 0 0 6px; font-size: 14px; }
+  .funnel { display: grid; gap: 6px; }
+  .funnel .brow { grid-template-columns: 9em minmax(0, 1fr) 5.5em; }
+  .chart { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 140px; padding: 0 0 2px; border-bottom: 1px solid var(--rule); }
+  .chart .col { position: relative; flex: 1; height: 100%; display: flex; align-items: flex-end; }
+  .chart .bar { width: 100%; min-height: 0; background: var(--blue); border-radius: 4px 4px 0 0; }
+  .chart .col:hover .bar, .chart .col:focus .bar { background: var(--blue-press); }
+  .chart .col:focus { outline: none; }
+  .chart .tip { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); z-index: 2; white-space: nowrap; padding: 4px 8px; border-radius: 6px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 700; pointer-events: none; opacity: 0; }
+  .chart .col:hover .tip, .chart .col:focus .tip { opacity: 1; }
+  .axis { display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: var(--sub); font-variant-numeric: tabular-nums; }
+  .st-note { margin: 8px 0 0; font-size: 12px; color: var(--sub); }
+  table.st td.n, table.st th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  /* AIへの指示文 */
+  .pr-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .pr-tabs button[aria-pressed="true"] { background: var(--blue); color: #fff; }
+  .pr-text { min-height: 360px; font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "BIZ UDGothic", monospace; font-size: 13px; }
+  .pr-test { display: grid; gap: 8px; margin-top: 10px; padding: 10px 12px; border: 1px dashed var(--rule); border-radius: 10px; }
+  .pr-test input, .pr-test select { min-height: 38px; padding: 0 10px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; font: inherit; font-size: 14px; }
   @media (max-width: 720px) {
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .st-grid, .ev-form .two { grid-template-columns: 1fr; }
     .ev-item { grid-template-columns: 1fr; }
     .ev-qr { justify-self: center; }
     .nums { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -159,28 +196,116 @@
 
     <section class="nums" id="nums" aria-label="件数"></section>
 
+    <section class="panel" id="stPanel" aria-labelledby="stTitle">
+      <div class="rep-head"><h2 id="stTitle">利用状況（どれくらい使われてるか）</h2></div>
+      <div class="st-filters">
+        <label class="msg" for="stDays">期間</label>
+        <select id="stDays"><option value="1">今日</option><option value="7">7日</option><option value="14" selected>14日</option><option value="30">30日</option><option value="60">60日</option></select>
+        <label class="msg" for="stEvent">イベント</label>
+        <select id="stEvent"><option value="">ぜんぶ</option><option value="-">イベントなし（普段使い）</option></select>
+      </div>
+      <div class="tiles" id="stTiles"></div>
+      <div class="st-grid">
+        <div><h3>使った人の流れ（人数）</h3><div class="funnel" id="stFunnel"></div></div>
+        <div><h3>今日の時間ごとの「作った」回数</h3><div class="chart" id="stHourly" role="img" aria-label="今日の時間ごとの作った回数"></div><div class="axis"><span>0時</span><span>6時</span><span>12時</span><span>18時</span><span>23時</span></div></div>
+        <div style="grid-column:1/-1"><h3>日ごとの使った人数</h3><div class="chart" id="stDaily" role="img" aria-label="日ごとの使った人数"></div><div class="axis" id="stDailyAxis"></div>
+          <details style="margin-top:8px"><summary class="msg" style="cursor:pointer">表で見る</summary><div class="table-wrap"><table class="st"><thead><tr><th>日付</th><th class="n">使った人</th><th class="n">開いた</th><th class="n">作った</th><th class="n">書き直し</th><th class="n">コピー</th><th class="n">報告</th><th class="n">エラー</th></tr></thead><tbody id="stDailyRows"></tbody></table></div></details>
+        </div>
+      </div>
+      <h3 style="margin:14px 0 6px;font-size:14px">イベントごと</h3>
+      <div class="table-wrap"><table class="st"><thead><tr><th>イベント</th><th class="n">使った人</th><th class="n">開いた</th><th class="n">作った</th><th class="n">コピー</th><th class="n">報告</th><th class="n">エラー</th></tr></thead><tbody id="stByEvent"></tbody></table></div>
+      <p class="st-note" id="stNote"></p>
+    </section>
+
     <section class="panel" id="evPanel">
       <div class="rep-head">
         <h2>イベント（参加者用のURL・あいことば・ハッシュタグ）</h2>
         <button class="btn btn-primary" id="evNewBtn" type="button">イベントを作る</button>
       </div>
-      <p class="empty" style="margin:0 0 10px">イベントを作ると、参加者用のURLとQRができます。あいことばを入れた参加者は、ここで登録したAIキー（空ならサーバーのキー）で文章を作れます。参加者が自分のキーを作る必要はありません。</p>
+      <p class="empty" style="margin:0 0 10px">イベントを作ると、参加者用のURLとQRができます。参加者は、ここで登録したAIキー（空ならサーバーのキー）で文章を作れます（自分のキーはいりません）。ハッシュタグ・メンション・フォロー・AIへの追加の指示・タイムスケジュールも、イベントごとに決められます。</p>
       <p class="msg bad" id="evKeyNote" hidden></p>
       <div class="ev-list" id="evList"></div>
       <p class="empty" id="noEvents" hidden>まだイベントはありません。</p>
       <form class="ev-form" id="evForm" hidden>
-        <label>イベントID<small>URLに入ります。英小文字・数字・ハイフン（例：lscw2026）</small><input type="text" id="aevId" maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
-        <label>イベント名<small>参加者の画面の上に出ます（空でもOK）</small><input type="text" id="aevName" maxlength="60" autocomplete="off"></label>
-        <label>ハッシュタグ<small>スペース区切り。どの投稿にも最後に必ず付きます（空なら質問セットの初期のハッシュタグ）</small><input type="text" id="aevTags" maxlength="400" autocomplete="off" placeholder="#LinkedIn #イベント名"></label>
-        <label>質問セット・色<small>config.js のプリセット</small><select id="aevPreset"></select></label>
-        <label>あいことば<small>参加者が入れると、下のAIキーで作れます。QR用URLには最初から入っています</small><input type="text" id="aevPass" maxlength="60" autocomplete="off"></label>
-        <label>Gemini APIキー<small id="aevKeyHint">空のままなら、サーバーのキー（GEMINI_API_KEY）を使います</small><input type="password" id="aevKey" maxlength="300" autocomplete="off" placeholder="AIza… / AQ.…"></label>
-        <label class="chk"><input type="checkbox" id="aevClearKey"> 登録してあるキーを消す</label>
-        <label class="chk"><input type="checkbox" id="aevCheer"> すべての投稿に「LinkedInの前向きな一文」を入れる</label>
-        <label class="chk"><input type="checkbox" id="aevActive" checked> 参加者が使える状態にする</label>
+        <fieldset>
+          <legend>基本</legend>
+          <label>イベントID<small>URLに入ります。英小文字・数字・ハイフン（例：lscw2026）。「lscw」は専用ページ /lscw が最初から使うID</small><input type="text" id="aevId" maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+          <label>イベント名<small>参加者の画面の上に出ます（空でもOK）</small><input type="text" id="aevName" maxlength="60" autocomplete="off"></label>
+          <label>質問セット・色<small>config.js のプリセット。専用ページがあるもの（LSCW → /lscw）は、QRもそのページになります</small><select id="aevPreset"></select></label>
+          <label class="chk"><input type="checkbox" id="aevActive" checked> 参加者が使える状態にする</label>
+        </fieldset>
+        <fieldset>
+          <legend>AIのキーとあいことば</legend>
+          <label>あいことば<small>空にすると「あいことばなし」：URL（QR）を開いた人は、だれでも下のAIキーで作れます。入れると、あいことばを知っている人だけ（QR用URLには最初から入っています）</small><input type="text" id="aevPass" maxlength="60" autocomplete="off"></label>
+          <label>Gemini APIキー<small id="aevKeyHint">空のままなら、サーバーのキー（GEMINI_API_KEY）を使います</small><input type="password" id="aevKey" maxlength="300" autocomplete="off" placeholder="AIza… / AQ.…"></label>
+          <label class="chk"><input type="checkbox" id="aevClearKey"> 登録してあるキーを消す</label>
+        </fieldset>
+        <fieldset>
+          <legend>投稿の最後に付くもの</legend>
+          <label>ハッシュタグ<small>スペース区切り。どの投稿にも最後に必ず付きます（空なら質問セットの初期のハッシュタグ）</small><input type="text" id="aevTags" maxlength="400" autocomplete="off" placeholder="#LSCW2026 #LinkedIn"></label>
+          <label>メンション<small>1行に1つ。「表示名」か「表示名 | LinkedInで打つ文字」（例：LinkedIn Japan | @LinkedIn）。5つまで。投稿のしかたで、打ち直してメンションにする手順を出します</small><textarea id="aevMentions" rows="3" placeholder="例：株式会社〇〇 | @〇〇"></textarea></label>
+          <label class="chk"><input type="checkbox" id="aevMentionInText" checked> メンションを、本文の最後（ハッシュタグの上）に「@名前」の文字で入れる</label>
+          <label class="chk"><input type="checkbox" id="aevCheer"> すべての投稿に「LinkedInの前向きな一文」を入れる</label>
+        </fieldset>
+        <fieldset>
+          <legend>フォロー（任意）</legend>
+          <div class="two">
+            <label>フォローしてほしいLinkedInページのURL<input type="text" id="aevFollowUrl" maxlength="500" autocomplete="off" placeholder="https://www.linkedin.com/company/…"></label>
+            <label>ページの名前<input type="text" id="aevFollowName" maxlength="40" autocomplete="off" placeholder="例：株式会社〇〇"></label>
+          </div>
+          <label class="chk"><input type="checkbox" id="aevFollowRequired"> フォローを必須にする（オフなら「よかったらフォロー」の案内だけ）</label>
+        </fieldset>
+        <fieldset>
+          <legend>AIへの追加の指示（このイベントだけ）</legend>
+          <label>指示<small>イベントの説明や、書いてほしくないこと。参加者の回答にない事実は、ここに書いても本文には足されません（1500字まで）</small><textarea id="aevAiNote" rows="6"></textarea></label>
+        </fieldset>
+        <fieldset>
+          <legend>イベントページの案内とタイムスケジュール</legend>
+          <p class="empty" style="margin:0">空の項目は、質問セット（config.js）の初期の内容のままです。</p>
+          <div class="two">
+            <label>見出し<input type="text" id="aevInfoTitle" maxlength="120" autocomplete="off"></label>
+            <label>日時<input type="text" id="aevInfoWhen" maxlength="120" autocomplete="off" placeholder="10/31(土) 9:30〜18:00"></label>
+            <label>会場<input type="text" id="aevInfoPlace" maxlength="120" autocomplete="off"></label>
+            <label>地図のURL<input type="text" id="aevInfoMap" maxlength="500" autocomplete="off" placeholder="https://…"></label>
+            <label>公式サイトのURL<input type="text" id="aevInfoSite" maxlength="500" autocomplete="off" placeholder="https://…"></label>
+            <label>公式サイトのボタンの文字<input type="text" id="aevInfoSiteLabel" maxlength="120" autocomplete="off" placeholder="公式サイト（最新のタイムテーブル）"></label>
+          </div>
+          <label>スケジュールの下の注意書き<input type="text" id="aevInfoNote" maxlength="200" autocomplete="off"></label>
+          <label>タイムスケジュール<small>「## 日の見出し」の行のあとに、1行に1つ「時間 | タイトル | 補足」。40行まで。空なら質問セットの初期のスケジュール</small><textarea id="aevSchedule" rows="8" placeholder="## 10/31(土) 会場&#10;9:30 | 開場 | 18:00まで入退室自由&#10;13:00〜14:00 | パネルトーク | 〇〇さん登壇"></textarea></label>
+        </fieldset>
+        <fieldset>
+          <legend>色（任意）</legend>
+          <div class="two">
+            <label>地の色<small>例：#0A66C2（LinkedInの青）。空なら質問セットの色</small><input type="text" id="aevGround" maxlength="7" autocomplete="off" placeholder="#0A66C2"></label>
+            <label>ボタンの色<small>例：#004182</small><input type="text" id="aevAccent" maxlength="7" autocomplete="off" placeholder="#004182"></label>
+          </div>
+        </fieldset>
         <div class="row"><button class="btn btn-primary" type="submit">保存</button><button class="btn" type="button" id="evCancel">やめる</button></div>
         <p class="msg" id="evMsg" role="status"></p>
       </form>
+    </section>
+
+    <section class="panel" id="prPanel" aria-labelledby="prTitle">
+      <div class="rep-head"><h2 id="prTitle">AIへの指示文（文章の書き方）</h2><span class="msg" id="prState"></span></div>
+      <p class="empty" style="margin:0 0 10px">ここを書きかえると、すべての参加者の文章の作り方が変わります（保存して15秒ほどで反映）。イベントだけの指示は「イベント」の「AIへの追加の指示」へ。「# 出力」の部分を消しても、自動で足されるので動きは止まりません。</p>
+      <div class="pr-tabs" id="prTabs" role="group" aria-label="指示文の種類"></div>
+      <label class="msg" for="prText">指示文</label>
+      <textarea class="pr-text" id="prText" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button class="btn btn-primary" id="prSave" type="button">保存</button>
+        <button class="btn" id="prPrev" type="button">ひとつ前に戻す</button>
+        <button class="btn btn-danger" id="prReset" type="button">初期の文に戻す</button>
+      </div>
+      <div class="pr-test">
+        <b class="msg">保存する前に、ためしに1本作る（サーバーのキーを使います。記録には残りません）</b>
+        <label class="msg" for="prSample">ためしの回答</label>
+        <input id="prSample" maxlength="400" placeholder="空なら、用意した例文で作ります">
+        <label class="msg" for="prEvent">イベントの追加の指示も入れる</label>
+        <select id="prEvent"><option value="">入れない</option></select>
+        <div class="row"><button class="btn" id="prTest" type="button">いまの指示文で作ってみる</button></div>
+        <div class="pre" id="prOut" hidden></div>
+      </div>
+      <p class="msg" id="prMsg" role="status" aria-live="polite"></p>
     </section>
 
     <section class="panel" id="repPanel">
@@ -301,9 +426,11 @@
       await loadSummary();
       try { localStorage.setItem(KEY, pass); } catch {}
       showDash();
-      loadRows(true);
+      loadRows(true).catch(() => {});
       loadReports().catch(() => {});
       loadEvents().catch(() => {});
+      loadStats().catch(() => {});
+      loadPrompts().catch(() => {});
     } catch (e) {
       $("#loginMsg").textContent = e.auth ? e.message : "つながりませんでした。URLを確認してください。";
     }
@@ -540,10 +667,12 @@
   let events = [];
   const PRESETS = window.APP_PRESETS || [];
   const presetLabel = (id) => (PRESETS.find((p) => p.id === id) || { label: id || "（いつもの）" }).label;
+  // 参加者用のURL。専用ページのあるプリセット（LSCW → /lscw）は、そのページ。lscw のイベントは ?e= を省く
   function eventUrl(ev, withPass) {
-    const u = new URL(location.origin + "/");
-    u.searchParams.set("e", ev.id);
-    if (ev.preset) u.searchParams.set("preset", ev.preset);
+    const pg = (PRESETS.find((p) => p.id === ev.preset) || {}).pagePath || "";
+    const u = new URL(location.origin + (pg || "/"));
+    if (!(pg && ev.id === pg.replace(/^\//, ""))) u.searchParams.set("e", ev.id);
+    if (ev.preset && !pg) u.searchParams.set("preset", ev.preset);
     if (withPass && ev.pass) u.searchParams.set("p", ev.pass);
     return u.toString();
   }
@@ -561,9 +690,10 @@
     const res = await api("api/admin/events");
     const d = await res.json();
     events = d.events || [];
-    const noKey = !d.serverKey && events.some((e) => e.pass && !e.keySet);
+    const noKey = !d.serverKey && events.some((e) => e.active && !e.keySet);
     $("#evKeyNote").hidden = !noKey;
-    $("#evKeyNote").textContent = "AIキーが登録されていないイベントがあります。イベントの「Gemini APIキー」に入れるか、サーバーのキー（GEMINI_API_KEY）を登録してください。このままだと、あいことばを入れても作れません。";
+    $("#evKeyNote").textContent = "AIキーが登録されていないイベントがあります。イベントの「Gemini APIキー」に入れるか、サーバーのキー（GEMINI_API_KEY）を登録してください。このままだと、参加者は文章を作れません。";
+    fillEventSelects();
     $("#noEvents").hidden = events.length > 0;
     $("#evList").innerHTML = events
       .map((ev) => {
@@ -574,13 +704,16 @@
             <h3>${esc(ev.name || ev.id)}${ev.active ? "" : "（止めています）"}</h3>
             <p>ID：<b>${esc(ev.id)}</b>　質問セット・色：${esc(presetLabel(ev.preset))}</p>
             <p>ハッシュタグ：${ev.hashtags.length ? esc(ev.hashtags.join(" ")) : "（質問セットの初期のもの）"}</p>
-            <p>あいことば：${ev.pass ? `<b>${esc(ev.pass)}</b>` : "（なし。AIキーは使えません）"}　AIキー：${ev.keySet ? `登録ずみ（…${esc(ev.keyTail)}）` : "サーバーのキーを使う"}</p>
-            <p>LinkedInの一文：${ev.cheerAlways ? "すべての投稿に入れる" : "参加者が選ぶ"}</p>
-            <label class="msg" for="evu-${esc(ev.id)}">QR用URL（あいことば入り。参加者は何も入れずに使えます）</label>
+            <p>メンション：${ev.mentions.length ? esc(ev.mentions.map((m) => "@" + m.name).join(" ")) + (ev.mentionInText ? "（本文の最後に入れる）" : "（手順だけ出す）") : "なし"}${ev.followUrl ? `　フォロー：${esc(ev.followName || "LinkedInページ")}（${ev.followRequired ? "必須" : "おすすめ"}）` : ""}</p>
+            <p>あいことば：${ev.pass ? `<b>${esc(ev.pass)}</b>` : "<b>なし</b>（URLを開いた人は、だれでも作れます）"}　AIキー：${ev.keySet ? `登録ずみ（…${esc(ev.keyTail)}）` : "サーバーのキーを使う"}</p>
+            <p>LinkedInの一文：${ev.cheerAlways ? "すべての投稿に入れる" : "参加者が選ぶ"}　AIへの追加の指示：${ev.aiNote ? "あり" : "なし"}　タイムスケジュール：${ev.schedule.length ? ev.schedule.length + "行" : "初期のまま"}</p>
+            <label class="msg" for="evu-${esc(ev.id)}">QR用URL${ev.pass ? "（あいことば入り。参加者は何も入れずに使えます）" : ""}</label>
             <input id="evu-${esc(ev.id)}" readonly value="${esc(qrUrl)}">
             <div class="row">
               <button class="btn btn-sm" type="button" data-evcopy="${esc(ev.id)}">URLをコピー</button>
               <a class="btn btn-sm" style="display:inline-flex;align-items:center;text-decoration:none;color:inherit" target="_blank" rel="noopener" href="qr?${esc(new URLSearchParams({ preset: ev.preset || "", url: qrUrl }).toString())}">会場スクリーン用QR</a>
+              <a class="btn btn-sm" style="display:inline-flex;align-items:center;text-decoration:none;color:inherit" target="_blank" rel="noopener" href="${esc(qrUrl)}">開いてみる</a>
+              <button class="btn btn-sm" type="button" data-evstats="${esc(ev.id)}">利用状況</button>
               <button class="btn btn-sm" type="button" data-evedit="${esc(ev.id)}">直す</button>
               <button class="btn btn-sm btn-danger" type="button" data-evdel="${esc(ev.id)}">消す</button>
             </div>
@@ -590,7 +723,24 @@
       .join("");
   }
   function openEventForm(ev) {
-    const f = ev || { id: "", name: "", hashtags: [], preset: (PRESETS.find((p) => p.default) || { id: "" }).id, pass: "", keySet: false, keyTail: "", cheerAlways: false, active: true };
+    const f = ev || { id: "", name: "", hashtags: [], preset: (PRESETS.find((p) => p.default) || { id: "" }).id, pass: "", keySet: false, keyTail: "", cheerAlways: false, active: true, mentions: [], mentionInText: true, followUrl: "", followName: "", followRequired: false, aiNote: "", info: {}, scheduleText: "", theme: null };
+    const info = f.info || {};
+    $("#aevMentions").value = (f.mentions || []).map((m) => (m.typeHint && m.typeHint !== "@" + m.name ? `${m.name} | ${m.typeHint}` : m.name)).join("\n");
+    $("#aevMentionInText").checked = f.mentionInText !== false;
+    $("#aevFollowUrl").value = f.followUrl || "";
+    $("#aevFollowName").value = f.followName || "";
+    $("#aevFollowRequired").checked = !!f.followRequired;
+    $("#aevAiNote").value = f.aiNote || "";
+    $("#aevInfoTitle").value = info.title || "";
+    $("#aevInfoWhen").value = info.when || "";
+    $("#aevInfoPlace").value = info.place || "";
+    $("#aevInfoMap").value = info.mapUrl || "";
+    $("#aevInfoSite").value = info.siteUrl || "";
+    $("#aevInfoSiteLabel").value = info.siteLabel || "";
+    $("#aevInfoNote").value = info.note || "";
+    $("#aevSchedule").value = f.scheduleText || "";
+    $("#aevGround").value = (f.theme && f.theme.ground) || "";
+    $("#aevAccent").value = (f.theme && f.theme.accent) || "";
     $("#aevId").value = f.id;
     $("#aevId").readOnly = !!ev;
     $("#aevName").value = f.name;
@@ -620,7 +770,30 @@
       clearKey: $("#aevClearKey").checked,
       cheerAlways: $("#aevCheer").checked,
       active: $("#aevActive").checked,
+      mentions: $("#aevMentions").value,
+      mentionInText: $("#aevMentionInText").checked,
+      followUrl: $("#aevFollowUrl").value.trim(),
+      followName: $("#aevFollowName").value,
+      followRequired: $("#aevFollowRequired").checked,
+      aiNote: $("#aevAiNote").value,
+      info: {
+        title: $("#aevInfoTitle").value,
+        when: $("#aevInfoWhen").value,
+        place: $("#aevInfoPlace").value,
+        mapUrl: $("#aevInfoMap").value.trim(),
+        siteUrl: $("#aevInfoSite").value.trim(),
+        siteLabel: $("#aevInfoSiteLabel").value,
+        note: $("#aevInfoNote").value,
+      },
+      schedule: $("#aevSchedule").value,
+      theme: { ground: $("#aevGround").value.trim(), accent: $("#aevAccent").value.trim() },
     };
+    const badColor = [body.theme.ground, body.theme.accent].find((c) => c && !/^#[0-9A-Fa-f]{6}$/.test(c));
+    if (badColor) {
+      $("#evMsg").className = "msg bad";
+      $("#evMsg").textContent = `色は #0A66C2 のような形で入れてください（${badColor}）`;
+      return;
+    }
     $("#evMsg").className = "msg";
     $("#evMsg").textContent = "保存しています…";
     try {
@@ -651,6 +824,13 @@
       setTimeout(() => { c.textContent = "URLをコピー"; }, 1600);
       return;
     }
+    const st = e.target.closest("[data-evstats]");
+    if (st) {
+      $("#stEvent").value = st.dataset.evstats;
+      loadStats().catch(() => {});
+      $("#stPanel").scrollIntoView({ block: "start", behavior: "smooth" });
+      return;
+    }
     const ed = e.target.closest("[data-evedit]");
     if (ed) {
       openEventForm(events.find((x) => x.id === ed.dataset.evedit));
@@ -664,10 +844,149 @@
     }
   });
 
+  // ---------- 利用状況 ----------
+  function fillEventSelects() {
+    for (const id of ["#stEvent", "#prEvent"]) {
+      const sel = $(id);
+      const cur = sel.value;
+      const base = id === "#stEvent" ? '<option value="">ぜんぶ</option><option value="-">イベントなし（普段使い）</option>' : '<option value="">入れない</option>';
+      sel.innerHTML = base + events.map((ev) => `<option value="${esc(ev.id)}">${esc(ev.name || ev.id)}（${esc(ev.id)}）</option>`).join("");
+      if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
+    }
+  }
+  function barChart(el, items, label) {
+    const max = Math.max(1, ...items.map((x) => x.v));
+    el.innerHTML = items
+      .map((x) => `<div class="col" tabindex="0" aria-label="${esc(x.k)}：${x.v}${label}"><span class="bar" style="height:${x.v ? Math.max(2, (x.v / max) * 100) : 0}%"></span><span class="tip">${esc(x.k)}　${x.v}${label}</span></div>`)
+      .join("");
+  }
+  async function loadStats() {
+    const days = $("#stDays").value;
+    const e = $("#stEvent").value;
+    const d = await (await api(`api/admin/stats?days=${encodeURIComponent(days)}&e=${encodeURIComponent(e)}`)).json();
+    if (!d.ok) return;
+    const t = d.total;
+    const tile = (n, label, sub) => `<div class="tile"><b>${n}</b><span>${label}</span>${sub ? `<small>${sub}</small>` : ""}</div>`;
+    const avg = d.avgMs ? `平均 ${(d.avgMs / 1000).toFixed(1)}秒で完成` : "";
+    $("#stTiles").innerHTML =
+      tile(d.users, "使った人（端末）", `今日 ${d.today.users}人`) +
+      tile(t.generate, "作った（回）", `今日 ${d.today.generate}回　${avg}`) +
+      tile(t.copy + t.later, "コピー・あとで（回）", `今日 ${d.today.copy + d.today.later}回`) +
+      tile(t.view, "ページを開いた（回）", `今日 ${d.today.view}回`) +
+      tile(t.refine, "書き直し（回）", "") +
+      tile(t.report, "投稿の報告（人）", "") +
+      tile(d.photos.used, "写真つきで作った（回）", d.photos.used ? `写真 合計${d.photos.total}枚` : "") +
+      tile(t.error, "エラー（回）", t.error ? "下の「最近のエラー」を見てな" : "");
+    const f = d.funnel;
+    const fmax = Math.max(1, f.viewed, f.made, f.copied, f.reported);
+    const fbase = Math.max(f.viewed, f.made); // 前の版から使っていた人は「開いた」が数えられていないので、多いほうを100%にする
+    const step = (label, n, base) => `<div class="brow"><span>${label}</span><span class="track"><span class="fill" style="width:${(n / fmax) * 100}%;display:block"></span></span><span class="n">${n}人${base ? `（${Math.round((n / base) * 100)}%）` : ""}</span></div>`;
+    $("#stFunnel").innerHTML = step("ページを開いた", f.viewed, 0) + step("文章を作った", f.made, fbase) + step("コピーした", f.copied, fbase) + (f.reported ? step("報告した", f.reported, fbase) : "");
+    barChart($("#stHourly"), d.hourly.map((h) => ({ k: `${h.h}時`, v: h.generate })), "回");
+    barChart($("#stDaily"), d.daily.map((x) => ({ k: x.d.slice(5).replace("-", "/"), v: x.users })), "人");
+    const dl = d.daily;
+    $("#stDailyAxis").innerHTML = dl.length > 1 ? `<span>${esc(dl[0].d.slice(5).replace("-", "/"))}</span><span>${esc(dl[dl.length - 1].d.slice(5).replace("-", "/"))}</span>` : "";
+    $("#stDailyRows").innerHTML = dl
+      .slice()
+      .reverse()
+      .map((x) => `<tr><td>${esc(x.d)}</td><td class="n">${x.users}</td><td class="n">${x.view}</td><td class="n">${x.generate}</td><td class="n">${x.refine}</td><td class="n">${x.copy + x.later}</td><td class="n">${x.report}</td><td class="n">${x.error}</td></tr>`)
+      .join("");
+    $("#stByEvent").innerHTML = d.byEvent.length
+      ? d.byEvent.map((r) => `<tr><td>${esc(r.name)}${r.id ? ` <small class="empty">${esc(r.id)}</small>` : ""}</td><td class="n">${r.users}</td><td class="n">${r.view}</td><td class="n">${r.generate}</td><td class="n">${r.copy + r.later}</td><td class="n">${r.report}</td><td class="n">${r.error}</td></tr>`).join("")
+      : '<tr><td colspan="7" class="empty">まだありません</td></tr>';
+    const kinds = d.kinds || {};
+    $("#stNote").textContent = `作ったものの内訳：投稿文 ${kinds.post || 0}回・プロフィール文 ${kinds.profile || 0}回（じぶんのAIキーで作った ${d.ownKey}回）。「使った人」は端末の数で、名前などは集めていません。この数え方は 2026/10/16 の版からです（それより前の分は「回」だけ）。`;
+  }
+
+  // ---------- AIへの指示文 ----------
+  let prompts = null;
+  let prKey = "system";
+  let prDirty = false;
+  async function loadPrompts() {
+    const d = await (await api("api/admin/prompts")).json();
+    if (!d.ok) return;
+    prompts = d.prompts;
+    renderPrompts(true);
+    if (!d.serverKey) $("#prTest").disabled = true;
+  }
+  function renderPrompts(fill) {
+    const keys = Object.keys(prompts || {});
+    $("#prTabs").innerHTML = keys.map((k) => `<button class="btn btn-sm" type="button" data-prkey="${esc(k)}" aria-pressed="${k === prKey}">${esc(prompts[k].label)}${prompts[k].custom ? "（書きかえ中）" : ""}</button>`).join("");
+    const p = prompts[prKey];
+    if (!p) return;
+    if (fill) {
+      $("#prText").value = p.current;
+      prDirty = false;
+    }
+    const when = p.updatedAt ? new Date(p.updatedAt).toLocaleString("ja-JP") : "";
+    $("#prState").textContent = p.custom ? `書きかえて使っています${when ? `（${when}）` : ""}` : "初期の文のまま";
+    $("#prPrev").disabled = !p.hasPrev;
+    $("#prReset").disabled = !p.custom;
+  }
+  async function savePrompt(extra) {
+    $("#prMsg").className = "msg";
+    $("#prMsg").textContent = "保存しています…";
+    try {
+      const res = await api("api/admin/prompt", { method: "POST", body: JSON.stringify({ key: prKey, ...extra }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.ok) throw new Error(d.message || "保存できませんでした");
+      prompts = d.prompts;
+      renderPrompts(true);
+      $("#prMsg").className = "msg good";
+      $("#prMsg").textContent = extra.restore === "default" ? "初期の文に戻しました。" : extra.restore === "prev" ? "ひとつ前の文に戻しました。" : "保存しました。15秒ほどで、参加者の画面にも効きます。";
+    } catch (err) {
+      $("#prMsg").className = "msg bad";
+      $("#prMsg").textContent = err.message || "保存できませんでした";
+    }
+  }
+  async function testPrompt() {
+    const b = $("#prTest");
+    b.disabled = true;
+    $("#prOut").hidden = true;
+    $("#prMsg").className = "msg";
+    $("#prMsg").textContent = "ためしに作っています…（10〜20秒）";
+    try {
+      const res = await api("api/admin/prompt-test", { method: "POST", body: JSON.stringify({ key: prKey, text: $("#prText").value, sample: $("#prSample").value, event: $("#prEvent").value }) });
+      const d = await res.json().catch(() => ({}));
+      if (!d.ok) throw new Error(d.message || "作れませんでした");
+      $("#prOut").textContent = d.text;
+      $("#prOut").hidden = false;
+      $("#prMsg").className = "msg good";
+      $("#prMsg").textContent = `できました（${d.model}・${(d.ms / 1000).toFixed(1)}秒）。よければ「保存」を押してください。`;
+    } catch (err) {
+      $("#prMsg").className = "msg bad";
+      $("#prMsg").textContent = err.message || "作れませんでした";
+    } finally {
+      b.disabled = false;
+    }
+  }
+  $("#prTabs").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-prkey]");
+    if (!b || b.dataset.prkey === prKey) return;
+    if (prDirty && !confirm("保存していない書きかえがあります。切りかえると消えますが、いいですか？")) return;
+    prKey = b.dataset.prkey;
+    renderPrompts(true);
+  });
+  $("#prText").addEventListener("input", () => { prDirty = true; });
+  $("#prSave").addEventListener("click", () => savePrompt({ text: $("#prText").value }));
+  $("#prPrev").addEventListener("click", () => { if (confirm("ひとつ前に保存していた文に戻しますか？")) savePrompt({ restore: "prev" }); });
+  $("#prReset").addEventListener("click", () => { if (confirm("初期の文に戻しますか？（いまの書きかえは「ひとつ前に戻す」で取り戻せます）")) savePrompt({ restore: "default" }); });
+  $("#prTest").addEventListener("click", testPrompt);
+  $("#stDays").addEventListener("change", () => loadStats().catch(() => {}));
+  $("#stEvent").addEventListener("change", () => loadStats().catch(() => {}));
+  function loadAll() {
+    loadSummary().catch(() => {});
+    loadRows(true).catch(() => {});
+    loadReports().catch(() => {});
+    loadEvents().catch(() => {});
+    loadStats().catch(() => {});
+    loadPrompts().catch(() => {});
+  }
+
   $("#loginBtn").addEventListener("click", login);
   $("#pass").addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
   $("#logoutBtn").addEventListener("click", logout);
-  $("#reloadBtn").addEventListener("click", () => { loadSummary(); loadRows(true); loadReports().catch(() => {}); loadEvents().catch(() => {}); });
+  $("#reloadBtn").addEventListener("click", () => loadAll());
   $("#testBtn").addEventListener("click", test);
   $("#csvBtn").addEventListener("click", csv);
   $("#toggleBtn").addEventListener("click", toggle);
@@ -697,9 +1016,9 @@
   });
 
   if (pass) {
-    loadSummary().then(() => { showDash(); loadRows(true); loadReports().catch(() => {}); loadEvents().catch(() => {}); }).catch(() => { pass = ""; });
+    loadSummary().then(() => { showDash(); loadAll(); }).catch(() => { pass = ""; });
   }
-  setInterval(() => { if (!$("#dash").hidden) loadSummary().catch(() => {}); }, 30000);
+  setInterval(() => { if (!$("#dash").hidden && !document.hidden) { loadSummary().catch(() => {}); loadStats().catch(() => {}); } }, 30000);
   setInterval(() => { if (!$("#dash").hidden && !document.hidden) loadReports().catch(() => {}); }, 10000);
 })();
 </script>

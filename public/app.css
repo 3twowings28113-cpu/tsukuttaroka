@@ -2,10 +2,15 @@
 :root {
   color-scheme: light;
   /* 色：役割を固定する。イベントごとの色は config.js の theme で上書きする（ここは初期値） */
-  --ground: #B4D0F0;     /* 画面の地（LinkedInの青を明るくしたもの） */
+  --ground: #0A66C2;     /* 画面の地（LinkedInの青） */
+  --on-ground: #FFFFFF;  /* 地の上にじかに置く文字（地が濃い青なので白） */
+  --on-ground-soft: #E3EEFA; /* 地の上の補足文字 */
+  --on-ink: #FFFFFF;     /* 黒い丸・黒い帯の中の文字 */
+  --sheet: #EAF2FB;      /* 下から出るシートの地（明るくして読みやすく） */
+  --focus: #121212;      /* キーボードで選んだときの枠 */
   --note: #F1F7FE;       /* 補足の囲み */
   --ink: #121212;        /* 文字と線 */
-  --ink-soft: #26313D;   /* 地の上の補足文字 */
+  --ink-soft: #26313D;   /* 白い囲みの中の補足文字 */
   --paper: #FFFFFF;      /* カード・フキダシ・入力欄 */
   --muted: #55606B;      /* 白の上の補足文字 */
   --coral: #FF7373;      /* 小さな強調だけ（進み具合・必須・番号） */
@@ -47,7 +52,7 @@ button { cursor: pointer; }
 a { color: var(--blue); }
 b { font-weight: 700; }
 [hidden] { display: none !important; }
-:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
 .bx { word-break: keep-all; overflow-wrap: anywhere; }
 .nw { white-space: nowrap; }
 .has-scribble { position: relative; }
@@ -89,7 +94,7 @@ main:focus { outline: none; }
 .help-btn:active { transform: translate(2px, 2px); box-shadow: none; }
 .help-q {
   width: 26px; height: 26px; display: grid; place-items: center;
-  border-radius: 50%; background: var(--ink); color: var(--ground);
+  border-radius: 50%; background: var(--ink); color: var(--on-ink);
   font-family: var(--f-display); font-weight: 900; font-size: 16px; line-height: 1;
 }
 .stepper { display: flex; gap: 6px; }
@@ -101,7 +106,7 @@ main:focus { outline: none; }
   font: 700 12px/1 var(--f-body);
 }
 .stepper .dot.is-now { background: var(--coral); }
-.stepper .dot.is-done { background: var(--ink); color: var(--ground); }
+.stepper .dot.is-done { background: var(--ink); color: var(--on-ink); }
 .stepper .dot:disabled { cursor: default; }
 
 /* ---------- 雲フキダシ（この画面の見せ場） ---------- */
@@ -111,7 +116,7 @@ main:focus { outline: none; }
 
 .scribble {
   position: absolute; z-index: 2;
-  font-family: var(--f-hand); font-size: 22px; line-height: 1; color: var(--ink);
+  font-family: var(--f-hand); font-size: 22px; line-height: 1; color: var(--on-ground);
   pointer-events: none; user-select: none;
 }
 .sc-nanyate { right: 6px; top: -6px; transform: rotate(-8deg); font-size: 24px; }
@@ -132,8 +137,8 @@ main:focus { outline: none; }
 .hero-lead b { background: linear-gradient(transparent 58%, var(--ground) 58%); padding: 0 2px; }
 
 .block { display: grid; gap: 12px; }
-.sec-title { margin: 0; font-family: var(--f-display); font-weight: 900; font-size: 18px; line-height: 1.4; }
-.sec-note { margin: 0; font-size: 13px; font-weight: 700; }
+.sec-title { margin: 0; font-family: var(--f-display); font-weight: 900; font-size: 18px; line-height: 1.4; color: var(--on-ground); }
+.sec-note { margin: 0; font-size: 13px; font-weight: 700; color: var(--on-ground); }
 
 /* 何問にする？／ネタのセット（1つだけ選ぶ行） */
 .opts { display: grid; gap: 10px; }
@@ -183,7 +188,7 @@ main:focus { outline: none; }
 .swap[open] summary::before { transform: rotate(45deg); margin-top: -4px; }
 .swap-count {
   margin-left: auto; padding: 0 10px; border-radius: 999px;
-  background: var(--ink); color: var(--ground);
+  background: var(--ink); color: var(--on-ink);
   font-size: 13px; line-height: 24px; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .swap-note { margin: 0; font-size: 14px; font-weight: 700; }
@@ -232,19 +237,19 @@ main:focus { outline: none; }
   border: var(--line) solid var(--ink); border-radius: 999px;
   background: var(--paper); font-weight: 700; font-size: 14px;
 }
-.big-toggle[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
+.big-toggle[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); }
 .big-a { font-family: var(--f-display); font-weight: 900; font-size: 20px; line-height: 1; }
 .pick-divider {
   display: flex; align-items: center; gap: 12px; margin: 6px 0 -4px;
-  font-family: var(--f-body); font-weight: 700; font-size: 15px; color: var(--ink-soft);
+  font-family: var(--f-body); font-weight: 700; font-size: 15px; color: var(--on-ground-soft);
 }
-.pick-divider::before, .pick-divider::after { content: ""; flex: 1; height: 2px; background: var(--ink); opacity: 0.25; }
+.pick-divider::before, .pick-divider::after { content: ""; flex: 1; height: 2px; background: var(--on-ground); opacity: 0.35; }
 
 /* 質問の画面：マイク → 入力欄 → 候補 */
 .answer-wrap { display: grid; gap: 6px; }
-.answer-label { font-size: 15px; font-weight: 700; }
+.answer-label { font-size: 15px; font-weight: 700; color: var(--on-ground); }
 .chips-wrap { display: grid; gap: 8px; }
-.chips-label { margin: 0; font-size: 15px; font-weight: 700; }
+.chips-label { margin: 0; font-size: 15px; font-weight: 700; color: var(--on-ground); }
 
 /* 困ったら */
 .help-staff { display: grid; gap: 2px; padding: 22px 24px; text-align: center; }
@@ -271,7 +276,7 @@ main:focus { outline: none; }
 .key-on { margin: 8px 0 0; text-align: center; font-size: 13px; font-weight: 700; color: var(--ink-soft); }
 #keyStatus.is-ng { color: #b3261e; }
 .key-entry { margin: 12px 0 0; text-align: center; }
-.key-ok { display: inline-block; padding: 1px 8px; border: 2px solid var(--ink); border-radius: 999px; background: var(--ground); font-size: 12px; font-weight: 700; }
+.key-ok { display: inline-block; padding: 1px 8px; border: 2px solid var(--ink); border-radius: 999px; background: var(--blue-tint); font-size: 12px; font-weight: 700; }
 .key-ng { display: inline-block; padding: 1px 8px; border: 2px solid var(--ink); border-radius: 999px; background: var(--coral); font-size: 12px; font-weight: 700; }
 .key-off { margin: 8px 0 0; padding: 8px 12px; border: 2px solid var(--ink); border-radius: 12px; background: #FFF1EF; text-align: center; font-size: 13px; font-weight: 700; }
 .badge-opt {
@@ -586,7 +591,7 @@ textarea.edit-body {
 .sheet {
   width: 100%; max-width: 480px; max-height: 92dvh; overflow: auto;
   padding: 10px 16px calc(18px + env(safe-area-inset-bottom, 0px));
-  background: var(--ground);
+  background: var(--sheet);
   border: var(--line) solid var(--ink); border-bottom: 0; border-radius: 22px 22px 0 0;
   display: grid; gap: 14px;
 }
@@ -789,3 +794,67 @@ body.has-dock .toast { bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
   font-family: var(--f-body); font-weight: 700; font-size: 14px; color: var(--ink-soft);
 }
 .ev-or::before, .ev-or::after { content: ""; flex: 1; height: 2px; background: var(--ink); opacity: 0.25; }
+
+/* ---------- 地の上にじかに置く文字（地が濃い青のときは白、黄色の地のときは黒。config.js の theme.onGround） ---------- */
+main > .key-on, .q-head, .voice-label, .page-head, .tone-note, .mode-row, .edit-label,
+main > .name-box .name-label, .fields > .field > .field-label, .fields .intro-box > .field-label,
+.block > .field > .field-label, .edit-add > .field-label, .self-report, .done-foot, main > .center, main > .center a,
+.photo-item .btn-text, .ev-head-links .btn-text { color: var(--on-ground); }
+.voice-sub, .voice-alt, .count-row, .edit-note, main > .name-box .name-note,
+.fields > .field > .field-note, .fields .intro-box > .field-note, .block > .field > .field-note { color: var(--on-ground-soft); }
+main > .key-on { color: var(--on-ground-soft); }
+
+/* ---------- イベント専用ページの案内（/lscw など） ---------- */
+.ev-head {
+  display: grid; gap: 6px; padding: 12px 14px 14px;
+  background: var(--paper); border: var(--line) solid var(--ink); border-radius: var(--r); box-shadow: var(--shadow);
+}
+.ev-head-title { margin: 0; font-family: var(--f-display); font-weight: 900; font-size: 18px; line-height: 1.35; }
+.ev-head-line { margin: 0; display: flex; gap: 8px; align-items: baseline; font-size: 14px; font-weight: 700; line-height: 1.55; }
+.ev-head-line a { color: var(--blue); }
+.ev-head-k {
+  flex: none; padding: 0 8px; border: 2px solid var(--ink); border-radius: 999px;
+  background: var(--blue-tint); font-size: 12px; line-height: 20px;
+}
+.ev-head-links { display: grid; gap: 8px; margin-top: 4px; }
+.ev-head-links.is-two { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); }
+.ev-head-links .btn { min-height: 48px; padding: 0 10px; font-size: 15px; }
+
+/* ---------- 写真（最初の画面・じぶん色） ---------- */
+.photo-field { display: grid; gap: 8px; }
+.photo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.photo-cell { position: relative; aspect-ratio: 1; }
+.photo-cell img {
+  display: block; width: 100%; height: 100%; object-fit: cover;
+  border: var(--line) solid var(--ink); border-radius: 10px; background: var(--paper);
+}
+.photo-x {
+  position: absolute; top: -8px; right: -8px; width: 32px; height: 32px; padding: 0;
+  display: grid; place-items: center;
+  border: var(--line) solid var(--ink); border-radius: 50%; background: var(--paper); color: var(--ink);
+  font-weight: 900; font-size: 18px; line-height: 1; box-shadow: var(--shadow-sm);
+}
+.photo-x::after { content: ""; position: absolute; inset: -6px; } /* 押しやすく（44px相当） */
+.photo-count, .photo-busy { margin: 0; font-size: 14px; font-weight: 700; color: var(--on-ground); }
+.photo-note { margin: 0; font-size: 13px; color: var(--on-ground-soft); }
+.photo-clear-all { justify-self: start; color: var(--on-ground); }
+.photo-block .badge-opt { margin-left: 8px; }
+
+/* ---------- タイムスケジュール（シートの中） ---------- */
+.sch-day { display: grid; gap: 8px; }
+.sch-day-title { margin: 6px 0 0; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-family: var(--f-display); font-weight: 900; font-size: 17px; }
+.sch-today, .sch-now {
+  display: inline-block; padding: 0 8px; border: 2px solid var(--ink); border-radius: 999px;
+  background: var(--coral); color: var(--ink); font-family: var(--f-body); font-size: 12px; font-weight: 700; line-height: 20px;
+}
+.sch-now { margin-left: 8px; vertical-align: 1px; }
+.sch-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sch-item {
+  display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 10px; align-items: start;
+  padding: 10px 12px; background: var(--paper); border: var(--line) solid var(--ink); border-radius: 12px;
+}
+.sch-item.is-now { border-left-width: 8px; border-left-color: var(--coral); background: #FFF6F5; }
+.sch-time { font-weight: 700; font-size: 14px; line-height: 1.5; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sch-main { display: grid; gap: 2px; font-size: 15px; line-height: 1.5; }
+.sch-note { font-size: 13px; color: var(--ink-soft); }
+.sch-foot { margin: 0; font-size: 13px; font-weight: 700; color: var(--ink-soft); }

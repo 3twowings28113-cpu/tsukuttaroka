@@ -8,8 +8,9 @@ QRを読む → ネタを選ぶ → しゃべる（音声入力OK）→ 3パタ�
 このフォルダで `npm run setup` を実行するだけ（GenCode に「AGENTS.md を読んで、最初の公開をして」と頼めばOK）。
 最後に表示される URL を使う。
 
-- 参加者用（QRにするURL）：`https://tsukuttaroka.<サブドメイン>.workers.dev/`
-- 会場スクリーン用QR：`…/qr`
+- LSCW（LinkedIn Student Career Week 2026 Autumn）専用ページ（QRにするURL）：`https://tsukuttaroka.<サブドメイン>.workers.dev/lscw`
+- 普段使い：`https://tsukuttaroka.<サブドメイン>.workers.dev/`
+- 会場スクリーン用QR：`…/qr?preset=lscw&url=…/lscw`（運営ページの「イベント」→「会場スクリーン用QR」からも開ける）
 - 運営ページ：`…/admin`（合言葉は .dev.vars の ADMIN_PASSCODE）
 - パネラー用ページ：運営ページの「パネラー用リンク」からコピー（`…/judge?k=…`。鍵は合言葉から自動で作られる）
 - リハーサル用（例文入り）：`…/?demo=1`
@@ -25,6 +26,8 @@ QRを読む → ネタを選ぶ → しゃべる（音声入力OK）→ 3パタ�
 | パネラーの名前を変える | public/config.js の judges |
 | 報告シートの文言を変える | public/config.js の report |
 | 「困ったら」の案内を変える | public/config.js の help |
+| イベントのハッシュタグ・メンション・AIキー・あいことば・タイムスケジュールを変える | 運営ページの「イベント」（デプロイ不要） |
+| AIへの指示文をその場で直す | 運営ページの「AIへの指示文」（デプロイ不要・初期の文に戻せる） |
 変えたあとは `npm run deploy`。
 
 ## 中身
