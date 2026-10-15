@@ -36,7 +36,7 @@ export const SYSTEM_PROMPT = `あなたは、LinkedInの投稿づくりを手伝
 回答と好みだけを材料に、その人らしいLinkedIn投稿文を3パターン書きます。投稿は、ビジネスの場で本人が自分の言葉で語るものです。
 
 # 必ず守ること
-1. 事実は回答から取る。回答にない人名・数字・発言・エピソード・感想を作らない。材料が少ないときは、盛らずに短くまとめる。
+1. 事実は回答から取る（写真が付いているときは決まり23も）。回答にない人名・数字・発言・エピソード・感想を作らない。材料が少ないときは、盛らずに短くまとめる。
 2. 本人の言葉を活かす。回答の言い回しや口ぐせは、できるだけそのまま使う。
 3. 学びや気づきは具体的に書く。「勉強になった」「刺激を受けた」だけで終わらせない。
 4. 感謝の回答があれば自然に入れる。人名は回答に書かれたものだけを使い、名前の直前に「@」を付けてメンションの形にする（例：@山下 翼）。敬称は付けない。
@@ -58,6 +58,7 @@ export const SYSTEM_PROMPT = `あなたは、LinkedInの投稿づくりを手伝
 20. アプリの宣伝が「入れる」のときは、本文の終わりのほうに、このアプリを作った人への一文を1回だけ入れる。形は「ちなみにこの文章は、@山下 翼 が作ったアプリ『投稿、つくったろか。』で作りました」のような文。名前の直前に「@」を付ける。「なし」のときは、絶対に入れない。
 21. 【投稿テーマ】の指定があるときは、そのテーマに沿った投稿にする。回答とカレンダーの予定はテーマの材料として使い、テーマに関係が薄い話は減らすか書かない。テーマに書かれていない事実は作らない。テーマそのものを文章に書くかは、自然なほうを選ぶ。
 22. 【この人の書き方のくせ】があるときは、そこに書かれた一人前・口ぐせ・組み立て・温度感を最優先でまねる（トーン3パターンの型は守りつつ、言葉選びはくせを優先）。長さと絵文字の指定だけは従う。事実は回答から取るルールは変わらない。
+23. 【写真】が付いているときは、写真を見て確かに分かること（写っている物、場の様子や雰囲気）だけを材料に足してよい。写っている人の名前・所属、場所、日付、数字、写真の中の文字の意味は、回答に書かれていなければ推測しない。写真の説明を長々と書かず、回答の話を主役にする。写真と回答が食い違うときは回答を優先する。
 
 # トーン（【トーン】の指定どおり、1本だけ書く）
 - emo（エモい）：その場の空気や、気持ちが動いた瞬間から書き出す。読み終わると少し温かくなる。
@@ -200,7 +201,21 @@ export function sanitizePayload(raw) {
     .slice(0, 8)
     .map((s) => clean(s, 80))
     .filter(Boolean);
-  return { answers, style, profile: { role }, name: who, theme, voice, mode, intro, stylePrompt, prefs, tone };
+  return { answers, style, profile: { role }, name: who, theme, voice, mode, intro, stylePrompt, prefs, tone, photos: 0 };
+}
+
+// 写真（端末で長辺1024pxのJPEGにしてから届く）。形と大きさだけ確かめる。中身の確認はAI側に任せる
+const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
+export const IMAGE_MAX = 4;
+export const IMAGE_MAX_CHARS = 700000; // 1枚あたりのbase64の長さ（約500KB）
+export function sanitizeImages(raw) {
+  return (Array.isArray(raw) ? raw : [])
+    .slice(0, IMAGE_MAX)
+    .map((im) => ({
+      mime: IMAGE_TYPES.includes(im && im.mime) ? im.mime : "",
+      data: typeof (im && im.data) === "string" ? im.data : "",
+    }))
+    .filter((im) => im.mime && im.data.length >= 100 && im.data.length <= IMAGE_MAX_CHARS && /^[A-Za-z0-9+/]+$/.test(im.data.slice(0, 200)));
 }
 
 // ---------- AIに渡す文 ----------
@@ -212,6 +227,10 @@ export function buildUserInput(p) {
     if (a.text) lines.push(`・本人のことば：${a.text}`);
   }
   lines.push("");
+  if (p.photos) {
+    lines.push(`【写真】${p.photos}枚を添付（決まり23のとおり、写真を見て確かに分かることだけ使う）`);
+    lines.push("");
+  }
   if (p.theme) {
     lines.push(`【投稿テーマ】${p.theme}`);
     lines.push("");

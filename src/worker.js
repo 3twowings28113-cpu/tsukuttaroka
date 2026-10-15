@@ -24,6 +24,9 @@ import {
   cleanRequest,
   TONE_IDS,
   sanitizePayload,
+  sanitizeImages,
+  IMAGE_MAX,
+  IMAGE_MAX_CHARS,
   buildUserInput,
   buildRefineInput,
   cleanBody,
@@ -32,7 +35,7 @@ import {
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { extractLinkedInUrl, cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-08.voice-3";
+const VERSION = "2026-10-15.photo-1";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -56,6 +59,7 @@ async function route(request, env, ctx, url) {
   if (p === "/api/stats" && m === "GET") return stats(env);
   if (p === "/api/generate" && m === "POST") return generate(request, env, ctx);
   if (p === "/api/checkkey" && m === "POST") return checkKey(request);
+  if (p === "/api/clientlog" && m === "POST") return clientLog(request, env, ctx);
   if (p === "/api/cal" && m === "POST") return calEvents(request, env);
   if (p === "/api/style" && m === "POST") return styleProfile(request, env);
   if (p === "/api/refine" && m === "POST") return refine(request, env, ctx);
@@ -229,7 +233,7 @@ function aiConfigOf(request) {
   return { provider: c.provider, baseUrl: String(c.baseUrl || def).slice(0, 200), model: String(c.model).slice(0, 80), key: String(c.key).slice(0, 300) };
 }
 
-async function anthropicJSON({ baseUrl, model, key, system, input, timeoutMs = 30000, maxOutputTokens = 4000 }) {
+async function anthropicJSON({ baseUrl, model, key, system, input, images = [], timeoutMs = 30000, maxOutputTokens = 4000 }) {
   const started = Date.now();
   const base = { model, style: "anthropic" };
   if (!key || !model) return { ...base, ok: false, status: 0, reason: "NO_KEY", message: "AIの設定が足りません", ms: 0 };
@@ -244,7 +248,14 @@ async function anthropicJSON({ baseUrl, model, key, system, input, timeoutMs = 3
         model,
         max_tokens: maxOutputTokens,
         system: `${system}\n\n出力は指定のJSONだけにして。前後に説明は書かない。`,
-        messages: [{ role: "user", content: input }],
+        messages: [
+          {
+            role: "user",
+            content: images.length
+              ? [...images.map((im) => ({ type: "image", source: { type: "base64", media_type: im.mime, data: im.data } })), { type: "text", text: input }]
+              : input,
+          },
+        ],
       }),
       signal: ctl.signal,
     });
@@ -271,7 +282,7 @@ async function anthropicJSON({ baseUrl, model, key, system, input, timeoutMs = 3
   }
 }
 
-async function openaiJSON({ baseUrl, model, key, system, input, timeoutMs = 22000, maxOutputTokens = 4000 }) {
+async function openaiJSON({ baseUrl, model, key, system, input, images = [], timeoutMs = 22000, maxOutputTokens = 4000 }) {
   const started = Date.now();
   const base = { model, style: "openai" };
   if (!key || !model) return { ...base, ok: false, status: 0, reason: "NO_KEY", message: "AIの設定が足りません", ms: 0 };
@@ -286,7 +297,12 @@ async function openaiJSON({ baseUrl, model, key, system, input, timeoutMs = 2200
         model,
         messages: [
           { role: "system", content: system },
-          { role: "user", content: `${input}\n\n出力は指定のJSONだけにして。` },
+          {
+            role: "user",
+            content: images.length
+              ? [{ type: "text", text: `${input}\n\n出力は指定のJSONだけにして。` }, ...images.map((im) => ({ type: "image_url", image_url: { url: `data:${im.mime};base64,${im.data}` } }))]
+              : `${input}\n\n出力は指定のJSONだけにして。`,
+          },
         ],
         response_format: { type: "json_object" },
         max_tokens: maxOutputTokens,
@@ -316,10 +332,10 @@ async function openaiJSON({ baseUrl, model, key, system, input, timeoutMs = 2200
 }
 
 let primaryCoolUntil = 0;
-async function callAI(env, { system, input, schema, validate, userKey, adv }) {
+async function callAI(env, { system, input, schema, validate, userKey, adv, images = [] }) {
   // 上級者設定（Gemini以外）があるときは、そのAI一本でいく（予備チェーンなし）
   if (adv) {
-    const args = { baseUrl: adv.baseUrl, model: adv.model, key: adv.key, system, input };
+    const args = { baseUrl: adv.baseUrl, model: adv.model, key: adv.key, system, input, images };
     let r = adv.provider === "anthropic" ? await anthropicJSON(args) : await openaiJSON(args);
     if (r.ok && validate) {
       const v = validate(r.json);
@@ -348,6 +364,7 @@ async function callAI(env, { system, input, schema, validate, userKey, adv }) {
       input,
       schema,
       thinking,
+      images,
       ...step,
     };
     let r = await geminiJSON(args);
@@ -367,7 +384,7 @@ async function callAI(env, { system, input, schema, validate, userKey, adv }) {
 
 // ---------- 参加者用 ----------
 // 端末で入れた自分のキーや、上級者設定（Gemini以外のAI）を受け取る
-const userKeyOf = (request) => (String(request.headers.get("x-user-key") || "").trim().slice(0, 200) || null);
+const userKeyOf = (request) => (String(request.headers.get("x-user-key") || "").trim().slice(0, 300) || null);
 
 // ---------- キーのお試し確認（紐づけの前に、キーが使えるかだけ確かめる。無料の一覧取得） ----------
 async function checkKey(request) {
@@ -390,10 +407,43 @@ async function checkKey(request) {
   }
 }
 
+// 写真つきのとき、生成と書き直しは本文が大きくなる（写真4枚まで＋回答）
+const AI_BODY_MAX = IMAGE_MAX * IMAGE_MAX_CHARS + 60000;
+const imagesKb = (images) => Math.round((images.reduce((n, im) => n + im.data.length, 0) * 3) / 4 / 1024);
+// 写真が原因になりやすい失敗（400・413・返事の形の崩れ）なら、写真なしでもう一度だけ作る
+const photoRetryable = (r) => r.status === 400 || r.status === 413 || ["BAD_SHAPE", "EMPTY", "BAD_JSON"].includes(r.reason);
+
+async function readAiBody(request, env, ctx, where) {
+  const body = await readJson(request, AI_BODY_MAX);
+  if (!body) logEvent(env, ctx, "error", { where: `${where}:read`, reason: "BAD_BODY", kb: Math.round(Number(request.headers.get("content-length") || 0) / 1024) });
+  return body;
+}
+
+// 端末で起きた失敗（時間切れ・通信切れ・写真が読めない・作っている途中で画面が閉じた など）を記録する。運営ページの「最近のエラー」に出る
+async function clientLog(request, env, ctx) {
+  const body = await readJson(request, 4000);
+  if (!body) return json({ ok: false, code: "input" }, 400);
+  const cid = String(body.clientId || "").slice(0, 64);
+  const ip = request.headers.get("cf-connecting-ip") || "local";
+  if (limited(`cl:${cid}`, 20, 60000) || limited(`cli:${ip}`, 600, 60000)) return json({ ok: false, code: "rate" }, 429);
+  const str = (v, n) => String(v ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").slice(0, n);
+  logEvent(env, ctx, "error", {
+    where: `client:${str(body.where, 20)}`,
+    reason: str(body.code, 40),
+    message: str(body.message, 200),
+    photos: Math.max(0, Math.min(10, Number(body.photos) || 0)),
+    kb: Math.max(0, Math.min(100000, Number(body.kb) || 0)),
+    ua: str(request.headers.get("user-agent"), 160),
+    name: cleanName(body.name),
+  });
+  return json({ ok: true });
+}
+
 async function generate(request, env, ctx) {
-  const body = await readJson(request);
+  const body = await readAiBody(request, env, ctx, "generate");
   if (!body) return json({ ok: false, code: "input", message: "入力が読めませんでした" }, 400);
   const p = sanitizePayload(body);
+  const images = sanitizeImages(body.images);
   if (!p.answers.length) return json({ ok: false, code: "input", message: "回答が空です" }, 400);
   if (!(await generationOpen(env))) return json({ ok: false, code: "stopped", message: "受付停止中" }, 503);
   const cid = String(body.clientId || "").slice(0, 64);
@@ -408,20 +458,28 @@ async function generate(request, env, ctx) {
     logEvent(env, ctx, "generate", { cards, sample: true, name: who, mode: p.mode, followed: body.followed === true });
     return json({ ok: true, sample: true });
   }
-  const r = await callAI(env, {
+  const opts = (imgs) => ({
     userKey: ukey,
     adv: aiCfg,
     system: SYSTEM_PROMPT,
-    input: buildUserInput(p),
+    input: buildUserInput({ ...p, photos: imgs.length }),
+    images: imgs,
     schema: patternsSchema(patternCount(p.mode), p.tone),
     validate: (j) => normalizePatterns(j, p.style.phrase, patternCount(p.mode), p.tone),
   });
+  let r = await callAI(env, opts(images));
+  let photoSkipped = false;
+  if (!r.ok && images.length && photoRetryable(r)) {
+    logEvent(env, ctx, "error", { where: "generate:photo", status: r.status, reason: r.reason, model: r.model, photos: images.length, kb: imagesKb(images), message: String(r.message || "").slice(0, 160) });
+    r = await callAI(env, opts([]));
+    photoSkipped = r.ok;
+  }
   if (!r.ok) {
-    logEvent(env, ctx, "error", { where: "generate", status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey });
+    logEvent(env, ctx, "error", { where: "generate", status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey, photos: images.length, kb: imagesKb(images) });
     return json({ ok: false, code: "failed", message: ukey ? explainFailure(r) : "生成に失敗しました" }, 502);
   }
-  logEvent(env, ctx, "generate", { cards, model: r.model, ms: r.ms, name: who, mode: p.mode, followed: body.followed === true });
-  return json({ ok: true, patterns: r.value, model: r.model });
+  logEvent(env, ctx, "generate", { cards, model: r.model, ms: r.ms, name: who, mode: p.mode, followed: body.followed === true, photos: images.length, photoSkipped });
+  return json({ ok: true, patterns: r.value, model: r.model, photoSkipped });
 }
 
 // ---------- カレンダー（Googleカレンダーの「秘密のiCalアドレス」を見る。URLは保存しない） ----------
@@ -541,9 +599,10 @@ async function styleProfile(request, env) {
 }
 
 async function refine(request, env, ctx) {
-  const body = await readJson(request);
+  const body = await readAiBody(request, env, ctx, "refine");
   if (!body) return json({ ok: false, code: "input", message: "入力が読めませんでした" }, 400);
   const p = sanitizePayload(body);
+  const images = sanitizeImages(body.images);
   const tone = TONE_IDS.includes(body.tone) ? body.tone : null;
   const action = REFINE_ACTIONS[body.action] ? body.action : null;
   const current = String(body.body || "").slice(0, 1500);
@@ -558,22 +617,28 @@ async function refine(request, env, ctx) {
   const aiCfg = aiConfigOf(request);
   if (!ukey && !aiCfg && !env.GEMINI_API_KEY) return json({ ok: true, sample: true });
 
-  const r = await callAI(env, {
+  const opts = (imgs) => ({
     userKey: ukey,
     adv: aiCfg,
     system: SYSTEM_PROMPT,
-    input: buildRefineInput(p, tone, current, action, ask),
+    input: buildRefineInput({ ...p, photos: imgs.length }, tone, current, action, ask),
+    images: imgs,
     schema: BODY_SCHEMA,
     validate: (j) => {
       const b = cleanBody(j && j.body, p.style.phrase);
       return b.length >= 20 ? b : null;
     },
   });
+  let r = await callAI(env, opts(images));
+  if (!r.ok && images.length && photoRetryable(r)) {
+    logEvent(env, ctx, "error", { where: "refine:photo", status: r.status, reason: r.reason, model: r.model, photos: images.length, kb: imagesKb(images), message: String(r.message || "").slice(0, 160) });
+    r = await callAI(env, opts([]));
+  }
   if (!r.ok) {
-    logEvent(env, ctx, "error", { where: "refine", status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey });
+    logEvent(env, ctx, "error", { where: "refine", status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey, photos: images.length });
     return json({ ok: false, code: "failed", message: ukey ? explainFailure(r) : "書き直しに失敗しました" }, 502);
   }
-  logEvent(env, ctx, "refine", { action, tone, model: r.model, name: cleanName(body.name), mode: p.mode });
+  logEvent(env, ctx, "refine", { action, tone, model: r.model, name: cleanName(body.name), mode: p.mode, photos: images.length });
   return json({ ok: true, body: r.value, model: r.model });
 }
 
@@ -795,7 +860,7 @@ async function adminSummary(env) {
     db.prepare("SELECT COUNT(*) AS n FROM posts"),
     db.prepare("SELECT detail FROM events WHERE type = 'generate' ORDER BY id DESC LIMIT 3000"),
     db.prepare("SELECT detail FROM events WHERE type IN ('copy', 'later') ORDER BY id DESC LIMIT 3000"),
-    db.prepare("SELECT created_at, detail FROM events WHERE type = 'error' ORDER BY id DESC LIMIT 5"),
+    db.prepare("SELECT created_at, detail FROM events WHERE type = 'error' ORDER BY id DESC LIMIT 20"),
     db.prepare("SELECT COUNT(*) AS n FROM reports WHERE hidden = 0"),
     db.prepare("SELECT name, created_at FROM reports WHERE hidden = 0"),
   ]);
@@ -845,7 +910,10 @@ async function adminSummary(env) {
   out.followed = out.people.filter((x) => x.followed).length;
   out.recentErrors = (errs.results || []).map((r) => {
     const d = safeParse(r.detail);
-    return { at: jst(r.created_at), ...d, hint: explainFailure(d) };
+    // 端末からの記録は、端末が送ってきた説明をそのまま出す。写真で失敗したものは、写真なしで作り直したことを添える
+    const where = String(d.where || "");
+    const hint = where.startsWith("client:") ? d.message || d.reason || "" : explainFailure(d) + (where.endsWith(":photo") ? "（→ 写真なしで作り直した）" : "");
+    return { at: jst(r.created_at), ...d, hint };
   });
   return json(out);
 }

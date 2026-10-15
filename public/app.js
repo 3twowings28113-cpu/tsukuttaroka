@@ -308,7 +308,8 @@
     ask: "", // 「こうしてほしい」の下書き
     modeFrom: "", // 書き方シートをどこから開いたか（gen＝作る前／regen＝作り直し）
     rep: null, // 報告シートの下書き
-    photos: [], // えらんだ写真（複数OK。保存しない。リロードで消える）
+    photos: [], // えらんだ写真（4枚まで。端末で小さくしたもの {url, mime, data, kb}。保存しない。リロードで消える）
+    photoBusy: false, // 写真を小さくしている途中
     photoWhat: "",
     photoWant: "",
   };
@@ -715,15 +716,22 @@
         </div>
         ${field("role")}${field("formality")}${field("kansai")}${field("length")}${field("emoji")}${C.style.sign ? field("sign") : ""}
         <div class="field">
-          <div class="field-label">写真（任意・複数えらべるで）</div>
+          <div class="field-label">写真（任意・${PHOTO_LIMIT}枚まで）</div>
           ${
             T.photos.length
               ? `<div class="photo-prev">${T.photos.map((p, i) => `<div class="photo-item"><img src="${esc(p.url)}" alt="選んだ写真のプレビュー${i + 1}"><button type="button" class="btn-text" data-act="photoClear" data-i="${i}">この写真をやめる</button></div>`).join("")}</div>`
-              : `<label class="btn btn-secondary btn-block" for="photoInput">写真をえらぶ</label><input id="photoInput" type="file" accept="image/*" multiple class="sr-only">`
+              : ""
+          }
+          ${
+            T.photoBusy
+              ? `<p class="field-note" role="status">写真を読みこんでるで…</p>`
+              : T.photos.length < PHOTO_LIMIT
+              ? `<label class="btn btn-secondary btn-block" for="photoInput">${T.photos.length ? "写真を足す" : "写真をえらぶ"}</label><input id="photoInput" type="file" accept="image/*" multiple class="sr-only">`
+              : ""
           }
           <input id="photoWhat" class="phrase" type="text" maxlength="60" autocomplete="off" placeholder="この写真は何？（例：できたてのパンの山）" value="${esc(T.photoWhat || "")}">
           <input id="photoWant" class="phrase" type="text" maxlength="60" autocomplete="off" placeholder="伝えたいこと（例：焼きたての温度感）" value="${esc(T.photoWant || "")}">
-          <p class="field-note">写真のことは、文章にも反映させるで。写真そのものは、投稿のときにLinkedInで添付してな（案内も出るで）。</p>
+          <p class="field-note">写真は小さくしてAIに見せて、文章に反映させるで（このアプリには保存せえへん）。写真そのものは、投稿のときにLinkedInで添付してな（案内も出るで）。</p>
         </div>
         <div class="field">
           <label class="field-label" for="phrase">入れたい一言（任意）</label>
@@ -1659,6 +1667,120 @@
     return btoa(bin);
   };
 
+  // ---------- 写真 ----------
+  // えらんだ写真は、すぐ端末で長辺1024pxのJPEGにする。大きい元の写真は持ち続けない（iPhoneで画面が落ちる対策）
+  const PHOTO_LIMIT = 4;
+  const PHOTO_MAX_PX = 1024;
+  const PHOTO_MAX_CHARS = 650000; // サーバーの上限（700000）より少し小さく
+  function shrinkPhoto(file) {
+    return new Promise((resolve, reject) => {
+      const src = URL.createObjectURL(file);
+      const img = new Image();
+      let settled = false;
+      const finish = (err, v) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        URL.revokeObjectURL(src);
+        img.onload = img.onerror = null;
+        img.src = "";
+        if (err) reject(err);
+        else resolve(v);
+      };
+      const timer = setTimeout(() => finish(Object.assign(new Error("写真の読みこみが15秒で終わらへんかった"), { code: "photo_timeout" })), 15000);
+      img.onload = () => {
+        try {
+          const w0 = img.naturalWidth;
+          const h0 = img.naturalHeight;
+          if (!w0 || !h0) throw Object.assign(new Error("写真の大きさが読めへんかった"), { code: "photo_size" });
+          const k = Math.min(1, PHOTO_MAX_PX / Math.max(w0, h0));
+          const cv = document.createElement("canvas");
+          cv.width = Math.max(1, Math.round(w0 * k));
+          cv.height = Math.max(1, Math.round(h0 * k));
+          const g = cv.getContext("2d");
+          g.fillStyle = "#fff"; // 透明なところは白に
+          g.fillRect(0, 0, cv.width, cv.height);
+          g.drawImage(img, 0, 0, cv.width, cv.height);
+          let url = "";
+          for (const q of [0.8, 0.65, 0.5]) {
+            url = cv.toDataURL("image/jpeg", q);
+            if (url.length - url.indexOf(",") - 1 <= PHOTO_MAX_CHARS) break;
+          }
+          cv.width = cv.height = 0;
+          const data = url.slice(url.indexOf(",") + 1);
+          if (!url.startsWith("data:image/jpeg") || data.length < 100 || data.length > PHOTO_MAX_CHARS) {
+            throw Object.assign(new Error("写真を小さくできへんかった"), { code: "photo_encode" });
+          }
+          finish(null, { url, mime: "image/jpeg", data, kb: Math.round((data.length * 3) / 4 / 1024) });
+        } catch (e) {
+          finish(e);
+        }
+      };
+      img.onerror = () => finish(Object.assign(new Error("この形式の写真は、このブラウザで開けへんかった"), { code: "photo_decode" }));
+      img.src = src;
+    });
+  }
+  async function addPhotos(files) {
+    if (T.photoBusy) return;
+    T.photoBusy = true;
+    if (S.step === "style") keepScroll(render);
+    let failed = 0;
+    let over = false;
+    for (const f of files) {
+      if (T.photos.length >= PHOTO_LIMIT) {
+        over = true;
+        break;
+      }
+      try {
+        T.photos.push(await shrinkPhoto(f));
+      } catch (e) {
+        failed += 1;
+        clientLog("photo", e, { kb: Math.round((f.size || 0) / 1024), message: `${(e && e.message) || e}（${f.type || "形式不明"}）` });
+      }
+    }
+    T.photoBusy = false;
+    if (S.step === "style") keepScroll(render);
+    if (failed) toast(`写真${failed}枚が読みこめへんかった。別の写真にするか、写真なしで進めてな`, 3600);
+    else if (over) toast(`写真は${PHOTO_LIMIT}枚までやで`, 2400);
+  }
+  const photoKb = () => T.photos.reduce((n, p) => n + (p.kb || 0), 0);
+  // 生成と書き直しのときだけ、写真を付けて送る（記録用の送信には付けない）
+  const withPhotos = (p) => (T.photos.length ? { ...p, images: T.photos.map((x) => ({ mime: x.mime, data: x.data })) } : p);
+
+  // ---------- 失敗の記録（運営ページの「最近のエラー」に出る） ----------
+  function clientLog(where, e, extra) {
+    if (MODE === "preview") return;
+    const body = {
+      where,
+      code: (e && e.code) || (e && e.name) || "",
+      message: String((extra && extra.message) || (e && e.message) || e || "").slice(0, 200),
+      photos: extra && extra.photos != null ? extra.photos : T.photos.length,
+      kb: (extra && extra.kb) || photoKb(),
+      clientId: S.clientId,
+      name: myName(),
+    };
+    try {
+      fetch("api/clientlog", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body), keepalive: true }).catch(() => {});
+    } catch {}
+  }
+  // 作っている途中で画面が閉じた（落ちた・再読み込みされた）ことに、次に開いたとき気づけるようにする
+  const PENDING_KEY = "tsukuttaroka.pending";
+  function markPending(on) {
+    try {
+      if (on) localStorage.setItem(PENDING_KEY, JSON.stringify({ at: Date.now(), photos: T.photos.length, kb: photoKb() }));
+      else localStorage.removeItem(PENDING_KEY);
+    } catch {}
+  }
+  function takePending() {
+    try {
+      const v = JSON.parse(localStorage.getItem(PENDING_KEY) || "null");
+      localStorage.removeItem(PENDING_KEY);
+      return v && Date.now() - v.at < 10 * 60 * 1000 ? v : null;
+    } catch {
+      return null;
+    }
+  }
+
   // ---------- AIとの通信 ----------
   async function postJSON(url, body, timeoutMs) {
     const ctl = new AbortController();
@@ -1688,6 +1810,8 @@
         err.code = "timeout";
         throw err;
       }
+      // fetch 自体の失敗（電波が切れた・アプリを切り替えて通信が止まった など）
+      if (e instanceof TypeError && !e.code) e.code = "network";
       throw e;
     } finally {
       clearTimeout(timer);
@@ -1715,17 +1839,17 @@
   const API = {
     async generate(p) {
       if (MODE === "preview") return previewGenerate(p);
-      const data = await postJSON("api/generate", p, 60000);
+      const data = await postJSON("api/generate", withPhotos(p), T.photos.length ? 75000 : 60000);
       if (data.sample) return { ...sampleGenerate(p), sample: true };
       const r = toResults(data.patterns);
-      if (!r) throw Object.assign(new Error("empty"), { code: "failed" });
-      return { ...r, model: data.model || "" };
+      if (!r) throw Object.assign(new Error("empty"), { code: "empty" });
+      return { ...r, model: data.model || "", photoSkipped: !!data.photoSkipped };
     },
     async refine(p) {
       if (MODE === "preview") return previewRefine(p);
-      const data = await postJSON("api/refine", p, 45000);
+      const data = await postJSON("api/refine", withPhotos(p), T.photos.length ? 60000 : 45000);
       if (data.sample) return { body: sampleRefine(p) };
-      if (!data.body) throw Object.assign(new Error("empty"), { code: "failed" });
+      if (!data.body) throw Object.assign(new Error("empty"), { code: "empty" });
       return { body: data.body };
     },
     submit(p) {
@@ -1915,6 +2039,7 @@
     render();
     window.scrollTo(0, 0);
     startLoadingLines();
+    markPending(true);
     try {
       const r = await API.generate(payloadOverride || payload());
       S.results = r;
@@ -1933,10 +2058,12 @@
       render();
       window.scrollTo(0, 0);
       if (r.sample) toast("いまはサンプルの文やで。AIを紐づけると、本番の文章になるで（最初の画面の下のボタンから）", 5000);
+      else if (r.photoSkipped) toast("写真はAIが読めへんかったから、文字の回答だけで作ったで", 4000);
       const h = $(".tabs [aria-selected=true]");
       if (h) h.focus({ preventScroll: true });
       setTimeout(() => (T.fresh = false), 800);
     } catch (e) {
+      if (!loggedByServer(e)) clientLog("generate", e);
       T.error = errorText(e);
       if (before === "result" && S.results) {
         // 作り直しに失敗したときは、前の3つの文に戻す
@@ -1949,6 +2076,7 @@
         render();
       }
     } finally {
+      markPending(false);
       T.busy = false;
       stopLoadingLines();
     }
@@ -1973,10 +2101,14 @@
     if (code === "rate") return "ちょっと連打しすぎかも。5秒おいて、もう一回どうぞ。";
     if (code === "timeout") return "時間がかかりすぎて止まってしもた。入力は残ってるで。もう一回押してみて。";
     if (code === "input") return "回答が空っぽみたい。ひとことだけでも書いてな。";
-    // サーバーからの詳しい説明（キーの間違い・上限など）があれば、そのとおりに出す
-    if (e && e.message && e.message !== "request failed") return e.message;
+    if (code === "network") return "通信が切れたみたい。電波のええとこで、もう一回押してみて。入力は残ってるで。";
+    if (code === "empty") return "AIの返事が空っぽやった。入力は残ってるで。もう一回押してみて。";
+    // サーバーからの詳しい説明（キーの間違い・上限など）があれば、そのとおりに出す（画面側のエラー文は出さない）
+    if (code && e.message && e.message !== "request failed") return e.message;
     return "混み合ってて作れへんかった。入力はそのまま残ってるで。もう一回押してみて。";
   }
+  // サーバーが自分で記録している失敗（AIの失敗・連打・受付停止）以外は、端末から記録を送る
+  const loggedByServer = (e) => ["failed", "rate", "stopped"].includes(e && e.code);
 
   async function refine(actionId, request) {
     if (T.refining) return;
@@ -1997,6 +2129,7 @@
       save();
       toast(actionId === "custom" ? "言われたとおり直したで" : "直したで", 1400);
     } catch (e) {
+      if (!loggedByServer(e)) clientLog("refine", e);
       toast(errorText(e), 2600);
     } finally {
       T.refining = null;
@@ -2405,15 +2538,8 @@
       }
       case "photoClear": {
         const pi = Number(el.dataset && el.dataset.i);
-        if (Number.isInteger(pi) && T.photos[pi]) {
-          if (T.photos[pi].url && T.photos[pi].url.startsWith("blob:")) URL.revokeObjectURL(T.photos[pi].url);
-          T.photos.splice(pi, 1);
-        } else {
-          T.photos.forEach((p) => {
-            if (p.url && p.url.startsWith("blob:")) URL.revokeObjectURL(p.url);
-          });
-          T.photos = [];
-        }
+        if (Number.isInteger(pi) && T.photos[pi]) T.photos.splice(pi, 1);
+        else T.photos = [];
         keepScroll(render);
         break;
       }
@@ -3046,17 +3172,11 @@
       return;
     }
     if (e.target.id !== "photoInput") return;
-    const files = Array.from((e.target.files && e.target.files) || []).filter((f) => f && f.type && f.type.startsWith("image/"));
+    // 形式が空で来る端末もあるので、画像でないとはっきり分かるものだけ外す（読めるかどうかは shrinkPhoto で確かめる）
+    const files = Array.from((e.target.files && e.target.files) || []).filter((f) => f && (!f.type || f.type.startsWith("image/")));
     e.target.value = "";
     if (!files.length) return;
-    for (const f of files) {
-      if (T.photos.length >= 4) {
-        toast("写真は4枚までやで", 2400);
-        break;
-      }
-      T.photos.push({ file: f, url: URL.createObjectURL(f) });
-    }
-    keepScroll(render);
+    addPhotos(files);
   });
 
   // じぶんの書き方：ドラッグ＆ドロップ（パソコン）
@@ -3106,6 +3226,12 @@
   const saved = store.get();
   const params = new URLSearchParams(location.search);
   if (saved) S = restore(saved);
+  // 前回、作っている途中で画面が閉じていたら（端末のメモリ不足で落ちた・再読み込みされた など）、記録してひとこと出す
+  const wasPending = takePending();
+  if (wasPending) {
+    clientLog("reload", { code: "closed_while_generating" }, { photos: wasPending.photos || 0, kb: wasPending.kb, message: `作っている途中で画面が閉じた・再読み込みされた（写真${wasPending.photos || 0}枚）` });
+    setTimeout(() => toast(wasPending.photos ? "さっきは作ってる途中で画面が閉じてしもたみたい。写真を減らして、もう一回押してみて" : "さっきは作ってる途中で画面が閉じてしもたみたい。もう一回押してみて", 5000), 600);
+  }
   if (MODE === "live" && params.get("demo") === "1") {
     fillDemo();
   } else if (saved && hasProgress(saved)) {

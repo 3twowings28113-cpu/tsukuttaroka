@@ -303,7 +303,7 @@
     $("#tones").innerHTML = bars(Object.keys(TONE).map((k) => ({ label: TONE[k], n: (s.tones || {})[k] || 0 })).filter((x) => x.n || Object.keys(s.tones || {}).length));
     const errs = s.recentErrors || [];
     $("#errPanel").hidden = !errs.length;
-    $("#errs").innerHTML = errs.map((e) => `<div><b>${esc(e.at)}</b>　${esc(e.where || "")}　${esc(e.model || "")}　${esc(e.status || "")} ${esc(e.reason || "")}<br>${esc(e.hint || "")}</div>`).join("");
+    $("#errs").innerHTML = errs.map((e) => `<div><b>${esc(e.at)}</b>　${esc(e.where || "")}　${esc(e.model || "")}　${esc(e.status || "")} ${esc(e.reason || "")}${e.photos ? `　写真${esc(e.photos)}枚${e.kb ? `（${esc(e.kb)}KB）` : ""}` : ""}${e.name ? `　${esc(e.name)}` : ""}<br>${esc(e.hint || "")}${e.ua ? `<br><small>${esc(e.ua)}</small>` : ""}</div>`).join("");
     $("#postCount").textContent = `　${s.posts}件`;
     const MODE_NAME = { "": "おまかせ", first: "はじめての投稿", ishizaka: "石坂さん風" };
     const modes = s.modes || {};

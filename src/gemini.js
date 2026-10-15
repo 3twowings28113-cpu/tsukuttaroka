@@ -18,6 +18,7 @@ export async function geminiJSON({
   timeoutMs = 20000,
   maxOutputTokens = 6000,
   baseUrl = DEFAULT_BASE,
+  images = [], // [{ mime, data(base64) }]。端末で小さくした写真
 }) {
   const started = Date.now();
   const base = { model, style };
@@ -29,7 +30,7 @@ export async function geminiJSON({
     url = `${baseUrl}/models/${encodeURIComponent(model)}:generateContent`;
     body = {
       systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: "user", parts: [{ text: input }] }],
+      contents: [{ role: "user", parts: [{ text: input }, ...images.map((im) => ({ inlineData: { mimeType: im.mime, data: im.data } }))] }],
       generationConfig: { responseMimeType: "application/json", responseJsonSchema: schema, maxOutputTokens },
     };
     if (thinking) body.generationConfig.thinkingConfig = { thinkingLevel: thinking };
@@ -37,7 +38,10 @@ export async function geminiJSON({
     url = `${baseUrl}/interactions`;
     body = {
       model,
-      input,
+      // 写真があるときは、文 → 写真 の順に並べる（Interactions API の画像入力の形）
+      input: images.length
+        ? [{ type: "text", text: input }, ...images.map((im) => ({ type: "image", data: im.data, mime_type: im.mime }))]
+        : input,
       system_instruction: system,
       store: false,
       response_format: { type: "text", mime_type: "application/json", schema },
