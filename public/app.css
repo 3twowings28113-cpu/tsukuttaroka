@@ -779,3 +779,12 @@ body.has-dock .toast { bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
 .p-count { font-size: 13px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
 .btn-copy { min-height: 44px; padding: 0 14px; gap: 6px; font-size: 15px; box-shadow: var(--shadow-sm); }
 .p-about .li-body { white-space: pre-wrap; }
+
+/* ---------- イベントのあいことば ---------- */
+.ev-box { margin-top: 4px; }
+#evStatus.is-ng { color: #b3261e; }
+.ev-or {
+  display: flex; align-items: center; gap: 12px; margin: 18px 0 6px;
+  font-family: var(--f-body); font-weight: 700; font-size: 14px; color: var(--ink-soft);
+}
+.ev-or::before, .ev-or::after { content: ""; flex: 1; height: 2px; background: var(--ink); opacity: 0.25; }

@@ -101,7 +101,23 @@
   .awards .award-names { display: flex; flex-wrap: wrap; gap: 2px 16px; font-size: 20px; font-weight: 700; line-height: 1.5; }
   .awards .award-sub { font-size: 12px; color: var(--sub); font-weight: 700; }
   .awards .none { margin: 0; color: var(--sub); font-size: 14px; font-weight: 400; }
+  .ev-list { display: grid; gap: 12px; }
+  .ev-item { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 14px; padding: 12px; border: 2px solid var(--ink); border-radius: 10px; background: #F4F9FE; }
+  .ev-item.off { background: #F3F3F3; border-color: var(--rule); }
+  .ev-qr { width: 150px; height: 150px; padding: 6px; background: #fff; border: 1px solid var(--rule); border-radius: 8px; }
+  .ev-qr svg { display: block; width: 100%; height: 100%; }
+  .ev-side { display: grid; gap: 6px; min-width: 0; }
+  .ev-side h3 { margin: 0; font-size: 16px; }
+  .ev-side p { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
+  .ev-side input { width: 100%; min-height: 38px; padding: 0 10px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; font-size: 13px; }
+  .ev-form { display: grid; gap: 10px; margin-top: 12px; padding: 12px; border: 2px solid var(--blue); border-radius: 10px; }
+  .ev-form label { display: grid; gap: 4px; font-size: 14px; font-weight: 700; }
+  .ev-form label.chk { display: flex; align-items: center; gap: 8px; }
+  .ev-form input[type=text], .ev-form input[type=password], .ev-form select { min-height: 42px; padding: 0 10px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; font: inherit; font-size: 15px; font-weight: 500; }
+  .ev-form small { font-weight: 500; color: var(--sub); }
   @media (max-width: 720px) {
+    .ev-item { grid-template-columns: 1fr; }
+    .ev-qr { justify-self: center; }
     .nums { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .judge-box { grid-template-columns: 1fr; }
     .judge-qr { justify-self: center; }
@@ -142,6 +158,30 @@
     </section>
 
     <section class="nums" id="nums" aria-label="件数"></section>
+
+    <section class="panel" id="evPanel">
+      <div class="rep-head">
+        <h2>イベント（参加者用のURL・あいことば・ハッシュタグ）</h2>
+        <button class="btn btn-primary" id="evNewBtn" type="button">イベントを作る</button>
+      </div>
+      <p class="empty" style="margin:0 0 10px">イベントを作ると、参加者用のURLとQRができます。あいことばを入れた参加者は、ここで登録したAIキー（空ならサーバーのキー）で文章を作れます。参加者が自分のキーを作る必要はありません。</p>
+      <p class="msg bad" id="evKeyNote" hidden></p>
+      <div class="ev-list" id="evList"></div>
+      <p class="empty" id="noEvents" hidden>まだイベントはありません。</p>
+      <form class="ev-form" id="evForm" hidden>
+        <label>イベントID<small>URLに入ります。英小文字・数字・ハイフン（例：lscw2026）</small><input type="text" id="aevId" maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+        <label>イベント名<small>参加者の画面の上に出ます（空でもOK）</small><input type="text" id="aevName" maxlength="60" autocomplete="off"></label>
+        <label>ハッシュタグ<small>スペース区切り。どの投稿にも最後に必ず付きます（空なら質問セットの初期のハッシュタグ）</small><input type="text" id="aevTags" maxlength="400" autocomplete="off" placeholder="#LinkedIn #イベント名"></label>
+        <label>質問セット・色<small>config.js のプリセット</small><select id="aevPreset"></select></label>
+        <label>あいことば<small>参加者が入れると、下のAIキーで作れます。QR用URLには最初から入っています</small><input type="text" id="aevPass" maxlength="60" autocomplete="off"></label>
+        <label>Gemini APIキー<small id="aevKeyHint">空のままなら、サーバーのキー（GEMINI_API_KEY）を使います</small><input type="password" id="aevKey" maxlength="300" autocomplete="off" placeholder="AIza… / AQ.…"></label>
+        <label class="chk"><input type="checkbox" id="aevClearKey"> 登録してあるキーを消す</label>
+        <label class="chk"><input type="checkbox" id="aevCheer"> すべての投稿に「LinkedInの前向きな一文」を入れる</label>
+        <label class="chk"><input type="checkbox" id="aevActive" checked> 参加者が使える状態にする</label>
+        <div class="row"><button class="btn btn-primary" type="submit">保存</button><button class="btn" type="button" id="evCancel">やめる</button></div>
+        <p class="msg" id="evMsg" role="status"></p>
+      </form>
+    </section>
 
     <section class="panel" id="repPanel">
       <div class="rep-head">
@@ -263,6 +303,7 @@
       showDash();
       loadRows(true);
       loadReports().catch(() => {});
+      loadEvents().catch(() => {});
     } catch (e) {
       $("#loginMsg").textContent = e.auth ? e.message : "つながりませんでした。URLを確認してください。";
     }
@@ -495,10 +536,138 @@
     await loadReports();
   }
 
+  // ---------- イベント ----------
+  let events = [];
+  const PRESETS = window.APP_PRESETS || [];
+  const presetLabel = (id) => (PRESETS.find((p) => p.id === id) || { label: id || "（いつもの）" }).label;
+  function eventUrl(ev, withPass) {
+    const u = new URL(location.origin + "/");
+    u.searchParams.set("e", ev.id);
+    if (ev.preset) u.searchParams.set("preset", ev.preset);
+    if (withPass && ev.pass) u.searchParams.set("p", ev.pass);
+    return u.toString();
+  }
+  function qrSvg(text) {
+    try {
+      const q = qrcode(0, "M");
+      q.addData(text);
+      q.make();
+      return q.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
+    } catch {
+      return "";
+    }
+  }
+  async function loadEvents() {
+    const res = await api("api/admin/events");
+    const d = await res.json();
+    events = d.events || [];
+    const noKey = !d.serverKey && events.some((e) => e.pass && !e.keySet);
+    $("#evKeyNote").hidden = !noKey;
+    $("#evKeyNote").textContent = "AIキーが登録されていないイベントがあります。イベントの「Gemini APIキー」に入れるか、サーバーのキー（GEMINI_API_KEY）を登録してください。このままだと、あいことばを入れても作れません。";
+    $("#noEvents").hidden = events.length > 0;
+    $("#evList").innerHTML = events
+      .map((ev) => {
+        const qrUrl = eventUrl(ev, true);
+        return `<div class="ev-item${ev.active ? "" : " off"}">
+          <div class="ev-qr" role="img" aria-label="${esc(ev.name || ev.id)}のQRコード">${qrSvg(qrUrl)}</div>
+          <div class="ev-side">
+            <h3>${esc(ev.name || ev.id)}${ev.active ? "" : "（止めています）"}</h3>
+            <p>ID：<b>${esc(ev.id)}</b>　質問セット・色：${esc(presetLabel(ev.preset))}</p>
+            <p>ハッシュタグ：${ev.hashtags.length ? esc(ev.hashtags.join(" ")) : "（質問セットの初期のもの）"}</p>
+            <p>あいことば：${ev.pass ? `<b>${esc(ev.pass)}</b>` : "（なし。AIキーは使えません）"}　AIキー：${ev.keySet ? `登録ずみ（…${esc(ev.keyTail)}）` : "サーバーのキーを使う"}</p>
+            <p>LinkedInの一文：${ev.cheerAlways ? "すべての投稿に入れる" : "参加者が選ぶ"}</p>
+            <label class="msg" for="evu-${esc(ev.id)}">QR用URL（あいことば入り。参加者は何も入れずに使えます）</label>
+            <input id="evu-${esc(ev.id)}" readonly value="${esc(qrUrl)}">
+            <div class="row">
+              <button class="btn btn-sm" type="button" data-evcopy="${esc(ev.id)}">URLをコピー</button>
+              <a class="btn btn-sm" style="display:inline-flex;align-items:center;text-decoration:none;color:inherit" target="_blank" rel="noopener" href="qr?${esc(new URLSearchParams({ preset: ev.preset || "", url: qrUrl }).toString())}">会場スクリーン用QR</a>
+              <button class="btn btn-sm" type="button" data-evedit="${esc(ev.id)}">直す</button>
+              <button class="btn btn-sm btn-danger" type="button" data-evdel="${esc(ev.id)}">消す</button>
+            </div>
+          </div>
+        </div>`;
+      })
+      .join("");
+  }
+  function openEventForm(ev) {
+    const f = ev || { id: "", name: "", hashtags: [], preset: (PRESETS.find((p) => p.default) || { id: "" }).id, pass: "", keySet: false, keyTail: "", cheerAlways: false, active: true };
+    $("#aevId").value = f.id;
+    $("#aevId").readOnly = !!ev;
+    $("#aevName").value = f.name;
+    $("#aevTags").value = f.hashtags.join(" ");
+    $("#aevPreset").innerHTML = PRESETS.map((p) => `<option value="${esc(p.id)}"${p.id === f.preset ? " selected" : ""}>${esc(p.label)}</option>`).join("");
+    $("#aevPass").value = f.pass;
+    $("#aevKey").value = "";
+    $("#aevKeyHint").textContent = f.keySet ? `登録ずみ（…${f.keyTail}）。変えるときだけ入れてください` : "空のままなら、サーバーのキー（GEMINI_API_KEY）を使います";
+    $("#aevClearKey").checked = false;
+    $("#aevClearKey").parentElement.hidden = !f.keySet;
+    $("#aevCheer").checked = !!f.cheerAlways;
+    $("#aevActive").checked = f.active !== false;
+    $("#evMsg").textContent = "";
+    $("#evForm").hidden = false;
+    $("#evForm").scrollIntoView({ block: "start", behavior: "smooth" });
+    (ev ? $("#aevName") : $("#aevId")).focus({ preventScroll: true });
+  }
+  async function saveEventForm(e) {
+    e.preventDefault();
+    const body = {
+      id: $("#aevId").value.trim().toLowerCase(),
+      name: $("#aevName").value,
+      hashtags: $("#aevTags").value,
+      preset: $("#aevPreset").value,
+      pass: $("#aevPass").value,
+      key: $("#aevKey").value.trim(),
+      clearKey: $("#aevClearKey").checked,
+      cheerAlways: $("#aevCheer").checked,
+      active: $("#aevActive").checked,
+    };
+    $("#evMsg").className = "msg";
+    $("#evMsg").textContent = "保存しています…";
+    try {
+      const res = await api("api/admin/event", { method: "POST", body: JSON.stringify(body) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.ok) throw new Error(d.message || "保存できませんでした");
+      $("#evForm").hidden = true;
+      await loadEvents();
+    } catch (err) {
+      $("#evMsg").className = "msg bad";
+      $("#evMsg").textContent = err.message || "保存できませんでした";
+    }
+  }
+  $("#evNewBtn").addEventListener("click", () => openEventForm(null));
+  $("#evCancel").addEventListener("click", () => { $("#evForm").hidden = true; });
+  $("#evForm").addEventListener("submit", saveEventForm);
+  $("#evList").addEventListener("click", async (e) => {
+    const c = e.target.closest("[data-evcopy]");
+    if (c) {
+      const box = document.getElementById("evu-" + c.dataset.evcopy);
+      try {
+        await navigator.clipboard.writeText(box.value);
+      } catch {
+        box.select();
+        document.execCommand("copy");
+      }
+      c.textContent = "コピーした";
+      setTimeout(() => { c.textContent = "URLをコピー"; }, 1600);
+      return;
+    }
+    const ed = e.target.closest("[data-evedit]");
+    if (ed) {
+      openEventForm(events.find((x) => x.id === ed.dataset.evedit));
+      return;
+    }
+    const del = e.target.closest("[data-evdel]");
+    if (del) {
+      if (!confirm(`イベント「${del.dataset.evdel}」を消しますか？（このURLとあいことばは使えなくなります）`)) return;
+      await api("api/admin/event-delete", { method: "POST", body: JSON.stringify({ id: del.dataset.evdel }) }).catch(() => {});
+      loadEvents().catch(() => {});
+    }
+  });
+
   $("#loginBtn").addEventListener("click", login);
   $("#pass").addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
   $("#logoutBtn").addEventListener("click", logout);
-  $("#reloadBtn").addEventListener("click", () => { loadSummary(); loadRows(true); loadReports().catch(() => {}); });
+  $("#reloadBtn").addEventListener("click", () => { loadSummary(); loadRows(true); loadReports().catch(() => {}); loadEvents().catch(() => {}); });
   $("#testBtn").addEventListener("click", test);
   $("#csvBtn").addEventListener("click", csv);
   $("#toggleBtn").addEventListener("click", toggle);
@@ -528,7 +697,7 @@
   });
 
   if (pass) {
-    loadSummary().then(() => { showDash(); loadRows(true); loadReports().catch(() => {}); }).catch(() => { pass = ""; });
+    loadSummary().then(() => { showDash(); loadRows(true); loadReports().catch(() => {}); loadEvents().catch(() => {}); }).catch(() => { pass = ""; });
   }
   setInterval(() => { if (!$("#dash").hidden) loadSummary().catch(() => {}); }, 30000);
   setInterval(() => { if (!$("#dash").hidden && !document.hidden) loadReports().catch(() => {}); }, 10000);

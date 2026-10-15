@@ -10,6 +10,8 @@
  *           POST /api/report    「投稿したで！」の報告（名前・投稿のリンク・本文）。端末ごとに1件、送り直すと上書き
  *           GET  /api/stats     件数と、スクリーンに名前を出してOKな人（/qr の表示用）
  *           GET  /api/health    動作確認（version で、いま公開中の版が分かる）
+ *           GET  /api/event     イベント（?e=ID）の名前・ハッシュタグ。POST /api/event/unlock であいことばを確かめる
+ *           POST /api/clientlog 端末で起きた失敗の記録（運営ページの「最近のエラー」に出る）
  * パネラー用 /api/judge/*        ヘッダー x-judge-key にパネラー用の鍵（合言葉から自動で作る）が必要
  *           GET  /api/judge/feed  報告された投稿（since 以降に増えた・変わったものだけ）
  *           POST /api/judge/star  ★を付ける・外す
@@ -66,6 +68,8 @@ async function route(request, env, ctx, url) {
   if (p === "/api/generate" && m === "POST") return generate(request, env, ctx);
   if (p === "/api/checkkey" && m === "POST") return checkKey(request);
   if (p === "/api/clientlog" && m === "POST") return clientLog(request, env, ctx);
+  if (p === "/api/event" && m === "GET") return eventPublic(env, url);
+  if (p === "/api/event/unlock" && m === "POST") return eventUnlock(request, env);
   if (p === "/api/cal" && m === "POST") return calEvents(request, env);
   if (p === "/api/style" && m === "POST") return styleProfile(request, env);
   if (p === "/api/refine" && m === "POST") return refine(request, env, ctx);
@@ -91,6 +95,9 @@ async function route(request, env, ctx, url) {
     if (p === "/api/admin/judge-link" && m === "GET") return adminJudgeLink(env);
     if (p === "/api/admin/roster" && m === "POST") return adminRoster(request, env);
     if (p === "/api/admin/export-reports" && m === "GET") return adminExportReports(env);
+    if (p === "/api/admin/events" && m === "GET") return adminEvents(env);
+    if (p === "/api/admin/event" && m === "POST") return adminEventSave(request, env);
+    if (p === "/api/admin/event-delete" && m === "POST") return adminEventDelete(request, env);
   }
   return json({ ok: false, code: "not_found" }, 404);
 }
@@ -135,6 +142,8 @@ const SCHEMA = [
   )`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_client ON reports(client_id)`,
   `CREATE INDEX IF NOT EXISTS idx_reports_updated ON reports(updated_at)`,
+  // イベント（運営ページで作る。名前・ハッシュタグ・あいことば・AIキー）。data はJSON
+  `CREATE TABLE IF NOT EXISTS event_settings (id TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL)`,
   // パネラーの★（候補）
   `CREATE TABLE IF NOT EXISTS stars (
     judge TEXT NOT NULL,
@@ -445,6 +454,117 @@ async function clientLog(request, env, ctx) {
   return json({ ok: true });
 }
 
+// ---------- イベント（運営ページで作る。参加者は ?e=イベントID で開く） ----------
+// あいことばが合えば、イベントのAIキー（なければサーバーのキー）で作れる。参加者がキーを作らなくていい
+const NO_EVENT = { key: null, id: "" };
+const cleanEventId = (v) => {
+  const s = String(v || "").trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9-]{0,39}$/.test(s) ? s : "";
+};
+function cleanHashtags(v) {
+  const list = Array.isArray(v) ? v : String(v || "").split(/[\s,、，　]+/);
+  const out = [];
+  for (const raw of list) {
+    const t = String(raw || "").replace(/^[#＃]+/, "").replace(/[\s#＃]/g, "").slice(0, 40);
+    if (t && !out.includes(`#${t}`)) out.push(`#${t}`);
+    if (out.length >= 10) break;
+  }
+  return out;
+}
+const eventCache = new Map();
+async function readEvent(env, id, fresh = false) {
+  if (!id) return null;
+  const hit = eventCache.get(id);
+  if (!fresh && hit && Date.now() - hit.at < 10000) return hit.ev;
+  const db = await getDb(env);
+  if (!db) return null;
+  const row = await db.prepare("SELECT data, updated_at FROM event_settings WHERE id = ?").bind(id).first();
+  const ev = row ? { ...safeParse(row.data), id, updatedAt: row.updated_at } : null;
+  eventCache.set(id, { at: Date.now(), ev });
+  if (eventCache.size > 200) eventCache.clear();
+  return ev;
+}
+const passError = () => json({ ok: false, code: "pass", message: "あいことばが変わったみたい。もう一度入れてな" }, 403);
+// 生成のヘッダー（x-event と x-event-pass）から、使うキーを決める。あいことばがちがうときは bad
+async function eventKeyOf(request, env) {
+  const id = cleanEventId(request.headers.get("x-event"));
+  const raw = request.headers.get("x-event-pass");
+  if (!id || !raw) return NO_EVENT;
+  let pass = "";
+  try {
+    pass = decodeURIComponent(raw).trim();
+  } catch {
+    return { ...NO_EVENT, bad: true };
+  }
+  const ev = await readEvent(env, id);
+  if (!ev || !ev.active || !ev.pass || !safeEqual(ev.pass, pass)) return { ...NO_EVENT, id, bad: true };
+  return { key: ev.key || env.GEMINI_API_KEY || null, id };
+}
+// 参加者の画面用（あいことばとキーは返さない）
+async function eventPublic(env, url) {
+  const ev = await readEvent(env, cleanEventId(url.searchParams.get("e")));
+  if (!ev || !ev.active) return json({ ok: false, code: "no_event", message: "このイベントは、いまは使えません" }, 404);
+  return json({
+    ok: true,
+    event: { id: ev.id, name: ev.name || "", hashtags: ev.hashtags || [], cheerAlways: !!ev.cheerAlways, preset: ev.preset || "", needsPass: !!ev.pass, hasKey: !!(ev.pass && (ev.key || env.GEMINI_API_KEY)) },
+  });
+}
+async function eventUnlock(request, env) {
+  const body = await readJson(request, 2000);
+  const ip = request.headers.get("cf-connecting-ip") || "local";
+  const cid = String((body && body.clientId) || "").slice(0, 64);
+  if (limited(`evu:${cid}`, 10, 60000) || limited(`evi:${ip}`, 300, 60000)) return json({ ok: false, code: "rate", message: "ちょっと待って、もう一回どうぞ" }, 429);
+  const id = cleanEventId(body && body.e);
+  const pass = String((body && body.pass) || "").trim().slice(0, 60);
+  if (!id || !pass) return json({ ok: false, code: "input", message: "あいことばを入れてな" }, 400);
+  const ev = await readEvent(env, id);
+  if (!ev || !ev.active) return json({ ok: false, code: "no_event", message: "このイベントは、いまは使えません" }, 404);
+  if (!ev.pass || !safeEqual(ev.pass, pass)) return json({ ok: false, code: "pass", message: "あいことばがちがうみたい。スタッフに聞いてな" }, 403);
+  if (!ev.key && !env.GEMINI_API_KEY) return json({ ok: false, code: "no_key", message: "イベントのAIキーがまだ設定されてへん。スタッフに声かけてな" }, 503);
+  return json({ ok: true });
+}
+// 運営ページ：イベントの一覧・作成・変更・削除（キーは末尾4文字だけ見せる）
+async function adminEvents(env) {
+  const db = await getDb(env);
+  if (!db) return json({ ok: false, code: "db", message: "データベースがありません" }, 503);
+  const { results } = await db.prepare("SELECT id, data, updated_at FROM event_settings ORDER BY updated_at DESC").all();
+  const events = (results || []).map((r) => {
+    const d = safeParse(r.data);
+    return { id: r.id, name: d.name || "", hashtags: d.hashtags || [], pass: d.pass || "", keySet: !!d.key, keyTail: d.key ? String(d.key).slice(-4) : "", cheerAlways: !!d.cheerAlways, active: d.active !== false, preset: d.preset || "", updatedAt: r.updated_at };
+  });
+  return json({ ok: true, events, serverKey: !!env.GEMINI_API_KEY });
+}
+async function adminEventSave(request, env) {
+  const body = await readJson(request, 8000);
+  const id = cleanEventId(body && body.id);
+  if (!id) return json({ ok: false, code: "input", message: "イベントIDは、英小文字・数字・ハイフンで40字まで（例：lscw2026）" }, 400);
+  const db = await getDb(env);
+  if (!db) return json({ ok: false, code: "db", message: "データベースがありません" }, 503);
+  const prev = (await readEvent(env, id, true)) || {};
+  const str = (v, n) => String(v ?? "").replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, n);
+  const data = {
+    name: str(body.name, 60),
+    hashtags: cleanHashtags(body.hashtags),
+    pass: str(body.pass, 60),
+    key: body.clearKey ? "" : str(body.key, 300) || prev.key || "",
+    cheerAlways: body.cheerAlways === true,
+    active: body.active !== false,
+    preset: str(body.preset, 20),
+  };
+  await db.prepare("INSERT INTO event_settings (id, data, updated_at) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at").bind(id, JSON.stringify(data), Date.now()).run();
+  eventCache.delete(id);
+  return json({ ok: true });
+}
+async function adminEventDelete(request, env) {
+  const body = await readJson(request, 2000);
+  const id = cleanEventId(body && body.id);
+  const db = await getDb(env);
+  if (!id || !db) return json({ ok: false, code: "input" }, 400);
+  await db.prepare("DELETE FROM event_settings WHERE id = ?").bind(id).run();
+  eventCache.delete(id);
+  return json({ ok: true });
+}
+
 async function generate(request, env, ctx) {
   const body = await readAiBody(request, env, ctx, "generate");
   if (!body) return json({ ok: false, code: "input", message: "入力が読めませんでした" }, 400);
@@ -457,25 +577,28 @@ async function generate(request, env, ctx) {
   if (limited(`c:${cid}`, 10, 60000) || limited(`i:${ip}`, 400, 60000)) return json({ ok: false, code: "rate" }, 429);
   const ukey = userKeyOf(request);
   const aiCfg = aiConfigOf(request);
+  const ev = ukey || aiCfg ? NO_EVENT : await eventKeyOf(request, env);
+  if (ev.bad) return passError();
+  const key = ukey || ev.key;
 
   const cards = p.answers.map((a) => a.label);
   const who = cleanName(body.name);
-  if (!ukey && !aiCfg && !env.GEMINI_API_KEY) {
+  if (!key && !aiCfg && !env.GEMINI_API_KEY) {
     logEvent(env, ctx, "generate", { cards, sample: true, name: who, mode: p.mode, kind: p.kind, followed: body.followed === true });
     return json({ ok: true, sample: true });
   }
   // プロフィール文（見出し3案＋自己紹介）。写真は使わない
   if (p.kind === "profile") {
-    const r = await callAI(env, { userKey: ukey, adv: aiCfg, system: PROFILE_PROMPT, input: buildProfileInput(p), schema: PROFILE_SCHEMA, validate: normalizeProfile });
+    const r = await callAI(env, { userKey: key, adv: aiCfg, system: PROFILE_PROMPT, input: buildProfileInput(p), schema: PROFILE_SCHEMA, validate: normalizeProfile });
     if (!r.ok) {
       logEvent(env, ctx, "error", { where: "profile", status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey });
       return json({ ok: false, code: "failed", message: ukey ? explainFailure(r) : "生成に失敗しました" }, 502);
     }
-    logEvent(env, ctx, "generate", { cards, model: r.model, ms: r.ms, name: who, mode: "profile", kind: "profile", followed: body.followed === true });
+    logEvent(env, ctx, "generate", { cards, model: r.model, ms: r.ms, name: who, mode: "profile", kind: "profile", followed: body.followed === true, event: ev.id || "" });
     return json({ ok: true, profile: r.value, model: r.model });
   }
   const opts = (imgs) => ({
-    userKey: ukey,
+    userKey: key,
     adv: aiCfg,
     system: SYSTEM_PROMPT,
     input: buildUserInput({ ...p, photos: imgs.length }),
@@ -494,7 +617,7 @@ async function generate(request, env, ctx) {
     logEvent(env, ctx, "error", { where: "generate", status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey, photos: images.length, kb: imagesKb(images) });
     return json({ ok: false, code: "failed", message: ukey ? explainFailure(r) : "生成に失敗しました" }, 502);
   }
-  logEvent(env, ctx, "generate", { cards, model: r.model, ms: r.ms, name: who, mode: p.mode, followed: body.followed === true, photos: images.length, photoSkipped });
+  logEvent(env, ctx, "generate", { cards, model: r.model, ms: r.ms, name: who, mode: p.mode, followed: body.followed === true, photos: images.length, photoSkipped, event: ev.id || "" });
   return json({ ok: true, patterns: r.value, model: r.model, photoSkipped });
 }
 
@@ -594,11 +717,14 @@ async function styleProfile(request, env) {
   const sample = String((body && body.sample) || "").slice(0, 20000).trim();
   if (sample.length < 200) return json({ ok: false, code: "input", message: "過去の投稿が少なすぎるみたい。もう1〜2件、投稿を足してな" }, 400);
   const ukey = userKeyOf(request);
-  if (!ukey && !env.GEMINI_API_KEY) return json({ ok: false, code: "no_key", message: "先に、AIのキーを入れてな" }, 403);
+  const ev = ukey ? NO_EVENT : await eventKeyOf(request, env);
+  if (ev.bad) return passError();
+  const key = ukey || ev.key;
+  if (!key && !env.GEMINI_API_KEY) return json({ ok: false, code: "no_key", message: "先に、AIのキーを入れてな" }, 403);
   const ip = request.headers.get("cf-connecting-ip") || "local";
   if (limited(`st:${ip}`, 15, 60000)) return json({ ok: false, code: "rate" }, 429);
   const r = await callAI(env, {
-    userKey: ukey,
+    userKey: key,
     system: STYLE_SYSTEM,
     input: sample,
     schema: { type: "object", properties: { profile: { type: "string" } }, required: ["profile"] },
@@ -632,10 +758,13 @@ async function refine(request, env, ctx) {
   if (limited(`c:${cid}`, 10, 60000) || limited(`i:${ip}`, 400, 60000)) return json({ ok: false, code: "rate" }, 429);
   const ukey = userKeyOf(request);
   const aiCfg = aiConfigOf(request);
-  if (!ukey && !aiCfg && !env.GEMINI_API_KEY) return json({ ok: true, sample: true });
+  const ev = ukey || aiCfg ? NO_EVENT : await eventKeyOf(request, env);
+  if (ev.bad) return passError();
+  const key = ukey || ev.key;
+  if (!key && !aiCfg && !env.GEMINI_API_KEY) return json({ ok: true, sample: true });
 
   const opts = (imgs) => ({
-    userKey: ukey,
+    userKey: key,
     adv: aiCfg,
     system: isProfile ? PROFILE_PROMPT : SYSTEM_PROMPT,
     input: isProfile ? buildProfileRefineInput(p, current, action, ask) : buildRefineInput({ ...p, photos: imgs.length }, tone, current, action, ask),

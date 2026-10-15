@@ -2,7 +2,8 @@
  * 投稿、つくったろか。── 設定ファイル
  * ネタカード・ハッシュタグ・画面の文言は、ぜんぶここで変えられます。
  * （AIへの指示文は src/ai.js、使うAIモデルは wrangler.jsonc の vars）
- * イベント仕様に戻すときは、このファイルをイベント版と入れ替えるだけ。
+ * ここに書いてあるのは「普段使い」の設定。イベントごとの質問セット・色・文言は、いちばん下のプリセット（PRESETS）で上書きする。
+ * どのプリセットを使うかは、いちばん下の DEFAULT_PRESET（URLの ?preset=… でも切り替えられる）。
  */
 window.APP_CONFIG = {
   appName: "投稿、つくったろか。",
@@ -331,3 +332,307 @@ window.APP_CONFIG = {
   aizuchi: ["ええやん！", "それ、ほんまに大事やん", "めっちゃ伝わるわ", "わかる〜！", "ナイスや！", "それ書こ！"],
   loadingLines: ["ええ感じにまとめてるで…", "塩かげん、調整中…", "3つ並べてるとこ…", "もうちょいや！"],
 };
+
+/*
+ * ---------- イベントごとのまとまり（プリセット） ----------
+ * 質問セット・色・文言をイベントごとにまとめたもの。上の設定（普段使い）に上書きされる。
+ * いま使うのは DEFAULT_PRESET。URLに ?preset=fujitsu のように付けると、そのページだけ切り替わる。
+ * イベント名・ハッシュタグ・あいことば（主催のAIキーを使う合言葉）は、運営ページ（/admin）の「イベント」で作る。
+ */
+(() => {
+  const DEFAULT_PRESET = "lscw";
+  const B = window.APP_CONFIG;
+  const PRESETS = {
+    // 普段使い（上の設定そのまま）
+    everyday: { label: "普段使い" },
+
+    // LinkedIn Student Career Week（2026/10/31）の学生向けブース
+    lscw: {
+      label: "LSCW（2026/10/31 学生向けブース）",
+      eventSub: "LinkedIn Student Career Week",
+      eventName: "",
+      // 運営ページのイベントで上書きできる（イベントのハッシュタグが空のときは、これが付く）
+      hashtags: ["#LinkedIn"],
+      feedTag: "#LinkedIn",
+      // 投稿の終わりのほうに「LinkedInを使うとワクワクする／新しい自分の可能性が見つかる」という一文を、すべての投稿に入れる
+      cheerAlways: true,
+      style: {
+        ...B.style,
+        role: { ...B.style.role, default: "学生" },
+        cheer: { ...B.style.cheer, default: "入れる" },
+      },
+      cards: [
+        {
+          id: "learn",
+          label: "今日の/学び・気づき",
+          caption: "心に残ったこと",
+          question: "今日、/「これは学びやわ」って/思ったことは？",
+          placeholder: "例：先輩の話で、肩書きより「何をしてきたか」が大事やと気づいた",
+          chips: ["セッションで", "ブースで", "人と話して", "LinkedInを使ってみて", "ふとした瞬間に"],
+          required: true,
+        },
+        {
+          id: "session",
+          label: "心に残った/話",
+          caption: "セッション・人の話",
+          question: "心に残った/セッションや、/人の話は？",
+          placeholder: "例：「まず発信してみる」が、チャンスの入口になるという話",
+          note: "人の名前は、出してOKな人だけにしてな",
+        },
+        {
+          id: "career",
+          label: "就活・キャリアで/考えてること",
+          caption: "いまの悩みも/そのままでOK",
+          question: "いま、/就活やキャリアで/考えてることは？",
+          placeholder: "例：やりたいことがまだ1つに決まらない。だからこそ色んな人に会いたい",
+          chips: ["業界を調べてる", "インターンを探してる", "やりたいことを探してる", "まだ何も決めてない"],
+        },
+        {
+          id: "focus",
+          label: "力を入れて/いること",
+          caption: "ゼミ・部活・バイトなど",
+          question: "学生生活で、/力を入れてることは？",
+          placeholder: "例：ゼミで、地域の商店街のデータを分析している",
+          chips: ["ゼミ・研究", "部活・サークル", "アルバイト", "インターン", "学外の活動"],
+        },
+        {
+          id: "person",
+          label: "話した人・/つながった人",
+          caption: "出会いの話",
+          question: "今日話した人や、/つながった人で、/印象に残った人は？",
+          placeholder: "例：同じ業界を目指す他大学の学生と話せて、刺激になった",
+          note: "名前は、出してOKな人だけにしてな",
+        },
+        {
+          id: "next",
+          label: "これから/挑戦したいこと",
+          caption: "次の一歩で締める",
+          question: "これから、/なにに挑戦してみる？",
+          placeholder: "例：プロフィールを整えて、週1で学んだことを発信する",
+          chips: ["プロフィールを整える", "週1で発信する", "気になる人とつながる", "インターンに応募する", "LinkedIn Learningで学ぶ"],
+        },
+        {
+          id: "mood",
+          label: "いまの気分",
+          caption: "ひとことで",
+          question: "いまの気分を/ひとことで/言うと？",
+          placeholder: "例：帰り道にもう次の一歩を考えてる",
+          chips: ["ワクワク", "刺激だらけ", "燃えてきた", "ちょっと緊張した", "ほっとした"],
+        },
+        {
+          id: "free",
+          label: "自由に書く",
+          caption: "なんでもどうぞ",
+          question: "ほかに書きたいこと、/なんでもどうぞ",
+          placeholder: "例：次は自分が話す側になってみたい",
+        },
+      ],
+      sets: [
+        { id: "one", size: 1, theme: "basic", label: "学び・気づきだけ", who: "いちばん大事なところだけ、ぎゅっと書く", cards: ["learn"], recommended: true },
+        { id: "basic3", size: 3, theme: "basic", label: "今日の3つ", who: "迷ったらこれ。今日の流れのまま書ける", cards: ["learn", "session", "next"], recommended: true },
+        { id: "career3", size: 3, theme: "career", label: "就活・キャリア", who: "いま考えてることも、正直に残したい人に", cards: ["learn", "career", "next"] },
+        { id: "self3", size: 3, theme: "self", label: "自己紹介も", who: "はじめて投稿する人に。自分のことも知ってほしい人に", cards: ["focus", "learn", "next"] },
+        { id: "basic5", size: 5, theme: "basic", label: "今日をじっくり", who: "今日の流れが、まるごと伝わる", cards: ["learn", "session", "person", "career", "next"], recommended: true },
+        { id: "career5", size: 5, theme: "career", label: "就活・キャリアじっくり", who: "考えてることと、今日の学びをつなげたい人に", cards: ["career", "learn", "session", "focus", "next"] },
+        { id: "self5", size: 5, theme: "self", label: "自己紹介もじっくり", who: "はじめて読む人に、自分のことをしっかり伝えたい人に", cards: ["focus", "learn", "person", "career", "next"] },
+      ],
+      lastCards: ["next", "free"],
+      help: {
+        ...B.help,
+        staff: "近くのスタッフに、/この画面を見せてください",
+        staffSub: "いっしょにやります。",
+        tips: {
+          ...B.help.tips,
+          pick: ["最初に、お名前を入れてください", "「投稿文を作る」か「プロフィール文を作る」を選んでください", "ネタは何も選ばんでOK。下の青いボタンで始められます", "質問に答えると、LinkedInの文章ができます"],
+        },
+      },
+    },
+
+    // 2026/10/6「関西を、おもろくする夜。」（FLM主催 LinkedIn大交流会）。当日の設定をそのまま残したもの
+    fujitsu: {
+      label: "関西を、おもろくする夜。（2026/10/6 富士通ラーニングメディア）",
+      theme: { ground: "#FFDE59", groundText: "#3B372E", note: "#FBFFD3", subText: "#6A6456", accent: "#0A66C2", accentPress: "#004182", mark: "#FF7373", check: "#FF5A6F" },
+      profile: { ...B.profile, enabled: false },
+      cheerAlways: false,
+      eventName: "関西を、おもろくする夜。",
+      eventSub: "FLM主催 LinkedIn大交流会",
+      hashtags: ["#富士通ラーニングメディア", "#LinkedIn", "#関西をおもろくする会", "#関西"],
+      mention: { name: "富士通ラーニングメディア", typeHint: "@富士通", inText: true },
+      followUrl: "https://www.linkedin.com/company/%EF%BC%88%E6%A0%AA%EF%BC%89%E5%AF%8C%E5%A3%AB%E9%80%9A%E3%83%A9%E3%83%BC%E3%83%8B%E3%83%B3%E3%82%B0%E3%83%A1%E3%83%87%E3%82%A3%E3%82%A2/",
+      cards: [
+        {
+          id: "learn",
+          label: "印象に/残ったこと",
+          caption: "今日いちばん心に残ったこと",
+          question: "今日いちばん/印象に残ったこと、/なんやった？",
+          placeholder: "例：失敗の話を笑って話せる人ほど、強いと思った",
+          chips: ["パネルの話で", "プロフトークで", "人生観トークで", "魅力を伝え合って", "雑談の中で"],
+          required: true,
+        },
+        {
+          id: "miryoku",
+          label: "もらった/自分の魅力",
+          caption: "人から見た、自分らしさ",
+          question: "相手から言われた/あなたの魅力は？/どう感じた？",
+          placeholder: "例：「話を広げるのがうまい」と言われて、意外やけどうれしかった",
+          chips: ["意外やった", "うれしかった", "自信になった", "ちょっと照れた"],
+          note: "言われた言葉を、そのまま書いてOK",
+        },
+        {
+          id: "thanks",
+          label: "話した人への/ひとこと",
+          caption: "感謝を入れると/伝わる",
+          question: "今日話した人に、/ひとこと/伝えるなら？",
+          placeholder: "例：〇〇さん、プロフ帳の話めっちゃ刺さりました",
+          note: "名前は、出してOKな人だけにしてな",
+        },
+        {
+          id: "next",
+          label: "これから/挑戦したいこと",
+          caption: "次の一歩で締める",
+          question: "これから、/なにに挑戦してみる？",
+          placeholder: "例：失敗した話も、LinkedInで書いてみる",
+          chips: ["週1で投稿する", "今日つながった人と話す", "プロフィールを整える", "失敗談も発信する"],
+        },
+        {
+          id: "panel",
+          label: "パネルで/刺さった話",
+          caption: "登壇者のひとこと",
+          question: "パネルで/刺さった話は？",
+          placeholder: "例：反応が生まれる投稿は、うまさより本音、という話",
+          chips: ["松本さん", "石坂さん", "Machiさん", "投稿のコツ", "逆境・失敗の乗り越え方", "関西のつながり・挑戦", "まず一歩やってみる"],
+        },
+        {
+          id: "workshop",
+          label: "ワークショップ",
+          caption: "平成プロフ帳・人生観トーク",
+          question: "ワークショップ、/どうやった？",
+          placeholder: "例：初対面なのに、好きなことの話で一気に距離が縮まった",
+          chips: ["平成プロフ帳", "プロフトーク", "人生観トーク", "魅力を伝え合う", "関西の共通項さがし"],
+        },
+        {
+          id: "common",
+          label: "見つけた/関西の共通項",
+          caption: "あるある大歓迎",
+          question: "どんな共通項が/見つかった？",
+          placeholder: "例：隣の人も阪神ファンで、しかも同じ尼崎出身やった",
+        },
+        {
+          id: "kansai",
+          label: "関西の/すきなところ",
+          caption: "推しポイント",
+          question: "関西の/「ここが好き！」は？",
+          placeholder: "例：知らん人とでも、すぐツッコミ合えるところ",
+        },
+        {
+          id: "scene",
+          label: "心に残った/場面",
+          caption: "その場の空気",
+          question: "心に残った/場面は？",
+          placeholder: "例：23階の夜景を見ながら話した時間",
+        },
+        {
+          id: "mood",
+          label: "いまの気分",
+          caption: "ひとことで",
+          question: "いまの気分を/ひとことで/言うと？",
+          placeholder: "例：帰り道にもう次の一歩を考えてる",
+          chips: ["ワクワク", "刺激だらけ", "ほっこり", "燃えてきた", "ちょっと緊張した"],
+        },
+        {
+          id: "work",
+          label: "自分の/仕事・挑戦",
+          caption: "何してる人？",
+          question: "ふだんは/何してる人？/いまの挑戦は？",
+          placeholder: "例：関西で、学生と企業をつなぐ活動をしています",
+        },
+        {
+          id: "free",
+          label: "自由に書く",
+          caption: "なんでもどうぞ",
+          question: "ほかに書きたいこと、/なんでもどうぞ",
+          placeholder: "例：次は自分もパネルに立てるくらい発信したい",
+        },
+      ],
+      sizes: [
+        { n: 1, name: "ひとことだけ", who: "とにかく早く投稿したい人に", minutes: "約1分" },
+        { n: 3, name: "サクッと", who: "はじめてLinkedInに投稿する人・時間がない人に", minutes: "約3分", recommended: true },
+        { n: 5, name: "じっくり", who: "学びをしっかり残したい人・発信に慣れてる人に", minutes: "約5分" },
+      ],
+      sets: [
+        { id: "one", size: 1, theme: "basic", label: "印象に残ったことだけ", who: "いちばん大事なところだけ、ぎゅっと書く", cards: ["learn"], recommended: true },
+        { id: "basic3", size: 3, theme: "basic", label: "今日の3つ", who: "迷ったらこれ。会場で話した流れのまま書ける", cards: ["learn", "miryoku", "next"], recommended: true },
+        { id: "nori3", size: 3, theme: "nori", label: "関西ノリ", who: "くすっと笑える投稿にしたい人に", cards: ["learn", "common", "kansai"] },
+        { id: "panel3", size: 3, theme: "panel", label: "パネル中心", who: "登壇者の話を、自分の言葉で残したい人に", cards: ["learn", "panel", "next"] },
+        { id: "basic5", size: 5, theme: "basic", label: "定番じっくり", who: "今日の流れが、まるごと伝わる", cards: ["learn", "panel", "miryoku", "thanks", "next"], recommended: true },
+        { id: "nori5", size: 5, theme: "nori", label: "関西ノリ", who: "関西ネタで、読む人も楽しくしたい人に", cards: ["learn", "common", "kansai", "scene", "mood"] },
+        { id: "self5", size: 5, theme: "self", label: "自己紹介も", who: "今日つながった人に、自分のことも知ってほしい人に", cards: ["learn", "work", "panel", "thanks", "next"] },
+      ],
+      tones: [
+        { id: "emo", label: "エモい", note: "気持ちが動いた瞬間から" },
+        { id: "humor", label: "ユーモア", note: "関西ノリのツッコミから" },
+        { id: "straight", label: "学び", note: "学びを言い切るところから" },
+      ],
+      lastCards: ["next", "free"],
+      style: {
+        role: { label: "立場（任意）", options: ["学生", "会社員", "経営者・フリーランス", "その他"], default: "" },
+        formality: { label: "文体", options: ["です・ます", "だ・である"], default: "です・ます" },
+        kansai: { label: "関西弁", options: ["なし", "ちょい足し", "こってり"], default: "ちょい足し" },
+        length: { label: "長さ", options: ["短め", "ふつう", "しっかり"], default: "ふつう" },
+        emoji: { label: "絵文字", options: ["なし", "ちょっと", "多め"], default: "ちょっと" },
+      },
+      styleNotes: {
+        kansai: { なし: "3つとも標準語", ちょい足し: "ユーモア案だけ関西弁", こってり: "3つとも関西弁" },
+        length: { 短め: "本文120〜200字", ふつう: "本文200〜350字", しっかり: "本文350〜500字" },
+        emoji: { なし: "使わない", ちょっと: "1〜2個", 多め: "3〜5個" },
+      },
+      feedTag: "#関西をおもろくする会",
+      modes: [
+        { id: "", tone: "emo", label: "エモい", sub: "気持ちが動いた瞬間から書く", recommended: true },
+        { id: "", tone: "humor", label: "ユーモア", sub: "関西ノリのツッコミで、くすっと" },
+        { id: "", tone: "straight", label: "学び", sub: "学びを言い切って、/これからの行動で締める" },
+        { id: "first", label: "はじめての投稿", sub: "LinkedInにはじめて投稿する人に。/あいさつと自己紹介つき" },
+        { id: "ishizaka", label: "石坂さん風", sub: "見出し【】と「〇」の箇条書きで、/熱く言い切る" },
+      ],
+      refineActions: [
+        { id: "shorter", label: "もっと短く" },
+        { id: "hotter", label: "もっと熱く" },
+        { id: "concrete", label: "もっと具体的に" },
+        { id: "another", label: "別の言い回し" },
+        { id: "ishizaka", label: "石坂さん風" },
+      ],
+      judges: ["薬袋さん", "高山 将一さん", "井上 奈央さん", "Machi Wadaさん", "松本 淳さん", "山下 翼さん", "石坂 誠さん"],
+      report: {
+        screenDefault: true, // 会場スクリーンに名前を出す（初期値）
+        screenLabel: "会場スクリーンに/名前を出す",
+        screenNote: "「◯◯さんが投稿したで！」と出るで。本文は出えへん。",
+        linkHelp: "LinkedInの自分の投稿の/「…」か「共有」から、/リンクをコピーできるで。/なくてもOK。",
+        note: "報告した投稿は、パネラーと運営が読むで。",
+      },
+      help: {
+        staff: "近くのスタッフに、/この画面を見せてください",
+        staffSub: "いっしょにやります。",
+        tips: {
+          pick: ["最初に、お名前を入れてください", "「LinkedInページをひらく」で富士通ラーニングメディアをフォローして、「フォローした」にチェック", "迷ったら「おまかせで始める」を押すだけでOK", "質問に答えると、LinkedInの投稿文ができます"],
+          answer: ["マイクを押して話すと、文字になります", "うまく入らないときは、キーボードのマイクでも話せます", "ひとことでOK。必須でない質問は「とばす」で次へ"],
+          style: ["そのままでOK。下の「つくってもらう」を押してください", "はじめて投稿する人は「書き方」で「はじめての投稿」を選んでください"],
+          loading: ["10秒ほど待ってください"],
+          result: ["好きな案を選んで「この案でいく」を押してください", "「こうしてほしい」に書くと、そのとおりに直します", "文章は「自分で直す」で直せます"],
+          done: ["投稿の前に、富士通ラーニングメディアをフォローしてください", "LinkedInアプリの入力欄を長押しして「貼り付け」", "投稿したら、この画面の「報告する」を押してください。審査員に届きます"],
+        },
+      },
+      consentLabel: "イベント運営にも/回答と投稿文を/共有する",
+      consentNote: "振り返りに使います。名前やアカウントは集めません。",
+      loadingLines: ["ええ感じにまとめてるで…", "関西弁の塩かげん、調整中…", "3つ並べてるとこ…", "もうちょいや！"],
+    },
+  };
+
+  let id = DEFAULT_PRESET;
+  try {
+    const q = new URLSearchParams(location.search).get("preset");
+    if (q && PRESETS[q]) id = q;
+  } catch {}
+  if (!PRESETS[id]) id = "everyday";
+  window.APP_PRESETS = Object.keys(PRESETS).map((k) => ({ id: k, label: PRESETS[k].label || k, default: k === DEFAULT_PRESET }));
+  Object.assign(B, PRESETS[id], { presetId: id });
+})();

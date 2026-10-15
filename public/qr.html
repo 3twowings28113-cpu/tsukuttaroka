@@ -19,6 +19,7 @@
     --f-hand: "Yomogi", "Zen Maru Gothic", sans-serif;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { height: 100%; }
   body { margin: 0; overflow: hidden; background: var(--ground); color: var(--ink); font-family: var(--f-body); }
   .stage { position: relative; width: 100vw; height: 100vh; display: grid; grid-template-columns: 1.25fr 1fr; align-items: center; gap: 3vw; padding: 5vh 6vw; }
@@ -62,14 +63,14 @@
 <body>
 <div class="stage">
   <section class="cloud copy" data-bump="70">
-    <p class="eyebrow">FLM主催 LinkedIn大交流会<br>「関西を、おもろくする夜。」</p>
+    <p class="eyebrow" id="eyebrow"></p>
     <h1>投稿、<br><span class="nw">つくったろか。</span></h1>
     <p class="lead">スマホのカメラで、右のQRを読んでな</p>
     <ol class="steps">
       <li><span class="n">1</span>ネタを選ぶ</li>
       <li><span class="n">2</span>しゃべる</li>
       <li><span class="n">3</span>コピーして投稿</li>
-      <li><span class="n">4</span>アプリで報告</li>
+      <li id="stepReport"><span class="n">4</span>アプリで報告</li>
     </ol>
     <p class="feedtag" id="feedTagLine" hidden></p>
     <p class="feedtag" id="followLine" hidden></p>
@@ -94,6 +95,12 @@
     if (cfg.theme.ground) document.documentElement.style.setProperty("--ground", cfg.theme.ground);
     if (cfg.theme.mark) document.documentElement.style.setProperty("--coral", cfg.theme.mark);
   }
+  // 上の小さな文字（イベント名）と、報告の手順は、config.js の設定に合わせる
+  const eb = document.getElementById("eyebrow");
+  eb.textContent = cfg.eventSub || "";
+  if (cfg.eventName) eb.append(document.createElement("br"), `「${cfg.eventName}」`);
+  eb.hidden = !cfg.eventSub && !cfg.eventName;
+  if (!cfg.report) document.getElementById("stepReport").hidden = true;
   if (cfg.feedTag) {
     const ft = document.getElementById("feedTagLine");
     ft.textContent = `アプリを使わずに投稿する人は ${cfg.feedTag} を付けてな`;
@@ -101,7 +108,7 @@
   }
   if (cfg.followUrl) {
     const ff = document.getElementById("followLine");
-    ff.textContent = "富士通ラーニングメディアのフォローもお願いします！";
+    ff.textContent = `${cfg.mention && cfg.mention.name ? `${cfg.mention.name}の` : ""}フォローもお願いします！`;
     ff.hidden = false;
   }
   const params = new URLSearchParams(location.search);
@@ -110,7 +117,39 @@
   qr.addData(target);
   qr.make();
   document.getElementById("qr").innerHTML = qr.createSvgTag({ cellSize: 8, margin: 0, scalable: true });
-  document.getElementById("url").textContent = target.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  // 画面に出すURLは短く（あいことば p とプリセットは出さない。QRの中には入っている）
+  let shown = target;
+  let evId = "";
+  try {
+    const t = new URL(target);
+    evId = t.searchParams.get("e") || "";
+    t.searchParams.delete("p");
+    t.searchParams.delete("preset");
+    shown = t.toString();
+  } catch {}
+  document.getElementById("url").textContent = shown.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  // イベントのQRなら、イベント名とハッシュタグを運営ページの設定に合わせる
+  if (evId) {
+    fetch(`api/event?e=${encodeURIComponent(evId)}`)
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.ok || !d.event) return;
+        if (d.event.name) {
+          eb.textContent = cfg.eventSub || "";
+          if (cfg.eventSub) eb.append(document.createElement("br"));
+          eb.append(`「${d.event.name}」`);
+          eb.hidden = false;
+        }
+        const tags = d.event.hashtags || [];
+        const tag = tags.find((h) => h.toLowerCase() !== "#linkedin") || tags[0];
+        if (tag) {
+          const ft = document.getElementById("feedTagLine");
+          ft.textContent = `アプリを使わずに投稿する人は ${tag} を付けてな`;
+          ft.hidden = false;
+        }
+      })
+      .catch(() => {});
+  }
 
   // 件数と「◯◯さんが投稿したで！」（本人がOKした名前だけ。?ticker=0 で出さない）
   const useTicker = params.get("ticker") !== "0";

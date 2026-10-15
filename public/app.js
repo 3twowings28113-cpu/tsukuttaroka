@@ -133,6 +133,41 @@
     } catch {}
   }
 
+  // イベント（運営ページで作る。?e=イベントID で開く）。あいことばが合えば、主催のAIキーで作れる（参加者はキーを作らなくていい）
+  const EV_KEY = "tsukuttaroka.event";
+  const QS = new URLSearchParams(location.search);
+  let EVID = "";
+  let EVPASS = "";
+  let EVENT = null; // サーバーから読んだもの {id, name, hashtags, cheerAlways, preset, needsPass, hasKey}
+  try {
+    const v = JSON.parse(localStorage.getItem(EV_KEY) || "null");
+    if (v && v.id) {
+      EVID = String(v.id);
+      EVPASS = String(v.pass || "");
+    }
+  } catch {}
+  if (QS.has("e")) {
+    const id = String(QS.get("e") || "").trim().toLowerCase().slice(0, 40);
+    if (id !== EVID) EVPASS = "";
+    EVID = id; // ?e= を空で開くと、イベントから外れる
+  }
+  // QRに入れたあいことば（?p=）は、読んだらアドレス欄から消す（スクショや共有で広がらないように）
+  const URL_PASS = String(QS.get("p") || "").trim().slice(0, 60);
+  if (QS.has("p")) {
+    QS.delete("p");
+    try {
+      history.replaceState(null, "", location.pathname + (QS.toString() ? `?${QS}` : "") + location.hash);
+    } catch {}
+  }
+  function saveEvent() {
+    try {
+      if (EVID) localStorage.setItem(EV_KEY, JSON.stringify({ id: EVID, pass: EVPASS }));
+      else localStorage.removeItem(EV_KEY);
+    } catch {}
+  }
+  const eventNeedsPass = () => !!(EVENT && EVENT.needsPass);
+  const eventKeyReady = () => !!(EVENT && EVENT.hasKey && EVPASS);
+
   // Googleカレンダー（秘密のiCalアドレス）。URLはこの端末にだけ保存する
   const CAL_KEY = "tsukuttaroka.cal";
   let CALURL = "";
@@ -169,7 +204,7 @@
     if (v && v.key && v.model) AISET = { provider: "openai", ...v };
   } catch {}
   const advOn = () => !!(AISET && AISET.on && AISET.key && AISET.model);
-  const aiReady = () => !!MYKEY || advOn();
+  const aiReady = () => !!MYKEY || advOn() || eventKeyReady();
   function saveAISet() {
     try {
       if (AISET && AISET.on && AISET.key && AISET.model) localStorage.setItem(AISET_KEY, JSON.stringify(AISET));
@@ -422,7 +457,7 @@
         length: S.style.length,
         emoji: S.style.emoji,
         sign: S.style.sign || "なし",
-        cheer: C.style.cheer ? S.style.cheer || "なし" : "なし",
+        cheer: C.cheerAlways ? "入れる" : C.style.cheer ? S.style.cheer || "なし" : "なし",
         phrase: (S.style.phrase || "").trim().slice(0, 40),
       },
       mode: S.mode || "",
@@ -572,7 +607,7 @@
     const quickSize = C.sizes.find((z) => quickSet && z.n === quickSet.size);
     const html = `
       <div class="big-row"><button type="button" class="big-toggle" data-act="bigText" aria-pressed="${isBig()}"><span class="big-a" aria-hidden="true">あ</span>${isBig() ? "文字を元にもどす" : "文字を大きくする"}</button></div>
-      ${aiReady() ? `<p class="key-on bx">${advOn() ? `じぶんのAI（${esc(AISET.model)}）で文章を作るで` : "じぶんのGeminiで文章を作るで"}</p>` : ""}
+      ${aiReady() ? `<p class="key-on bx">${advOn() ? `じぶんのAI（${esc(AISET.model)}）で文章を作るで` : MYKEY ? "じぶんのGeminiで文章を作るで" : "イベントのあいことばで作るで"}</p>` : ""}
       <section class="hero cloud" data-bump="46" data-seed="3">
         <p class="hero-eyebrow">${esc(C.eventSub || "")}${C.eventName ? `<br>「${esc(C.eventName)}」` : ""}</p>
         <h1 class="hero-title bx" tabindex="-1">${fmt(C.appName)}</h1>
@@ -592,7 +627,11 @@
         </div>
         ${followNeeded() ? followGateHtml() : ""}
         <p class="hero-note bx">${isProfile() ? `${PCARDS.length}つの質問に<wbr>答えるだけ。<wbr>書いたことだけ使うで` : "何も選ばんでOK。<wbr>質問に答えるだけで<wbr>投稿文ができるで"}</p>
-        <p class="key-entry"><button type="button" class="btn btn-secondary btn-block${aiReady() ? "" : " is-unset"}" data-act="openKey">${aiReady() ? "作るAIを見る・変える" : '<span class="badge-unset">未設定</span>文章を作るAIを紐づける（無料・約5分）'}</button></p>
+        ${
+          eventKeyReady() && !MYKEY
+            ? ""
+            : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block${aiReady() ? "" : " is-unset"}" data-act="openKey">${aiReady() ? "作るAIを見る・変える" : eventNeedsPass() ? '<span class="badge-unset">未設定</span>イベントのあいことばを入れる' : '<span class="badge-unset">未設定</span>文章を作るAIを紐づける（無料・約5分）'}</button></p>`
+        }
         ${isProfile() ? "" : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block" data-act="cal">カレンダーから投稿をつくる${CALURL ? "（つないでる）" : "（まずつなぐ・1分）"}<span class="badge-opt">任意</span></button></p>`}
         ${histGet().length ? `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block" data-act="hist">マイ投稿記録（${histGet().length}件）</button></p>` : ""}
         ${isProfile() ? "" : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block" data-act="voice">じぶんの書き方をおぼえさせる${VOICE.text ? (VOICE.on ? "（適用中）" : "（おぼえてる・止まってる）") : "（一度だけでOK）"}<span class="badge-opt">任意</span></button></p>`}
@@ -755,7 +794,7 @@
           <div class="opts" role="radiogroup" aria-labelledby="lab-mode">${modeOpts()}</div>
           ${introField()}${stylePromptField()}
         </div>
-        ${field("role")}${field("formality")}${field("kansai")}${field("length")}${field("emoji")}${C.style.sign ? field("sign") : ""}${C.style.cheer ? field("cheer") : ""}
+        ${field("role")}${field("formality")}${field("kansai")}${field("length")}${field("emoji")}${C.style.sign ? field("sign") : ""}${C.style.cheer && !C.cheerAlways ? field("cheer") : ""}
         <div class="field">
           <div class="field-label">写真（任意・${PHOTO_LIMIT}枚まで）</div>
           ${
@@ -1279,6 +1318,7 @@
     return `
       <div class="sheet-grip" aria-hidden="true"></div>
       <h2 class="sheet-title" id="sheetTitle">文章を作るAIを紐づける</h2>
+      ${eventPassHtml()}
       <p class="sheet-lead bx">投稿文を作るAI（Gemini）を、<wbr>あなた自身のアカウントで使えるようにするで。<wbr>キーは無料で作れて、<wbr>一度紐づけたら二度と入らなくていい。</p>
       ${advOn() ? `<p class="key-on bx">いま：<b>Gemini以外のAI（${esc(AISET.model)}）で作ってるで</b>。<wbr>Geminiに戻すときは、下の「上級者向け」でやめる。</p>` : MYKEY ? '<p class="key-on bx">いま：<b>Gemini（じぶんのキー）で作ってるで</b>。設定ずみ（この端末）</p>' : '<p class="key-off bx">いまは、<b>まだAIがつながってへん</b>。<wbr>このままだと投稿文が作れへんから、<wbr>下の手順どおりに約5分でつなげてな。</p>'}
       <ol class="key-steps">
@@ -1890,6 +1930,11 @@
     if (/api\/(generate|refine|style)/.test(url)) {
       if (MYKEY) headers["x-user-key"] = MYKEY;
       if (advOn()) headers["x-ai-config"] = b64utf8(JSON.stringify(AISET));
+      // イベントのあいことば（日本語でも送れるように、ヘッダーでは文字をエスケープする）
+      if (!MYKEY && !advOn() && eventKeyReady()) {
+        headers["x-event"] = EVENT.id;
+        headers["x-event-pass"] = encodeURIComponent(EVPASS);
+      }
     }
     try {
       const res = await fetch(url, {
@@ -2086,8 +2131,92 @@
   // キーが無いと作れない。シートを出して、保存したら続きを自動でやる
   function needKey(after) {
     T.keyAfter = after || "";
+    if (eventNeedsPass()) {
+      openSheet(keyHtml(), "#evPass");
+      toast("作るには、イベントのあいことばを入れてな（ブースのスタッフが教えてくれるで）", 4000);
+      return;
+    }
     openSheet(keyHtml(), "#apiKeyInput");
     toast("作るには、まず文章を作るAIを紐づけるで。シートの手順どおりなら5分ぐらいでできる", 4000);
+  }
+
+  // ---------- イベント ----------
+  async function loadEvent() {
+    if (!EVID || MODE === "preview") return;
+    try {
+      const res = await fetch(`api/event?e=${encodeURIComponent(EVID)}`, { cache: "no-store" });
+      const d = await res.json().catch(() => ({}));
+      if (!d.ok || !d.event) {
+        // 消された・止められたイベントからは外れる
+        if (res.status === 404) {
+          EVID = "";
+          EVPASS = "";
+          saveEvent();
+        }
+        return;
+      }
+      EVENT = d.event;
+      // 運営ページで決めた「質問セット・色」（プリセット）とちがうときは、そのプリセットで開き直す（最初の1回だけ）
+      if (EVENT.preset && EVENT.preset !== C.presetId && !QS.has("preset") && (window.APP_PRESETS || []).some((p) => p.id === EVENT.preset)) {
+        QS.set("preset", EVENT.preset);
+        if (URL_PASS) QS.set("p", URL_PASS);
+        location.replace(`${location.pathname}?${QS}`);
+        return new Promise(() => {}); // 開き直すまで待つ
+      }
+      if (EVENT.name) C.eventName = EVENT.name;
+      if (EVENT.hashtags && EVENT.hashtags.length) {
+        C.hashtags = EVENT.hashtags;
+        C.feedTag = EVENT.hashtags.find((h) => h.toLowerCase() !== "#linkedin") || EVENT.hashtags[0];
+      }
+      if (EVENT.cheerAlways) C.cheerAlways = true;
+      saveEvent();
+      if (URL_PASS && !MYKEY && !advOn()) await unlockEvent(URL_PASS, true).catch(() => {});
+    } catch {}
+  }
+  // あいことばを確かめて、この端末に覚える（ちがうときは、サーバーの説明つきのエラーを投げる）
+  async function unlockEvent(pass, silent) {
+    const v = String(pass || "").trim().slice(0, 60);
+    if (!v) throw Object.assign(new Error("あいことばを入れてな"), { code: "input" });
+    await postJSON("api/event/unlock", { e: EVID, pass: v, clientId: S.clientId }, 15000);
+    EVPASS = v;
+    saveEvent();
+    if (!silent) toast("あいことば、OKや！これで作れるで", 2400);
+  }
+  function eventPassHtml() {
+    if (!eventNeedsPass()) return "";
+    return `<div class="key-box ev-box">
+        <label class="key-label" for="evPass">イベントのあいことば${eventKeyReady() ? '<span class="key-ok">入れずみ</span>' : ""}</label>
+        <p class="key-note bx">会場のスタッフが教えてくれるで。<wbr>これを入れたら、じぶんのキーは作らんでOK。</p>
+        <input id="evPass" class="name-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="60" enterkeyhint="done" placeholder="あいことば" value="${esc(eventKeyReady() ? EVPASS : "")}">
+        <button type="button" class="btn btn-primary btn-block" data-act="evUnlock">あいことばで使う</button>
+        <p class="key-on" id="evStatus" role="status" hidden></p>
+      </div>
+      <h3 class="ev-or"><span>じぶんのキーで使う人は、こちら</span></h3>`;
+  }
+  async function evUnlockFlow() {
+    const box = $("#evPass", sheet);
+    const st = $("#evStatus", sheet);
+    const btn = $("[data-act=evUnlock]", sheet);
+    if (btn) btn.disabled = true;
+    try {
+      await unlockEvent(box && box.value, false);
+      if (T.keyAfter === "generate" && S.step) {
+        T.keyAfter = "";
+        closeSheet();
+        generate();
+        return;
+      }
+      T.keyAfter = "";
+      closeSheet();
+      if (S.step === "pick") keepScroll(render);
+    } catch (e) {
+      if (st) {
+        st.hidden = false;
+        st.classList.add("is-ng");
+        st.textContent = errorText(e);
+      }
+      if (btn) btn.disabled = false;
+    }
   }
 
   // 「これで紐づける」：まずキーが使えるか確かめてから、端末に保存する
@@ -2198,6 +2327,10 @@
       if (h) h.focus({ preventScroll: true });
       setTimeout(() => (T.fresh = false), 800);
     } catch (e) {
+      if (e && e.code === "pass") {
+        EVPASS = "";
+        saveEvent();
+      }
       if (!loggedByServer(e)) clientLog("generate", e);
       T.error = errorText(e);
       if (before === "result" && S.results) {
@@ -2269,6 +2402,10 @@
       save();
       toast(actionId === "custom" ? "言われたとおり直したで" : "直したで", 1400);
     } catch (e) {
+      if (e && e.code === "pass") {
+        EVPASS = "";
+        saveEvent();
+      }
       if (!loggedByServer(e)) clientLog("refine", e);
       toast(errorText(e), 2600);
     } finally {
@@ -2305,6 +2442,10 @@
       save();
       toast(actionId === "custom" ? "言われたとおり直したで" : "直したで", 1400);
     } catch (e) {
+      if (e && e.code === "pass") {
+        EVPASS = "";
+        saveEvent();
+      }
       if (!loggedByServer(e)) clientLog("refine", e);
       toast(errorText(e), 2600);
     } finally {
@@ -2795,7 +2936,7 @@
         openSheet(helpHtml(), "[data-act=closeSheet]");
         break;
       case "openKey":
-        openSheet(keyHtml(), "#apiKeyInput");
+        openSheet(keyHtml(), eventNeedsPass() && !MYKEY ? "#evPass" : "#apiKeyInput");
         break;
       case "cal":
         T.calEvents = [];
@@ -2879,6 +3020,9 @@
         generate(p);
         break;
       }
+      case "evUnlock":
+        evUnlockFlow();
+        break;
       case "saveKey":
         saveKeyFlow();
         break;
@@ -3417,6 +3561,11 @@
       if (b && !b.disabled) b.click();
       return;
     }
+    if (e.key === "Enter" && !e.isComposing && e.target.id === "evPass") {
+      e.preventDefault();
+      evUnlockFlow();
+      return;
+    }
     if (e.key === "Enter" && !e.isComposing && e.target.id === "myName") {
       e.preventDefault();
       e.target.blur();
@@ -3449,23 +3598,34 @@
     clientLog("reload", { code: "closed_while_generating" }, { photos: wasPending.photos || 0, kb: wasPending.kb, message: `作っている途中で画面が閉じた・再読み込みされた（写真${wasPending.photos || 0}枚）` });
     setTimeout(() => toast(wasPending.photos ? "さっきは作ってる途中で画面が閉じてしもたみたい。写真を減らして、もう一回押してみて" : "さっきは作ってる途中で画面が閉じてしもたみたい。もう一回押してみて", 5000), 600);
   }
-  if (MODE === "live" && params.get("demo") === "1") {
-    fillDemo();
-  } else if (saved && hasProgress(saved)) {
-    render();
-    openSheet(
-      `<h2 class="sheet-title" id="sheetTitle">前回のつづきがあるで</h2>
-       <p class="sheet-lead">つづきから再開する？</p>
-       <div class="stack">
-         <button type="button" class="btn btn-primary btn-block" data-act="resumeYes">つづきから</button>
-         <button type="button" class="btn btn-secondary btn-block" data-act="resumeNo">最初から</button>
-       </div>`
-    );
-  } else {
-    // 回答前なら、選んだ問数とセットだけ引き継いで最初の画面から
-    if (!saved) S = freshState(S.clientId);
-    S.step = "pick";
-    render();
+  // イベント（?e=）は、名前とハッシュタグを読んでから最初の画面を出す（遅いときは2.5秒で先に出して、あとで描き直す）
+  async function start() {
+    const evLoad = loadEvent();
+    if (EVID) await Promise.race([evLoad, new Promise((r) => setTimeout(r, 2500))]);
+    let shown = false;
+    if (MODE === "live" && params.get("demo") === "1") {
+      fillDemo();
+    } else if (saved && hasProgress(saved)) {
+      render();
+      openSheet(
+        `<h2 class="sheet-title" id="sheetTitle">前回のつづきがあるで</h2>
+         <p class="sheet-lead">つづきから再開する？</p>
+         <div class="stack">
+           <button type="button" class="btn btn-primary btn-block" data-act="resumeYes">つづきから</button>
+           <button type="button" class="btn btn-secondary btn-block" data-act="resumeNo">最初から</button>
+         </div>`
+      );
+    } else {
+      // 回答前なら、選んだ問数とセットだけ引き継いで最初の画面から
+      if (!saved) S = freshState(S.clientId);
+      S.step = "pick";
+      render();
+    }
+    shown = true;
+    evLoad.then(() => {
+      if (shown && S.step === "pick") keepScroll(render);
+    });
   }
+  start();
   document.fonts && document.fonts.ready.then(() => paintClouds(document));
 })();
