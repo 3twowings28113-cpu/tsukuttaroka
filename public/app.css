@@ -2,16 +2,17 @@
 :root {
   color-scheme: light;
   /* 色：役割を固定する。イベントごとの色は config.js の theme で上書きする（ここは初期値） */
-  --ground: #D6E6F7;     /* 画面の地（淡いLinkedInの青） */
+  --ground: #B4D0F0;     /* 画面の地（LinkedInの青を明るくしたもの） */
   --note: #F1F7FE;       /* 補足の囲み */
   --ink: #121212;        /* 文字と線 */
   --ink-soft: #26313D;   /* 地の上の補足文字 */
   --paper: #FFFFFF;      /* カード・フキダシ・入力欄 */
   --muted: #55606B;      /* 白の上の補足文字 */
   --coral: #FF7373;      /* 小さな強調だけ（進み具合・必須・番号） */
-  --check: #0A66C2;      /* チェック */
-  --blue: #0A66C2;       /* 押せるもの・選択中（LinkedInの青） */
-  --blue-press: #004182;
+  --check: #004182;      /* チェック */
+  --blue: #004182;       /* 押せるもの・選択中（LinkedInの濃い青） */
+  --blue-press: #00315F;
+  --li-link: #0A66C2;    /* LinkedInでの見え方の中のハッシュタグ（本物と同じ青） */
   --blue-tint: #E8F1FB;
   --feed: #F4F2EE;       /* LinkedInのフィードの地 */
   --li-text: #191919;
@@ -554,7 +555,7 @@ input.phrase {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3;
   overflow: hidden; padding-bottom: 0; margin-bottom: 12px;
 }
-.li-tag { color: var(--blue); font-weight: 600; }
+.li-tag { color: var(--li-link); font-weight: 600; }
 .li-more {
   display: block; margin: -8px 12px 0 auto; padding: 4px 0 12px;
   border: 0; background: none;

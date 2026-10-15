@@ -4,8 +4,8 @@
   "description": "質問に答えるだけで、LinkedInの投稿文ができるで。",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#D6E6F7",
-  "theme_color": "#D6E6F7",
+  "background_color": "#B4D0F0",
+  "theme_color": "#B4D0F0",
   "lang": "ja",
   "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
 }

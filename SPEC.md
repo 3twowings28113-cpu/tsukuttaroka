@@ -228,7 +228,7 @@
 ## 2026-10-15 lscw-1：LinkedIn Student Career Week（10/31）の学生向けブース版
 - 写真：選んだ時点で端末で長辺1024pxのJPEGに縮小し、生成・書き直しのときだけAIに渡す（Interactions API は input に {type:"image", data, mime_type}）。AIが写真で失敗（400など）したら写真なしで1回作り直して画面で知らせる。写真は保存しない
 - 失敗の記録：通信切れ・時間切れ・写真の読みこみ失敗・作成中に画面が閉じた、を端末から /api/clientlog に送る。運営ページ「最近のエラー」（20件）に写真の枚数・端末つきで出る
-- 色：LinkedInの青と黒が基調（淡い青の地 #D6E6F7・黒線・青のボタン）。色は CSS 変数で、config.js の theme で上書きする
+- 色：LinkedInの青と黒が基調（青の地 #B4D0F0・黒線・濃い青のボタン #004182）。色は CSS 変数で、config.js の theme で上書きする
 - プロフィール文を作る：最初の画面で「投稿文／プロフィール文」を切り替え。5つの質問（config.js の profile.cards）から、見出し（Headline）3案と自己紹介（About）を作る。それぞれコピーでき、自己紹介はちょい直し・自分で直す・こうしてほしいに対応。/api/generate・/api/refine に kind:"profile"
 - 締め：「コメントで教えてください」は毎回入れない（決まり14）。じぶん色の「LinkedInの前向きな一文を入れる？」（style.cheer）で、終わりのほうに1文だけ入れられる（決まり24）。cheerAlways のときは全投稿に入れて、選ぶ欄は出さない
 - 表記：「LinkedIn」「LinkedIn Learning」にそろえる（AIの出力と回答の両方。音声入力の「リンクトイン」も直す）。出典のない数字・情報は書かない（決まり25）
