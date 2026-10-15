@@ -1,15 +1,15 @@
-/* 雲フキダシ × LinkedInの青。スライドの黄色い世界から、そのまま投稿画面へつなぐスマホ1カラム */
+/* 雲フキダシ × LinkedInの青と黒。スマホ1カラム */
 :root {
   color-scheme: light;
-  /* 色：役割を固定する */
-  --yellow: #FFDE59;     /* 画面の地（スライドと同じ） */
-  --cream: #FBFFD3;      /* 補足の囲み（スライドの日付ピル） */
+  /* 色：役割を固定する。イベントごとの色は config.js の theme で上書きする（ここは初期値） */
+  --ground: #D6E6F7;     /* 画面の地（淡いLinkedInの青） */
+  --note: #F1F7FE;       /* 補足の囲み */
   --ink: #121212;        /* 文字と線 */
-  --ink-soft: #3B372E;   /* 黄色の上の補足文字 */
+  --ink-soft: #26313D;   /* 地の上の補足文字 */
   --paper: #FFFFFF;      /* カード・フキダシ・入力欄 */
-  --muted: #6A6456;      /* 白の上の補足文字 */
+  --muted: #55606B;      /* 白の上の補足文字 */
   --coral: #FF7373;      /* 小さな強調だけ（進み具合・必須・番号） */
-  --pink: #FF5A6F;       /* チェック */
+  --check: #0A66C2;      /* チェック */
   --blue: #0A66C2;       /* 押せるもの・選択中（LinkedInの青） */
   --blue-press: #004182;
   --blue-tint: #E8F1FB;
@@ -32,7 +32,7 @@
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   margin: 0;
-  background: var(--yellow);
+  background: var(--ground);
   color: var(--ink);
   font-family: var(--f-body);
   font-weight: 500;
@@ -76,7 +76,7 @@ main:focus { outline: none; }
   gap: 10px;
   padding-block: 10px;
   margin-bottom: 6px;
-  background: var(--yellow);
+  background: var(--ground);
 }
 .help-btn {
   display: inline-flex; align-items: center; gap: 6px; flex: none;
@@ -88,7 +88,7 @@ main:focus { outline: none; }
 .help-btn:active { transform: translate(2px, 2px); box-shadow: none; }
 .help-q {
   width: 26px; height: 26px; display: grid; place-items: center;
-  border-radius: 50%; background: var(--ink); color: var(--yellow);
+  border-radius: 50%; background: var(--ink); color: var(--ground);
   font-family: var(--f-display); font-weight: 900; font-size: 16px; line-height: 1;
 }
 .stepper { display: flex; gap: 6px; }
@@ -100,7 +100,7 @@ main:focus { outline: none; }
   font: 700 12px/1 var(--f-body);
 }
 .stepper .dot.is-now { background: var(--coral); }
-.stepper .dot.is-done { background: var(--ink); color: var(--yellow); }
+.stepper .dot.is-done { background: var(--ink); color: var(--ground); }
 .stepper .dot:disabled { cursor: default; }
 
 /* ---------- 雲フキダシ（この画面の見せ場） ---------- */
@@ -128,7 +128,7 @@ main:focus { outline: none; }
 }
 .hero-title:focus { outline: none; }
 .hero-lead { margin: 12px 0 0; font-size: 15px; line-height: 1.7; }
-.hero-lead b { background: linear-gradient(transparent 58%, var(--yellow) 58%); padding: 0 2px; }
+.hero-lead b { background: linear-gradient(transparent 58%, var(--ground) 58%); padding: 0 2px; }
 
 .block { display: grid; gap: 12px; }
 .sec-title { margin: 0; font-family: var(--f-display); font-weight: 900; font-size: 18px; line-height: 1.4; }
@@ -168,7 +168,7 @@ main:focus { outline: none; }
 }
 
 /* ネタを自分で入れかえる（開くとカードが並ぶ） */
-.swap { background: var(--cream); border: var(--line) solid var(--ink); border-radius: var(--r); padding: 0 12px; }
+.swap { background: var(--note); border: var(--line) solid var(--ink); border-radius: var(--r); padding: 0 12px; }
 .swap summary {
   display: flex; align-items: center; gap: 10px; min-height: 54px;
   font-weight: 700; font-size: 15px; cursor: pointer; list-style: none;
@@ -182,7 +182,7 @@ main:focus { outline: none; }
 .swap[open] summary::before { transform: rotate(45deg); margin-top: -4px; }
 .swap-count {
   margin-left: auto; padding: 0 10px; border-radius: 999px;
-  background: var(--ink); color: var(--yellow);
+  background: var(--ink); color: var(--ground);
   font-size: 13px; line-height: 24px; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 .swap-note { margin: 0; font-size: 14px; font-weight: 700; }
@@ -231,7 +231,7 @@ main:focus { outline: none; }
   border: var(--line) solid var(--ink); border-radius: 999px;
   background: var(--paper); font-weight: 700; font-size: 14px;
 }
-.big-toggle[aria-pressed="true"] { background: var(--ink); color: var(--yellow); }
+.big-toggle[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
 .big-a { font-family: var(--f-display); font-weight: 900; font-size: 20px; line-height: 1; }
 .pick-divider {
   display: flex; align-items: center; gap: 12px; margin: 6px 0 -4px;
@@ -270,7 +270,7 @@ main:focus { outline: none; }
 .key-on { margin: 8px 0 0; text-align: center; font-size: 13px; font-weight: 700; color: var(--ink-soft); }
 #keyStatus.is-ng { color: #b3261e; }
 .key-entry { margin: 12px 0 0; text-align: center; }
-.key-ok { display: inline-block; padding: 1px 8px; border: 2px solid var(--ink); border-radius: 999px; background: var(--yellow); font-size: 12px; font-weight: 700; }
+.key-ok { display: inline-block; padding: 1px 8px; border: 2px solid var(--ink); border-radius: 999px; background: var(--ground); font-size: 12px; font-weight: 700; }
 .key-ng { display: inline-block; padding: 1px 8px; border: 2px solid var(--ink); border-radius: 999px; background: var(--coral); font-size: 12px; font-weight: 700; }
 .key-off { margin: 8px 0 0; padding: 8px 12px; border: 2px solid var(--ink); border-radius: 12px; background: #FFF1EF; text-align: center; font-size: 13px; font-weight: 700; }
 .badge-opt {
@@ -322,7 +322,7 @@ main:focus { outline: none; }
 /* マイ投稿記録 */
 .hist-item { padding: 12px; background: var(--paper); border: var(--line) solid var(--ink); border-radius: 12px; display: grid; gap: 8px; margin-bottom: 10px; }
 .hist-at { margin: 0; font-size: 12px; font-weight: 700; color: var(--ink-soft); }
-.hist-body { display: grid; gap: 4px; padding: 10px; background: var(--cream); border: var(--line) dashed var(--ink); border-radius: 10px; }
+.hist-body { display: grid; gap: 4px; padding: 10px; background: var(--note); border: var(--line) dashed var(--ink); border-radius: 10px; }
 .hist-body p { margin: 0; font-size: 14px; line-height: 1.6; }
 .hist-del { justify-self: start; font-size: 13px; opacity: 0.7; }
 
@@ -355,7 +355,7 @@ html.is-big .sheet { max-height: calc(92dvh / 1.15); }
 /* ---------- 下の固定ボタン ---------- */
 .dock {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  background: var(--yellow);
+  background: var(--ground);
   border-top: var(--line) solid var(--ink);
   padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
 }
@@ -436,7 +436,7 @@ textarea::placeholder, input::placeholder { color: #857F70; }
 .hint-box {
   display: flex; gap: 10px; align-items: flex-start; margin: 0;
   padding: 12px 14px; font-size: 14px; line-height: 1.6;
-  background: var(--cream); border: var(--line) dashed var(--ink); border-radius: var(--r);
+  background: var(--note); border: var(--line) dashed var(--ink); border-radius: var(--r);
 }
 .hint-box svg { flex: none; width: 22px; height: 22px; margin-top: 1px; }
 .hint-sub { display: block; margin-top: 2px; font-size: 14px; color: var(--ink-soft); }
@@ -507,7 +507,7 @@ input.phrase {
 .notice {
   margin: 0; justify-self: center;
   padding: 4px 12px; font-size: 14px; font-weight: 700;
-  background: var(--cream); border: var(--line) solid var(--ink); border-radius: 999px;
+  background: var(--note); border: var(--line) solid var(--ink); border-radius: 999px;
 }
 .tabs {
   display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -567,7 +567,7 @@ input.phrase {
 }
 .count-row { display: flex; justify-content: space-between; margin-top: 8px; font-size: 13px; font-weight: 700; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .tweak { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-.chip-edit { background: var(--cream); }
+.chip-edit { background: var(--note); }
 .edit-label { display: block; margin: 0 4px 6px; font-size: 13px; font-weight: 700; }
 textarea.edit-body {
   display: block; width: 100%; min-height: 280px; resize: vertical;
@@ -585,7 +585,7 @@ textarea.edit-body {
 .sheet {
   width: 100%; max-width: 480px; max-height: 92dvh; overflow: auto;
   padding: 10px 16px calc(18px + env(safe-area-inset-bottom, 0px));
-  background: var(--yellow);
+  background: var(--ground);
   border: var(--line) solid var(--ink); border-bottom: 0; border-radius: 22px 22px 0 0;
   display: grid; gap: 14px;
 }
@@ -609,10 +609,10 @@ textarea.edit-body {
   border: var(--line) solid var(--ink); border-radius: 8px;
   background: #fff; color: #fff;
 }
-.check[aria-checked="true"] .box { background: var(--pink); }
+.check[aria-checked="true"] .box { background: var(--check); }
 .consent {
   display: flex; align-items: flex-start; gap: 12px;
-  padding: 12px; background: var(--cream);
+  padding: 12px; background: var(--note);
   border: var(--line) solid var(--ink); border-radius: 12px;
 }
 .consent-label { font-weight: 700; font-size: 15px; line-height: 1.45; }
@@ -693,7 +693,7 @@ textarea.r-text {
   border: 1px solid #CFCAC0; border-radius: 8px; background: #FCFBF9;
 }
 .tips { display: grid; gap: 10px; }
-.tips p { margin: 0; padding: 12px 14px; background: var(--cream); border: var(--line) dashed var(--ink); border-radius: 12px; font-size: 14px; line-height: 1.65; }
+.tips p { margin: 0; padding: 12px 14px; background: var(--note); border: var(--line) dashed var(--ink); border-radius: 12px; font-size: 14px; line-height: 1.65; }
 .done-foot { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px 8px; }
 
 /* ---------- トースト（相づち） ---------- */
@@ -747,7 +747,7 @@ body.has-dock .toast { bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
 .ask {
   display: grid; gap: 8px; margin-top: 16px; padding: 14px;
   border: var(--line) solid var(--ink); border-radius: var(--r);
-  background: var(--cream);
+  background: var(--note);
 }
 .ask-label { font-family: var(--f-display); font-weight: 900; font-size: 16px; }
 .ask-row { display: flex; gap: 8px; }

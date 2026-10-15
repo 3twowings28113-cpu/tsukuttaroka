@@ -6,6 +6,17 @@
  */
 window.APP_CONFIG = {
   appName: "投稿、つくったろか。",
+
+  // 画面の色（書いていない色は app.css の初期値）。LinkedInの青と黒が基調。ロゴは使わない
+  theme: {
+    ground: "#D6E6F7", // 画面の地
+    groundText: "#26313D", // 地の上の補足文字
+    note: "#F1F7FE", // 補足の囲み
+    accent: "#0A66C2", // 押せるもの・選択中
+    accentPress: "#004182",
+    mark: "#FF7373", // 小さな強調（進み具合・必須）
+    check: "#0A66C2", // 投稿前チェックの印
+  },
   // 上の小さな文字。eventName を空にすると1行だけになる
   eventSub: "毎日のLinkedIn投稿に",
   eventName: "",

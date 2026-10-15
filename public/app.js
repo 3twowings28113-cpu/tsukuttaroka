@@ -8,6 +8,14 @@
 
   const C = window.APP_CONFIG;
   const MODE = window.APP_MODE === "preview" ? "preview" : "live";
+
+  // イベントごとの色（config.js の theme）。書いていない色は app.css の初期値のまま
+  const THEME_VARS = { ground: "--ground", note: "--note", ink: "--ink", groundText: "--ink-soft", subText: "--muted", accent: "--blue", accentPress: "--blue-press", accentTint: "--blue-tint", mark: "--coral", check: "--check" };
+  if (C.theme) {
+    for (const [k, v] of Object.entries(THEME_VARS)) if (C.theme[k]) document.documentElement.style.setProperty(v, C.theme[k]);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta && C.theme.ground) meta.setAttribute("content", C.theme.ground);
+  }
   const STORE_KEY = "tsukuttaroka.v1";
   const REPORT_KEY = "tsukuttaroka.report"; // 「投稿したで！」の報告（最初からつくり直しても残す）
   const CARD = Object.fromEntries(C.cards.map((c) => [c.id, c]));
