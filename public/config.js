@@ -279,7 +279,7 @@ window.APP_CONFIG = {
     { id: "", tone: "humor", label: "ユーモア", sub: "くすっと笑わせる、軽いノリで" },
     { id: "", tone: "straight", label: "学び", sub: "学びを言い切って、/これからの行動で締める" },
     { id: "first", label: "はじめての投稿", sub: "LinkedInにはじめて投稿する人に。/あいさつと自己紹介つき" },
-    { id: "ishizaka", label: "石坂誠風", sub: "見出し【】と「〇」の箇条書きで、/熱く言い切る" },
+    { id: "ishizaka", label: "石坂誠風", sub: "「」のセリフで始めて、/（心の声）と絵文字多めで熱く" },
     { id: "custom", label: "じぶんの書き方", sub: "書き方の指示を/自由に入れる" },
   ],
   introLabel: "ひとこと自己紹介（任意）",
@@ -294,7 +294,7 @@ window.APP_CONFIG = {
     { id: "hotter", label: "もっと熱く" },
     { id: "concrete", label: "もっと具体的に" },
     { id: "another", label: "別の言い回し" },
-    { id: "ishizaka", label: "見出しスタイル" },
+    { id: "ishizaka", label: "石坂さん風" },
   ],
 
   // 投稿前に確認すること
@@ -592,7 +592,7 @@ window.APP_CONFIG = {
         { id: "", tone: "humor", label: "ユーモア", sub: "関西ノリのツッコミで、くすっと" },
         { id: "", tone: "straight", label: "学び", sub: "学びを言い切って、/これからの行動で締める" },
         { id: "first", label: "はじめての投稿", sub: "LinkedInにはじめて投稿する人に。/あいさつと自己紹介つき" },
-        { id: "ishizaka", label: "石坂さん風", sub: "見出し【】と「〇」の箇条書きで、/熱く言い切る" },
+        { id: "ishizaka", label: "石坂さん風", sub: "「」のセリフで始めて、/（心の声）と絵文字多めで熱く" },
       ],
       refineActions: [
         { id: "shorter", label: "もっと短く" },
