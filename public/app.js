@@ -209,7 +209,7 @@
   // 問数を変えたとき：同じ theme のセットがあればそれ、なければおすすめ
   const setForSize = (n, theme) => setsOf(n).find((s) => theme && s.theme === theme) || recommendedSet(n);
   const fitSize = (len) => SIZES.find((n) => n >= len) || SIZES[SIZES.length - 1];
-  const styleDefault = (k) => (C.style[k].default !== undefined ? C.style[k].default : C.style[k].options[0]);
+  const styleDefault = (k) => (!C.style[k] ? "" : C.style[k].default !== undefined ? C.style[k].default : C.style[k].options[0]);
   const defaultStyle = () => ({
     role: styleDefault("role"),
     formality: styleDefault("formality"),
@@ -217,6 +217,7 @@
     length: styleDefault("length"),
     emoji: styleDefault("emoji"),
     sign: styleDefault("sign"),
+    cheer: styleDefault("cheer") || "なし",
     phrase: "",
   });
   function freshState(clientId) {
@@ -421,6 +422,7 @@
         length: S.style.length,
         emoji: S.style.emoji,
         sign: S.style.sign || "なし",
+        cheer: C.style.cheer ? S.style.cheer || "なし" : "なし",
         phrase: (S.style.phrase || "").trim().slice(0, 40),
       },
       mode: S.mode || "",
@@ -753,7 +755,7 @@
           <div class="opts" role="radiogroup" aria-labelledby="lab-mode">${modeOpts()}</div>
           ${introField()}${stylePromptField()}
         </div>
-        ${field("role")}${field("formality")}${field("kansai")}${field("length")}${field("emoji")}${C.style.sign ? field("sign") : ""}
+        ${field("role")}${field("formality")}${field("kansai")}${field("length")}${field("emoji")}${C.style.sign ? field("sign") : ""}${C.style.cheer ? field("cheer") : ""}
         <div class="field">
           <div class="field-label">写真（任意・${PHOTO_LIMIT}枚まで）</div>
           ${
@@ -2042,7 +2044,6 @@
           extra,
           thanks,
           `というわけで、${next || "まずは誰かの投稿にコメント"}。宣言したから、もう逃げられへん。${phrase}`,
-          `みなさんの「宣言したらやるしかない」こと、コメントで教えてください！`,
         ]),
       },
       straight: {
