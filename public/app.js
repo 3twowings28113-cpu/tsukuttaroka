@@ -632,9 +632,9 @@
             ? ""
             : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block${aiReady() ? "" : " is-unset"}" data-act="openKey">${aiReady() ? "作るAIを見る・変える" : eventNeedsPass() ? '<span class="badge-unset">未設定</span>イベントのあいことばを入れる' : '<span class="badge-unset">未設定</span>文章を作るAIを紐づける（無料・約5分）'}</button></p>`
         }
-        ${isProfile() ? "" : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block" data-act="cal">カレンダーから投稿をつくる${CALURL ? "（つないでる）" : "（まずつなぐ・1分）"}<span class="badge-opt">任意</span></button></p>`}
+        ${isProfile() ? "" : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block bx" data-act="cal">カレンダーから<wbr>投稿をつくる<wbr>${CALURL ? "（つないでる）" : "（まずつなぐ・1分）"}<span class="badge-opt">任意</span></button></p>`}
         ${histGet().length ? `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block" data-act="hist">マイ投稿記録（${histGet().length}件）</button></p>` : ""}
-        ${isProfile() ? "" : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block" data-act="voice">じぶんの書き方をおぼえさせる${VOICE.text ? (VOICE.on ? "（適用中）" : "（おぼえてる・止まってる）") : "（一度だけでOK）"}<span class="badge-opt">任意</span></button></p>`}
+        ${isProfile() ? "" : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block bx" data-act="voice">じぶんの書き方を<wbr>おぼえさせる<wbr>${VOICE.text ? (VOICE.on ? "（適用中）" : "（おぼえてる・止まってる）") : "（一度だけでOK）"}<span class="badge-opt">任意</span></button></p>`}
       </section>
       ${
         isProfile()
@@ -999,7 +999,7 @@
       );
     }
     if (T.photos.length) steps.push(`<b>えらんだ写真（${T.photos.length}枚）を添付する</b><span class="sub">入力欄の下の写真マークから。添付わすれに注意やで</span>`);
-    steps.push(`<b>写真を1枚つけると、見てもらいやすい</b><span class="sub">写ってる人には一声かけてな</span>`);
+    else steps.push(`<b>写真を1枚つけると、見てもらいやすい</b><span class="sub">写ってる人には一声かけてな</span>`);
     steps.push(`<b>右上の「投稿」をタップ</b><span class="sub">${lastNote}</span>`);
     return `<ol class="guide">${steps.map((s, i) => `<li><span class="n" aria-hidden="true">${i + 1}</span><div>${s}</div></li>`).join("")}</ol>`;
   }
@@ -1110,7 +1110,7 @@
         <button type="button" class="switch" role="switch" aria-checked="${S.consent}" aria-labelledby="consentLabel" data-act="consent"></button>
         <div><div class="consent-label bx" id="consentLabel">${fmt(C.consentLabel)}</div><div class="consent-note">${esc(C.consentNote)}</div></div>
       </div>
-      ${myName() ? `<div class="consent consent-judge">
+      ${C.report && myName() ? `<div class="consent consent-judge">
         <button type="button" class="switch" role="switch" aria-checked="${S.sendJudge !== false}" aria-labelledby="judgeLabel" data-act="sendJudge"></button>
         <div><div class="consent-label bx" id="judgeLabel">審査員にも、<wbr>この文章を送る</div><div class="consent-note bx">${esc(myName())}さんの投稿として、<wbr>表彰の候補になるで。<wbr>あとで直すこともできるで。</div></div>
       </div>` : ""}
@@ -3341,7 +3341,7 @@
         const text = finalText(S.tab);
         copyNow(text);
         record("copy");
-        if (S.sendJudge !== false && myName()) autoReport(text);
+        if (C.report && S.sendJudge !== false && myName()) autoReport(text);
         S.done = { action: "copy", tone: S.tab, text, shared: false };
         save();
         setTimeout(() => {
