@@ -8,13 +8,18 @@
 window.APP_CONFIG = {
   appName: "投稿、つくったろか。",
 
-  // 画面の色（書いていない色は app.css の初期値）。LinkedInの青と黒が基調。ロゴは使わない
+  // 画面の色（書いていない色は app.css の初期値）。LinkedInの青（#0A66C2）と黒が基調。ロゴは使わない
   theme: {
-    ground: "#B4D0F0", // 画面の地
-    groundText: "#26313D", // 地の上の補足文字
+    ground: "#0A66C2", // 画面の地（LinkedInの青）
+    onGround: "#FFFFFF", // 地の上の文字（地が濃いので白）
+    onGroundSoft: "#E3EEFA", // 地の上の補足文字
+    onInk: "#FFFFFF", // 黒い丸の中の文字
+    sheet: "#EAF2FB", // 下から出るシートの地（読みやすいように明るく）
+    groundText: "#26313D", // 白い囲みの中の補足文字
     note: "#F1F7FE", // 補足の囲み
     accent: "#004182", // 押せるもの・選択中（LinkedInの濃い青）
     accentPress: "#00315F",
+    focus: "#121212", // キーボードで選んだときの枠
     mark: "#FF7373", // 小さな強調（進み具合・必須）
     check: "#004182", // 投稿前チェックの印
   },
@@ -27,9 +32,11 @@ window.APP_CONFIG = {
 
   // メンション先（ 使うときだけ設定。name を空にすると、メンションは出ない）
   // inText：true なら、投稿文の最後（ハッシュタグの上）に「@◯◯」を文字で入れる
+  // 2つ以上のときは mentions: [{ name, typeHint }, …] に並べる（運営ページのイベントでも設定できる）
   mention: { name: "", typeHint: "", inText: false },
 
   // 主催のLinkedInページURL。空のままならフォローボタンは出ない
+  // followRequired：false にすると、フォローは「おすすめ」になり、始める前に必須にしない
   followUrl: "",
 
   signupUrl: "https://www.linkedin.com/signup",
@@ -162,61 +169,128 @@ window.APP_CONFIG = {
     },
   ],
 
-  // プロフィール文を作る（LinkedInの見出し3案＋自己紹介）。学生向け。enabled: false で入口を出さない
-  // cards の id は「p_」で始める（上の cards と重ねない）。required: true は答えないと進めない
+  // プロフィールを作る（LinkedInの「見出し（Headline）」と「自己紹介（About）」を、それぞれ別に作る）。enabled: false で入口を出さない
+  // 先に「条件」（立場・目指す方向・言語・雰囲気・長さなど）を決めてから、条件に合わせた質問に答える
+  // cards の id は「pf_」で始める（投稿文の cards と重ねない）。見出しと自己紹介で同じ id の答えは引き継がれる
+  // question・placeholder・chips の Work つきは、立場が「社会人」のときに使う
   profile: {
     enabled: true,
-    openUrl: "https://www.linkedin.com/",
+    openUrl: "https://www.linkedin.com/in/me/",
+    conds: {
+      role: { label: "あなたの立場", options: ["大学生", "大学院生", "専門・短大生", "高校生", "既卒・第二新卒", "社会人"], default: "" },
+      year: { label: "学年・年次（任意）", chips: ["1年", "2年", "3年", "4年", "修士1年", "修士2年"], chipsWork: ["1年目", "2〜3年目", "5年目以上"], placeholder: "例：3年" },
+      dirs: { label: "目指す方向（3つまで・任意）", max: 3, options: ["まだ探し中", "IT・エンジニア", "コンサル", "外資系", "商社", "メーカー", "金融", "広告・マーケ", "人材・教育", "公務員・NPO", "起業・スタートアップ", "研究・専門職"], placeholder: "ほかにあれば（例：ゲーム業界）" },
+      focus: { label: "いちばん伝えたいこと", options: ["学んでいること", "できること・スキル", "経験・実績", "目指す姿・夢", "人柄・価値観"], default: "" },
+      lang: { label: "言語", options: ["日本語", "英語", "日本語＋英語"], default: "日本語", notes: { 日本語: "日本語だけ", 英語: "海外の人にも読んでもらいたい人に", "日本語＋英語": "日本語のあとに英語も入れる" } },
+      tone: { label: "雰囲気", options: ["誠実・きちんと", "親しみやすく", "熱意強め"], default: "誠実・きちんと" },
+      hLen: { label: "長さ", options: ["短め", "ふつう", "長め"], default: "ふつう", notes: { 短め: "60字くらいまで。パッと読める", ふつう: "60〜120字", 長め: "120〜220字（上限いっぱい）" } },
+      aLen: { label: "長さ", options: ["短め", "ふつう", "しっかり"], default: "ふつう", notes: { 短め: "200〜350字", ふつう: "400〜700字", しっかり: "800〜1200字" } },
+      aForm: { label: "書き方の形", options: ["文章（ストーリー）", "見出し＋箇条書き", "シンプル"], default: "文章（ストーリー）", notes: { "文章（ストーリー）": "いま → 経験 → 強み → これから、の流れで読ませる", "見出し＋箇条書き": "【強み】などの小見出しで、ひと目で分かる", シンプル: "3〜5文の短い自己紹介" } },
+      aClose: { label: "最後の一言", options: ["つながり歓迎", "メッセージ歓迎", "なし"], default: "つながり歓迎" },
+      keywords: { label: "入れたいキーワード（任意）", placeholder: "例：Python、データ分析、TOEIC 850" },
+    },
+    // 目指す方向を選ぶと、質問の候補（chips）に足されることば
+    dirChips: {
+      "IT・エンジニア": ["プログラミング", "アプリ開発", "AI・データ"],
+      コンサル: ["課題を整理する力", "リサーチ", "論理的に考える"],
+      外資系: ["英語", "留学経験", "グローバル"],
+      商社: ["語学", "海外とのやりとり", "交渉"],
+      メーカー: ["ものづくり", "研究開発", "品質・改善"],
+      金融: ["数字に強い", "分析", "簿記・FP"],
+      "広告・マーケ": ["SNS運用", "企画", "デザイン"],
+      "人材・教育": ["人の成長を支える", "コーチング", "教える経験"],
+      "公務員・NPO": ["地域", "社会課題", "政策"],
+      "起業・スタートアップ": ["0から作る", "事業づくり", "行動力"],
+      "研究・専門職": ["研究テーマ", "学会発表", "専門知識"],
+    },
     cards: [
       {
-        id: "p_now",
+        id: "pf_now",
         label: "いまの所属",
-        question: "いまの所属は？/（大学・学部・学年など）",
-        placeholder: "例：〇〇大学 経済学部の2年生",
+        question: "いまの所属は？/（学校・学部・学年など）",
+        questionWork: "いまの会社・仕事は？/（会社名を出したくなければ/業界だけでOK）",
+        placeholder: "例：〇〇大学 経済学部 3年",
+        placeholderWork: "例：IT企業で法人営業（3年目）",
         note: "書いたことだけ使うで。出したくないことは書かんでOK",
-      },
-      {
-        id: "p_focus",
-        label: "力を入れて/いること",
-        question: "いま、/力を入れてることは？",
-        placeholder: "例：ゼミでマーケティングを学びながら、学園祭の広報を担当している",
-        chips: ["ゼミ・研究", "部活・サークル", "アルバイト", "インターン", "学外の活動"],
         required: true,
       },
       {
-        id: "p_strength",
-        label: "強み・/よく言われること",
-        question: "まわりから/よく言われることや、/得意なことは？",
-        placeholder: "例：人の話を最後まで聞くところ、とよく言われる",
-        chips: ["話を聞くのが得意", "段取りが得意", "人前で話せる", "コツコツ続けられる", "アイデアを出せる"],
+        id: "pf_skill",
+        label: "学んでいること・/できること",
+        question: "学んでいることや、/できること・得意なことは？",
+        questionWork: "仕事で使っているスキルや、/得意なことは？",
+        placeholder: "例：ゼミでマーケティングを学び、SNSの数字を分析できる",
+        placeholderWork: "例：顧客の課題を聞き出して、提案書にまとめるのが得意",
+        chips: ["プログラミング", "データ分析", "デザイン", "語学（英語など）", "人前で話す", "企画・イベント運営"],
+        dirChips: true,
       },
       {
-        id: "p_future",
-        label: "これから/挑戦したいこと",
-        question: "これから挑戦したいことや、/興味のある仕事・業界は？",
-        placeholder: "例：人と人をつなぐ仕事に興味がある。まずはインターンに挑戦したい",
+        id: "pf_exp",
+        label: "経験・実績",
+        question: "胸を張れる経験や実績は？/（数字があると強い）",
+        questionWork: "仕事の実績や、/やりきった経験は？/（数字があると強い）",
+        placeholder: "例：学園祭の広報で、SNSのフォロワーを1年で2倍にした",
+        placeholderWork: "例：新しい顧客を半年で20社増やした",
+        chips: ["長期インターン", "部活・サークルの役職", "留学", "アルバイトでの工夫", "コンテスト・受賞", "資格"],
+        chipsWork: ["新しい仕事の立ち上げ", "チームのまとめ役", "社内表彰", "業務の改善"],
       },
       {
-        id: "p_connect",
+        id: "pf_strength",
+        label: "強み・/大切にしていること",
+        question: "まわりからよく言われる強みや、/大切にしていることは？",
+        placeholder: "例：人の話を最後まで聞くところ。相手の本音を引き出すのが得意",
+        chips: ["話を聞くのが得意", "段取りが得意", "粘り強い", "人をつなぐのが好き", "新しいことに飛び込める"],
+      },
+      {
+        id: "pf_learned",
+        label: "経験から/学んだこと",
+        question: "その経験から/学んだことは？",
+        placeholder: "例：数字で振り返ると、次にやることが見えるようになる",
+      },
+      {
+        id: "pf_future",
+        label: "これから/目指すこと",
+        question: "これから挑戦したいことや、/目指す姿は？",
+        placeholder: "例：データで人の行動を変えるマーケターになりたい",
+        chips: ["インターンに挑戦", "海外で働く", "起業したい", "専門性を深める", "まだ探している途中"],
+        dirChips: true,
+      },
+      {
+        id: "pf_connect",
         label: "つながりたい人",
-        question: "LinkedInで、/どんな人と/つながりたい？",
-        placeholder: "例：同じ業界を目指す学生や、社会人の先輩",
-        chips: ["同じ目標の学生", "社会人の先輩", "興味のある業界の人", "海外に関心のある人"],
+        question: "LinkedInで、/どんな人とつながりたい？",
+        placeholder: "例：マーケティングの仕事をしている方、同じ業界を目指す学生",
+        chips: ["同じ目標の学生", "社会人の先輩", "興味のある業界の人", "採用担当の方", "海外の人"],
       },
     ],
-    // 自己紹介のちょい直し（id は src/ai.js の PROFILE_ACTIONS と合わせる）
-    refineActions: [
-      { id: "shorter", label: "もっと短く" },
-      { id: "concrete", label: "もっと具体的に" },
-      { id: "another", label: "別の言い回し" },
-    ],
-    // 結果の画面の「LinkedInに入れるには」
-    steps: [
-      "使いたい見出しの/「コピー」を押す",
-      "下の「LinkedInをひらく」→/自分の写真のアイコン→/「プロフィールを表示」",
-      "名前の横の鉛筆マークから/「見出し」に貼り付けて保存",
-      "この画面にもどって/「自己紹介をコピー」→/「概要（About）」の/鉛筆マークから貼り付けて保存",
-    ],
+    // いちばん伝えたいこと → その質問を2問目に出して、必須にする
+    focusCard: { 学んでいること: "pf_skill", "できること・スキル": "pf_skill", "経験・実績": "pf_exp", "目指す姿・夢": "pf_future", "人柄・価値観": "pf_strength" },
+    headline: {
+      label: "見出し（Headline）",
+      cards: ["pf_now", "pf_skill", "pf_exp", "pf_future"],
+      lead: "名前のすぐ下に出る一行。/検索やつながり申請のとき、/最初に読まれるところ。",
+      steps: ["使いたい案の/「コピー」を押す", "下の「LinkedInをひらく」→/自分のプロフィール", "名前の下の鉛筆マーク（編集）→/「見出し」に貼り付けて保存"],
+      refineActions: [
+        { id: "shorter", label: "もっと短く" },
+        { id: "concrete", label: "もっと具体的に" },
+        { id: "english", label: "英語で" },
+        { id: "bilingual", label: "日本語＋英語で" },
+        { id: "another", label: "別の5案" },
+      ],
+    },
+    about: {
+      label: "自己紹介（About）",
+      cards: ["pf_now", "pf_exp", "pf_strength", "pf_learned", "pf_future", "pf_connect"],
+      lead: "プロフィールの「概要（About）」。/どんな人か、何をしてきたか、/これから何をしたいかを伝えるところ。",
+      steps: ["下の「自己紹介をコピー」を押す", "「LinkedInをひらく」→/自分のプロフィール", "「概要（About）」の鉛筆マーク→/貼り付けて保存。/概要が無いときは/「プロフィールセクションを追加」→「概要」"],
+      refineActions: [
+        { id: "shorter", label: "もっと短く" },
+        { id: "concrete", label: "もっと具体的に" },
+        { id: "friendly", label: "もっと親しみやすく" },
+        { id: "english", label: "英語版も付ける" },
+        { id: "another", label: "別の書き方" },
+      ],
+    },
   },
 
   // 何問にするか。who は「どんな人に向いているか」。選んだ問数が、選べるネタの上限になる
@@ -337,25 +411,51 @@ window.APP_CONFIG = {
  * ---------- イベントごとのまとまり（プリセット） ----------
  * 質問セット・色・文言をイベントごとにまとめたもの。上の設定（普段使い）に上書きされる。
  * いま使うのは DEFAULT_PRESET。URLに ?preset=fujitsu のように付けると、そのページだけ切り替わる。
- * イベント名・ハッシュタグ・あいことば（主催のAIキーを使う合言葉）は、運営ページ（/admin）の「イベント」で作る。
+ * イベント専用ページ（例：/lscw ＝ public/lscw.html）は、ページの中で window.APP_PAGE を決めていて、そのプリセットに固定される。
+ * イベント名・ハッシュタグ・メンション・あいことば・AIキー・タイムスケジュールは、運営ページ（/admin）の「イベント」で変えられる。
  */
 (() => {
-  const DEFAULT_PRESET = "lscw";
+  const DEFAULT_PRESET = "everyday";
   const B = window.APP_CONFIG;
   const PRESETS = {
     // 普段使い（上の設定そのまま）
     everyday: { label: "普段使い" },
 
-    // LinkedIn Student Career Week（2026/10/31）の学生向けブース
+    // LinkedIn Student Career Week 2026 Autumn（オンライン10/26〜30、会場10/31）の学生向けブース。専用ページは /lscw
     lscw: {
-      label: "LSCW（2026/10/31 学生向けブース）",
-      eventSub: "LinkedIn Student Career Week",
+      label: "LSCW 2026 Autumn（10/31 学生向けブース）",
+      pagePath: "/lscw", // このプリセット専用のページ（運営ページのQRは、このページのURLになる）
+      eventSub: "LinkedIn Student Career Week 2026 Autumn",
       eventName: "",
       // 運営ページのイベントで上書きできる（イベントのハッシュタグが空のときは、これが付く）
-      hashtags: ["#LinkedIn"],
-      feedTag: "#LinkedIn",
+      // 主催がイベントの告知で使っているタグ（#LSCW2026・#LinkedInStudentCareerWeek）に合わせた
+      hashtags: ["#LSCW2026", "#LinkedInStudentCareerWeek", "#LinkedIn"],
+      feedTag: "#LSCW2026",
       // 投稿の終わりのほうに「LinkedInを使うとワクワクする／新しい自分の可能性が見つかる」という一文を、すべての投稿に入れる
       cheerAlways: true,
+      // プロフィールの条件の初期値は「大学生」（学生向けブース）
+      profile: { ...B.profile, conds: { ...B.profile.conds, role: { ...B.profile.conds.role, default: "大学生" } } },
+      // イベント専用ページ（/lscw）の上に出す案内と、タイムスケジュール。運営ページのイベントで上書きできる
+      // schedule の day が同じものは1つの日にまとまる。時間はまだ公式に細かく出ていないところがあるので「予定」
+      eventPage: {
+        title: "LinkedIn Student Career Week 2026 Autumn",
+        when: "会場 10/31(土) 9:30〜18:00（予定・入退室自由）｜オンライン 10/26(月)〜10/30(金)",
+        place: "WeWork 日比谷FORT TOWER（東京都港区西新橋1-1-1）",
+        mapUrl: "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent("日比谷フォートタワー 東京都港区西新橋1-1-1"),
+        siteUrl: "https://lscw.scoutalia.com/",
+        siteLabel: "公式サイト（最新のタイムテーブル）",
+        note: "時間は予定です。変わることがあるので、最新は公式サイトで確かめてな。",
+        schedule: [
+          { day: "10/31(土) 会場（日比谷）", time: "9:30", title: "開場（予定）", note: "18:00まで入退室自由" },
+          { day: "10/31(土) 会場（日比谷）", time: "終日", title: "企業ブース", note: "企業の人と話せる・相談できる・インターンに応募できる" },
+          { day: "10/31(土) 会場（日比谷）", time: "終日", title: "特別セミナー", note: "パネルトーク・ワークショップ・業界別の講演など。時間は公式サイトで" },
+          { day: "10/31(土) 会場（日比谷）", time: "終日", title: "このブース：投稿、つくったろか。", note: "しゃべるだけで、LinkedInの投稿文とプロフィール文ができる" },
+          { day: "10/31(土) 会場（日比谷）", time: "18:00", title: "終了（予定）" },
+          { day: "10/26(月)〜10/30(金) オンライン", time: "8:00〜9:30", title: "モーニングセッション", note: "企業の登壇（1社45分）" },
+          { day: "10/26(月)〜10/30(金) オンライン", time: "12:00〜13:30", title: "ランチセッション", note: "企業の登壇（1社45分）" },
+          { day: "10/26(月)〜10/30(金) オンライン", time: "18:00〜", title: "イブニングセッション", note: "企業の登壇" },
+        ],
+      },
       style: {
         ...B.style,
         role: { ...B.style.role, default: "学生" },
@@ -380,6 +480,23 @@ window.APP_CONFIG = {
           note: "人の名前は、出してOKな人だけにしてな",
         },
         {
+          id: "company",
+          label: "気になった/企業・ブース",
+          caption: "話を聞いて/刺さったこと",
+          question: "話を聞いて/気になった企業や/ブースは？",
+          placeholder: "例：若手社員さんの「失敗してもいいから手を挙げる」という話が刺さった",
+          chips: ["ブースで話して", "セミナーで聞いて", "パネルトークで", "オンラインで"],
+          note: "企業や人の名前は、出してOKなものだけにしてな",
+        },
+        {
+          id: "dream",
+          label: "私の夢・/やりたいこと",
+          caption: "LSCWで/話題のテーマ",
+          question: "あなたの夢や、/将来やってみたい/ことは？",
+          placeholder: "例：地元の会社の魅力を、世界に届けられる人になりたい",
+          chips: ["こんな働き方がしたい", "社会をこう変えたい", "海外で挑戦したい", "まだ探してる途中"],
+        },
+        {
           id: "career",
           label: "就活・キャリアで/考えてること",
           caption: "いまの悩みも/そのままでOK",
@@ -401,6 +518,14 @@ window.APP_CONFIG = {
           caption: "出会いの話",
           question: "今日話した人や、/つながった人で、/印象に残った人は？",
           placeholder: "例：同じ業界を目指す他大学の学生と話せて、刺激になった",
+          note: "名前は、出してOKな人だけにしてな",
+        },
+        {
+          id: "thanks",
+          label: "お礼を/伝えたい人",
+          caption: "感謝を入れると/伝わる",
+          question: "お礼を伝えたい人や/企業は？",
+          placeholder: "例：ブースで就活の悩みを聞いてくれた社員さん、ありがとうございました",
           note: "名前は、出してOKな人だけにしてな",
         },
         {
@@ -430,9 +555,13 @@ window.APP_CONFIG = {
       sets: [
         { id: "one", size: 1, theme: "basic", label: "学び・気づきだけ", who: "いちばん大事なところだけ、ぎゅっと書く", cards: ["learn"], recommended: true },
         { id: "basic3", size: 3, theme: "basic", label: "今日の3つ", who: "迷ったらこれ。今日の流れのまま書ける", cards: ["learn", "session", "next"], recommended: true },
+        { id: "dream3", size: 3, theme: "dream", label: "私の夢を書く", who: "LSCWで話題の「私の夢」。将来やりたいことと、今日の学びをつなげる", cards: ["dream", "learn", "next"] },
+        { id: "company3", size: 3, theme: "company", label: "企業との出会い", who: "ブースやセミナーで話した企業のこと、お礼も込めて残したい人に", cards: ["company", "learn", "thanks"] },
         { id: "career3", size: 3, theme: "career", label: "就活・キャリア", who: "いま考えてることも、正直に残したい人に", cards: ["learn", "career", "next"] },
         { id: "self3", size: 3, theme: "self", label: "自己紹介も", who: "はじめて投稿する人に。自分のことも知ってほしい人に", cards: ["focus", "learn", "next"] },
-        { id: "basic5", size: 5, theme: "basic", label: "今日をじっくり", who: "今日の流れが、まるごと伝わる", cards: ["learn", "session", "person", "career", "next"], recommended: true },
+        { id: "basic5", size: 5, theme: "basic", label: "今日をじっくり", who: "今日の流れが、まるごと伝わる", cards: ["learn", "session", "company", "career", "next"], recommended: true },
+        { id: "dream5", size: 5, theme: "dream", label: "私の夢をじっくり", who: "夢と、いま力を入れていることと、今日の学びをつなげたい人に", cards: ["dream", "focus", "learn", "career", "next"] },
+        { id: "company5", size: 5, theme: "company", label: "企業との出会いをじっくり", who: "話した企業・人のことを、感謝と一緒にしっかり残したい人に", cards: ["company", "session", "learn", "thanks", "next"] },
         { id: "career5", size: 5, theme: "career", label: "就活・キャリアじっくり", who: "考えてることと、今日の学びをつなげたい人に", cards: ["career", "learn", "session", "focus", "next"] },
         { id: "self5", size: 5, theme: "self", label: "自己紹介もじっくり", who: "はじめて読む人に、自分のことをしっかり伝えたい人に", cards: ["focus", "learn", "person", "career", "next"] },
       ],
@@ -443,7 +572,8 @@ window.APP_CONFIG = {
         staffSub: "いっしょにやります。",
         tips: {
           ...B.help.tips,
-          pick: ["最初に、お名前を入れてください", "「投稿文を作る」か「プロフィール文を作る」を選んでください", "ネタは何も選ばんでOK。下の青いボタンで始められます", "質問に答えると、LinkedInの文章ができます"],
+          pick: ["最初に、お名前を入れてください", "作るもの（投稿文・見出し・自己紹介）を選んでください。見出しと自己紹介は、先に条件を決めると質問がかんたんになります", "ネタは何も選ばんでOK。下のボタンで始められます", "写真があれば「写真から作る」で入れてな（10枚まで）", "イベントの時間は「タイムスケジュールを見る」で見られます"],
+          done: ["LinkedInアプリの入力欄を長押しして「貼り付け」", "選んだ写真は、LinkedInの投稿画面で添付してな", "ほかのセッションの時間は「タイムスケジュールを見る」で"],
         },
       },
     },
@@ -451,7 +581,7 @@ window.APP_CONFIG = {
     // 2026/10/6「関西を、おもろくする夜。」（FLM主催 LinkedIn大交流会）。当日の設定をそのまま残したもの
     fujitsu: {
       label: "関西を、おもろくする夜。（2026/10/6 富士通ラーニングメディア）",
-      theme: { ground: "#FFDE59", groundText: "#3B372E", note: "#FBFFD3", subText: "#6A6456", accent: "#0A66C2", accentPress: "#004182", mark: "#FF7373", check: "#FF5A6F" },
+      theme: { ground: "#FFDE59", onGround: "#121212", onGroundSoft: "#3B372E", onInk: "#FFDE59", sheet: "#FFDE59", groundText: "#3B372E", note: "#FBFFD3", subText: "#6A6456", accent: "#0A66C2", accentPress: "#004182", focus: "#0A66C2", mark: "#FF7373", check: "#FF5A6F" },
       profile: { ...B.profile, enabled: false },
       cheerAlways: false,
       eventName: "関西を、おもろくする夜。",
@@ -627,12 +757,14 @@ window.APP_CONFIG = {
     },
   };
 
-  let id = DEFAULT_PRESET;
+  // イベント専用ページ（window.APP_PAGE があるページ）は、そのプリセットに固定。ほかは ?preset= → DEFAULT_PRESET
+  const PAGE = window.APP_PAGE && PRESETS[window.APP_PAGE.preset] ? window.APP_PAGE : null;
+  let id = PAGE ? PAGE.preset : DEFAULT_PRESET;
   try {
     const q = new URLSearchParams(location.search).get("preset");
-    if (q && PRESETS[q]) id = q;
+    if (!PAGE && q && PRESETS[q]) id = q;
   } catch {}
   if (!PRESETS[id]) id = "everyday";
-  window.APP_PRESETS = Object.keys(PRESETS).map((k) => ({ id: k, label: PRESETS[k].label || k, default: k === DEFAULT_PRESET }));
+  window.APP_PRESETS = Object.keys(PRESETS).map((k) => ({ id: k, label: PRESETS[k].label || k, default: k === DEFAULT_PRESET, pagePath: PRESETS[k].pagePath || "" }));
   Object.assign(B, PRESETS[id], { presetId: id });
 })();

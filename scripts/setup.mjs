@@ -137,8 +137,9 @@ async function main() {
   }
 
   say("\n==================== できあがり ====================");
-  say(`参加者用（QRにするURL）：${url}/`);
-  say(`会場スクリーン用QR     ：${url}/qr`);
+  say(`LSCW専用ページ（QR）  ：${url}/lscw`);
+  say(`参加者用（普段使い）   ：${url}/`);
+  say(`会場スクリーン用QR     ：${url}/qr?preset=lscw&url=${encodeURIComponent(url + "/lscw")}`);
   say(`運営ページ             ：${url}/admin　（合言葉：${vars.ADMIN_PASSCODE}）`);
   say(`リハーサル用（例文入り）：${url}/?demo=1`);
   say(`AI                     ：${aiOk ? "OK" : "NG（上の理由を確認）"}`);

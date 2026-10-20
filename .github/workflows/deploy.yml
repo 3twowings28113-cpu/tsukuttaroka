@@ -1,0 +1,50 @@
+# main に入ったら、Cloudflare に自動で公開する（npm run deploy と同じ）
+# 使うには、GitHub のリポジトリの Settings → Secrets and variables → Actions に
+# CLOUDFLARE_API_TOKEN（Cloudflare の「Edit Cloudflare Workers」テンプレートで作ったトークン）を1回だけ登録する。
+# 登録していないあいだは、公開をとばして「未登録」と出るだけ（エラーにはならない）。
+# GEMINI_API_KEY と ADMIN_PASSCODE は、Cloudflare に登録ずみのものがそのまま使われる。
+name: Cloudflareに公開
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cloudflare のトークンがあるか確かめる
+        id: token
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CF_TOKEN" ]; then
+            echo "has=no" >> "$GITHUB_OUTPUT"
+            echo "::notice::CLOUDFLARE_API_TOKEN が未登録なので、公開はとばしました（README の「GitHub から自動で公開する」を見てください）"
+          else
+            echo "has=yes" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.token.outputs.has == 'yes'
+        with:
+          node-version: 22
+          cache: npm
+      - name: 部品の準備
+        if: steps.token.outputs.has == 'yes'
+        run: npm ci --no-audit --no-fund
+      - name: 公開（wrangler deploy）
+        if: steps.token.outputs.has == 'yes'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy
+      - name: 動作確認（/api/health と /lscw）
+        if: steps.token.outputs.has == 'yes'
+        run: |
+          sleep 5
+          curl -fsS https://tsukuttaroka.3twowings28113.workers.dev/api/health
+          echo
+          curl -fsS -o /dev/null -w "lscw: %{http_code}\n" https://tsukuttaroka.3twowings28113.workers.dev/lscw
