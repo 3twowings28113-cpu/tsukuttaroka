@@ -35,3 +35,12 @@ QRを読む → ネタを選ぶ → しゃべる（音声入力OK）→ 3パタ�
 - src/：サーバー（worker.js）、AIへの指示文（ai.js）、Gemini呼び出し（gemini.js）、報告の小道具（report.js）
 - scripts/：setup.mjs（公開まで全自動）、check-gemini.mjs（AIの動作確認）
 - AGENTS.md：GenCode 用のルール／SPEC.md：仕様書
+
+## GitHub から自動で公開する（1回だけ設定）
+main ブランチに入ると、GitHub Actions（`.github/workflows/deploy.yml`）が Cloudflare に公開します。最初に1回だけ、次の設定が必要です。
+1. Cloudflare のダッシュボード → 右上の人のマーク →「プロフィール」→「API トークン」→「トークンを作成」→ テンプレート「Cloudflare Workers を編集する（Edit Cloudflare Workers）」→ アカウントを選んで作成 → 出てきたトークンをコピー
+2. GitHub のこのリポジトリ → Settings → Secrets and variables → Actions →「New repository secret」→ 名前 `CLOUDFLARE_API_TOKEN`、値に1のトークンを貼って保存
+3. GitHub の Actions →「Cloudflareに公開」→「Run workflow」で、すぐ公開もできる
+
+GEMINI_API_KEY と ADMIN_PASSCODE は、Cloudflare に登録ずみのものがそのまま使われます（GitHub には入れません）。
+

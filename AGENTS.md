@@ -33,7 +33,8 @@
 - イベント名・ハッシュタグ・メンション・フォロー・あいことば・イベント用のAIキー・AIへの追加の指示・タイムスケジュール・色 → 運営ページ（/admin）の「イベント」。参加者は専用ページ（/lscw）か ?e=イベントID のURL（QR）で開く。あいことばが空のイベントは、URLを開いた人だれでもイベントのキー（なければサーバーのキー）で作れる
 - AIへの指示文の書きかえ（投稿文・プロフィール文・石坂さん風）→ 運営ページの「AIへの指示文」（D1 の settings に保存。初期の文は `src/ai.js`）
 - 利用状況（使った人・作った回数・日ごと・イベントごと）→ 運営ページの「利用状況」
-- AIへの指示文（文章の書き方） → `src/ai.js` の `SYSTEM_PROMPT`（投稿文）・`PROFILE_PROMPT`（プロフィール文）・`ISHIZAKA_STYLE`（石坂さん風）
+- AIへの指示文（文章の書き方） → `src/ai.js` の `SYSTEM_PROMPT`（投稿文）・`HEADLINE_PROMPT`（見出し）・`ABOUT_PROMPT`（自己紹介）・`ISHIZAKA_STYLE`（石坂さん風）
+- 見出し・自己紹介の条件と質問 → `public/config.js` の `profile`（conds＝条件、cards＝質問、headline／about＝それぞれの質問の並び・入れ方・ちょい直し）
 - 画面の動き → `public/app.js`／見た目 → `public/app.css`／LSCW専用ページ → `public/lscw.html`（中身は app.js と同じ。window.APP_PAGE でプリセットとイベントを固定）
 - パネラー用ページ → `public/judge.html`／運営ページ → `public/admin.html`／会場スクリーン → `public/qr.html`
 - 「投稿したで！」の報告 → 画面は `public/app.js`、サーバーは `src/worker.js` と `src/report.js`
@@ -51,7 +52,7 @@
 
 ## よく使うコマンド（Windows。`&&` でつながず、1つずつ実行）
 - 公開まで全部：`npm run setup`
-- 反映だけ：`npm run deploy`
+- 反映だけ：`npm run deploy`（GitHub の main に入れたら自動で公開する仕組みもある：`.github/workflows/deploy.yml`。リポジトリの secret に CLOUDFLARE_API_TOKEN が必要）
 - AIの確認：`npm run check`
 - 手元で動かす：`npm run local`（http://localhost:8787）
 - 本番のログを見る：`npm run logs`

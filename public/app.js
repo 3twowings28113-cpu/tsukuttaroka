@@ -26,9 +26,28 @@
   const REPORT_KEY = "tsukuttaroka.report" + PAGE_NS; // 「投稿したで！」の報告（最初からつくり直しても残す）
   const CARD = Object.fromEntries(C.cards.map((c) => [c.id, c]));
   // プロフィール文を作る（LinkedInの見出し＋自己紹介）の質問。config.js の profile
-  const PCARDS = (C.profile && C.profile.cards) || [];
-  const profileOn = () => !!(C.profile && C.profile.enabled && PCARDS.length);
-  const isProfile = () => S.kind === "profile";
+  // 見出し（headline）と自己紹介（about）は、別々に作る。先に条件（S.pcond）を決めてから質問。答えは両方で引き継ぐ
+  const PF = C.profile || {};
+  const PFCARD = Object.fromEntries((PF.cards || []).map((c) => [c.id, c]));
+  const PARTS = ["headline", "about"];
+  const profileOn = () => !!(PF.enabled && (PF.cards || []).length && PF.headline && PF.about);
+  const isProfile = () => PARTS.includes(S.kind);
+  const partCfg = (k) => PF[k || S.kind] || {};
+  const condDefault = (k) => ((PF.conds || {})[k] && PF.conds[k].default !== undefined ? PF.conds[k].default : ((PF.conds || {})[k] && (PF.conds[k].options || [])[0]) || "");
+  const defaultCond = () => ({
+    role: condDefault("role"),
+    year: "",
+    dirs: [],
+    dirOther: "",
+    focus: condDefault("focus"),
+    lang: condDefault("lang") || "日本語",
+    tone: condDefault("tone") || "誠実・きちんと",
+    hLen: condDefault("hLen") || "ふつう",
+    aLen: condDefault("aLen") || "ふつう",
+    aForm: condDefault("aForm") || "文章（ストーリー）",
+    aClose: condDefault("aClose") || "つながり歓迎",
+    keywords: "",
+  });
   const TONES = C.tones;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
   const NS = "http://www.w3.org/2000/svg";
@@ -291,6 +310,8 @@
       free: false, // ボリューム「じぶんで選ぶ」（ネタをいくつでも）
       customTheme: "", // 「じぶんで決める」のテーマ（AIにそのまま渡る）
       style: defaultStyle(),
+      pcond: defaultCond(), // 見出し・自己紹介の条件
+      presults: { headline: null, about: null }, // 見出し {list, edited}／自己紹介 {text, edited}
       results: null,
       tab: TONES[0].id,
       consent: !!C.consentDefault,
@@ -400,15 +421,32 @@
     st.intro = String(st.intro || "").slice(0, 60);
     st.stylePrompt = String(st.stylePrompt || "").slice(0, 800);
     st.checks = C.checklist.map((_, i) => !!(st.checks || [])[i]);
-    st.kind = st.kind === "profile" && profileOn() ? "profile" : "post";
+    // 前の版の「プロフィール文（見出し＋自己紹介まとめて）」は、見出しと自己紹介に分けて引き継ぐ
+    const pr = saved.presults && typeof saved.presults === "object" ? saved.presults : {};
+    st.presults = {
+      headline: pr.headline && Array.isArray(pr.headline.list) && pr.headline.list.length ? { list: pr.headline.list.map(String).slice(0, 5), edited: !!pr.headline.edited } : null,
+      about: pr.about && typeof pr.about.text === "string" && pr.about.text ? { text: pr.about.text, edited: !!pr.about.edited } : null,
+    };
+    if (st.results && st.results.kind === "profile") {
+      const old = st.results.profile || {};
+      if (!st.presults.headline && Array.isArray(old.headlines) && old.headlines.length) st.presults.headline = { list: old.headlines.map(String), edited: false };
+      if (!st.presults.about && typeof old.about === "string" && old.about) st.presults.about = { text: old.about, edited: !!old.edited };
+      st.results = null;
+    }
+    if (st.kind === "profile") st.kind = "headline";
+    st.kind = PARTS.includes(st.kind) && profileOn() ? st.kind : "post";
+    const pc = saved.pcond && typeof saved.pcond === "object" ? saved.pcond : {};
+    st.pcond = { ...defaultCond(), ...pc, dirs: Array.isArray(pc.dirs) ? pc.dirs.map(String).slice(0, 3) : [] };
     const resultsOk = (r) =>
-      r && (r.kind === "profile"
-        ? r.kind === "profile" && r.profile && Array.isArray(r.profile.headlines) && typeof r.profile.about === "string"
-        : r.single
+      r && (r.single
         ? TONES.filter((t) => r[t.id] && typeof r[t.id].body === "string" && r[t.id].body).length === 1
         : TONES.every((t) => r[t.id] && typeof r[t.id].body === "string"));
     if (st.results && !resultsOk(st.results)) st.results = null;
-    if ((st.step === "result" && !st.results) || (st.step === "done" && !st.done)) st.step = st.results ? "result" : "style";
+    if (PARTS.includes(st.kind)) {
+      const has = !!st.presults[st.kind];
+      if (!["pick", "answer", "result"].includes(st.step) || (st.step === "result" && !has)) st.step = has ? "result" : "pick";
+    }
+    if ((st.step === "result" && !PARTS.includes(st.kind) && !st.results) || (st.step === "done" && !st.done)) st.step = st.results ? "result" : "style";
     if (st.step === "guide" && !st.results) st.step = "style";
     if (!["pick", "answer", "style", "result", "guide", "done"].includes(st.step)) st.step = "pick";
     return st;
@@ -428,9 +466,44 @@
   };
   // 聞く順番：必須 → 選んだ順（セットの順）→ 入れたいこと・気持ち。自分で足したネタは「締めのネタ」の前に入る
   function flowCards() {
-    if (isProfile()) return PCARDS;
+    if (isProfile()) return profileCards();
     const sel = S.selected.map((id) => CARD[id]).filter(Boolean);
     return [...sel.filter((c) => c.required), ...sel.filter((c) => !c.required), FEEL_CARD];
+  }
+  // 見出し・自己紹介の質問：条件に合わせて、聞き方・例・候補を変える。「いちばん伝えたいこと」の質問は2問目で必須
+  const condDirs = () => {
+    const c = S.pcond || {};
+    const list = [...(c.dirs || [])];
+    const other = String(c.dirOther || "").trim().slice(0, 20);
+    if (other && !list.includes(other)) list.push(other);
+    return list.slice(0, 3);
+  };
+  function profileCards(kind) {
+    const c = S.pcond || {};
+    const ids = (partCfg(kind).cards || []).slice();
+    const fid = (PF.focusCard || {})[c.focus] || "";
+    const ordered = [];
+    const push = (id) => {
+      if (id && PFCARD[id] && !ordered.includes(id)) ordered.push(id);
+    };
+    push(ids[0]);
+    push(fid);
+    ids.forEach(push);
+    const work = c.role === "社会人";
+    const extra = [];
+    for (const d of condDirs()) for (const ch of (PF.dirChips || {})[d] || []) if (!extra.includes(ch)) extra.push(ch);
+    return ordered.map((id) => {
+      const card = PFCARD[id];
+      const base = (work && card.chipsWork) || card.chips || [];
+      const chips = card.dirChips ? [...extra, ...base.filter((x) => !extra.includes(x))] : base;
+      return {
+        ...card,
+        question: (work && card.questionWork) || card.question,
+        placeholder: (work && card.placeholderWork) || card.placeholder,
+        chips: chips.slice(0, 9),
+        required: !!card.required || id === fid,
+      };
+    });
   }
   function addCard(id) {
     const last = C.lastCards || [];
@@ -486,6 +559,7 @@
       name: myName(),
       followed: !!C.followUrl && FOLLOW === "done",
       kind: S.kind || "post",
+      pcond: isProfile() ? { ...S.pcond, dirs: condDirs() } : undefined,
       event: EVENT ? EVENT.id : "",
       page: PAGE ? PAGE.id : "",
       clientId: S.clientId,
@@ -544,9 +618,9 @@
     if (!el) return;
     const now = STEP_INDEX[S.step] ?? 0;
     // 結果に飛べるのは、いま作っているもの（投稿文／プロフィール文）の結果があるときだけ
-    const reachable = [true, true, true, !!S.results && (S.results.kind === "profile") === isProfile()];
-    // プロフィール文は「じぶん色」がないので3つ
-    const steps = isProfile() ? [[0, "質問"], [1, "こたえる"], [3, "プロフィール"]] : STEP_NAMES.map((name, i) => [i, name]);
+    const reachable = [true, true, true, isProfile() ? !!S.presults[S.kind] : !!S.results];
+    // 見出し・自己紹介は「じぶん色」のかわりに、最初に条件を決める
+    const steps = isProfile() ? [[0, "条件"], [1, "こたえる"], [3, "できあがり"]] : STEP_NAMES.map((name, i) => [i, name]);
     el.innerHTML = steps.map(([i, name], pos) => {
       const state = i < now ? "is-done" : i === now ? "is-now" : "";
       const can = i !== now && reachable[i] && S.step !== "loading" && !(i === 1 && flowCards().length === 0);
@@ -634,20 +708,22 @@
         <h1 class="hero-title bx" tabindex="-1">${fmt(C.appName)}</h1>
         ${
           profileOn()
-            ? `<div class="kind-switch seg" role="group" aria-label="作るもの" style="--cols:2">
-            <button type="button" class="bx" data-act="kind" data-v="post" aria-pressed="${!isProfile()}">投稿文を<wbr>作る</button>
-            <button type="button" class="bx" data-act="kind" data-v="profile" aria-pressed="${isProfile()}">プロフィール文を<wbr>作る</button>
+            ? `<p class="kind-q">なにを作る？</p>
+          <div class="kind-switch seg" role="group" aria-label="作るもの" style="--cols:3">
+            <button type="button" class="bx" data-act="kind" data-v="post" aria-pressed="${S.kind === "post"}">投稿文</button>
+            <button type="button" class="bx" data-act="kind" data-v="headline" aria-pressed="${S.kind === "headline"}">見出し<span class="kind-sub">Headline</span></button>
+            <button type="button" class="bx" data-act="kind" data-v="about" aria-pressed="${S.kind === "about"}">自己紹介<span class="kind-sub">About</span></button>
           </div>`
             : ""
         }
-        <p class="hero-lead bx">${isProfile() ? "しゃべって答えるだけ。<br>LinkedInの見出しと<wbr>自己紹介の案が<wbr>できあがるで。" : "しゃべって答えるだけ。<br>LinkedInの投稿文が<wbr>できあがるで。"}</p>
+        <p class="hero-lead bx">${S.kind === "headline" ? "条件を決めて、<wbr>質問に答えるだけ。<br>プロフィールの<wbr>「見出し」の案が<wbr>5つできるで。" : S.kind === "about" ? "条件を決めて、<wbr>質問に答えるだけ。<br>プロフィールの<wbr>「自己紹介（概要）」が<wbr>できるで。" : "しゃべって答えるだけ。<br>LinkedInの投稿文が<wbr>できあがるで。"}</p>
         <div class="name-box${T.nameMissing ? " is-missing" : ""}">
           <label class="name-label" for="myName">まず、お名前<span class="req-inline">必須</span></label>
           <input id="myName" class="name-input" type="text" maxlength="40" autocomplete="name" enterkeyhint="done" placeholder="例：山下 翼" value="${esc(MYNAME)}">
           <p class="name-note bx">LinkedInと同じ名前で。<wbr>投稿の報告にも使うで</p>
         </div>
         ${followNeeded() ? followGateHtml() : ""}
-        <p class="hero-note bx">${isProfile() ? `${PCARDS.length}つの質問に<wbr>答えるだけ。<wbr>書いたことだけ使うで` : "何も選ばんでOK。<wbr>質問に答えるだけで<wbr>投稿文ができるで"}</p>
+        <p class="hero-note bx">${isProfile() ? "下で条件を決めると、<wbr>あなたに合わせた質問になるで。<wbr>書いたことだけ使うで" : "何も選ばんでOK。<wbr>質問に答えるだけで<wbr>投稿文ができるで"}</p>
         ${
           eventKeyReady() && !MYKEY
             ? ""
@@ -659,11 +735,7 @@
       </section>
       ${
         isProfile()
-          ? `<section class="block">
-        <h2 class="sec-title">聞く質問（この順で聞くで）</h2>
-        <p class="flow-now">${PCARDS.map((c) => `<span class="nw">${esc(plain(c.label))}</span>`).join("／<wbr>")}</p>
-        <p class="sec-note bx">見出し（名前の下の一行）の案を3つと、<wbr>自己紹介（About）の案を1つ作るで。</p>
-      </section>`
+          ? condFormHtml()
           : `<section class="block photo-block">
         <h2 class="sec-title">写真から作る<span class="badge-opt">任意</span></h2>
         <p class="sec-note bx">写真を入れると、<wbr>AIが写真も見て書くで（${PHOTO_LIMIT}枚まで）。<wbr>入れんでもOK。</p>
@@ -700,9 +772,70 @@
       }</p>` : ""}
       ${MODE === "preview" ? '<p class="center"><button type="button" class="btn-text" data-act="demo">例文を入れて試す</button></p>' : ""}`;
     const dockHtml = isProfile()
-      ? `<button type="button" class="btn btn-primary" data-act="toAnswer">この質問で始める<span class="btn-sub">${PCARDS.length}問</span></button>`
+      ? `<button type="button" class="btn btn-primary" data-act="toAnswer">この条件で質問へ<span class="btn-sub">${flowCards().length}問</span></button>`
       : `<button type="button" class="btn btn-primary" data-act="toAnswer">このネタで始める<span class="btn-sub">${n}問</span></button>`;
     return { html, dockHtml };
+  }
+
+  // 見出し・自己紹介の条件（最初の画面の下）。決めた条件で、質問の聞き方と候補が変わる
+  function condFormHtml() {
+    const K = PF.conds || {};
+    const c = S.pcond;
+    const kind = S.kind;
+    const seg = (key, cols) => {
+      const def = K[key];
+      if (!def) return "";
+      const note = def.notes && def.notes[c[key]] ? `<p class="field-note bx">${fmt(def.notes[c[key]])}</p>` : "";
+      return `<div class="field">
+          <div class="field-label" id="cl-${key}">${fmt(def.label)}${key === "role" ? '<span class="req-inline">必須</span>' : ""}</div>
+          <div class="seg" role="group" aria-labelledby="cl-${key}" style="--cols:${cols || Math.min(3, def.options.length)}">
+            ${def.options.map((o) => `<button type="button" class="bx" data-act="cond" data-k="${key}" data-v="${esc(o)}" aria-pressed="${c[key] === o}">${fmt(o)}</button>`).join("")}
+          </div>${note}
+        </div>`;
+    };
+    const work = c.role === "社会人";
+    const yearChips = ((work ? K.year && K.year.chipsWork : K.year && K.year.chips) || [])
+      .map((y) => `<button type="button" class="chip chip-s" data-act="condYear" data-v="${esc(y)}" aria-pressed="${c.year === y}">${esc(y)}</button>`)
+      .join("");
+    const dirMax = (K.dirs && K.dirs.max) || 3;
+    const dirs = ((K.dirs && K.dirs.options) || [])
+      .map((d) => {
+        const on = (c.dirs || []).includes(d);
+        return `<button type="button" class="chip chip-s" data-act="condDir" data-v="${esc(d)}" aria-pressed="${on}"${!on && (c.dirs || []).length >= dirMax ? ' aria-disabled="true"' : ""}>${esc(d)}</button>`;
+      })
+      .join("");
+    const cards = flowCards();
+    return `<section class="block cond-block" aria-labelledby="condTitle">
+        <h2 class="sec-title" id="condTitle">${esc(plain(partCfg().label || ""))}の条件を決める</h2>
+        <p class="sec-note bx">${fmt(partCfg().lead || "")}</p>
+        <div class="fields cond-fields">
+          ${seg("role", 3)}
+          <div class="field">
+            <label class="field-label" for="condYear">${esc(plain((K.year && K.year.label) || "学年・年次（任意）"))}</label>
+            <div class="chips">${yearChips}</div>
+            <input id="condYear" class="phrase" type="text" maxlength="20" autocomplete="off" placeholder="${esc((K.year && K.year.placeholder) || "")}" value="${esc(c.year || "")}">
+          </div>
+          <div class="field">
+            <div class="field-label" id="cl-dirs">${esc(plain((K.dirs && K.dirs.label) || "目指す方向"))}</div>
+            <div class="chips" role="group" aria-labelledby="cl-dirs">${dirs}</div>
+            <input id="condDirOther" class="phrase" type="text" maxlength="20" autocomplete="off" placeholder="${esc((K.dirs && K.dirs.placeholder) || "")}" value="${esc(c.dirOther || "")}" aria-label="ほかの目指す方向">
+          </div>
+          ${seg("focus", 2)}
+          ${seg("lang", 3)}
+          ${seg("tone", 3)}
+          ${kind === "headline" ? seg("hLen", 3) : seg("aLen", 3)}
+          ${kind === "about" ? seg("aForm", 3) + seg("aClose", 3) : ""}
+          <div class="field">
+            <label class="field-label" for="condKeywords">${esc(plain((K.keywords && K.keywords.label) || "入れたいキーワード（任意）"))}</label>
+            <input id="condKeywords" class="phrase" type="text" maxlength="80" autocomplete="off" placeholder="${esc((K.keywords && K.keywords.placeholder) || "")}" value="${esc(c.keywords || "")}">
+          </div>
+        </div>
+      </section>
+      <section class="block">
+        <h2 class="sec-title">この条件で聞く質問（${cards.length}問）</h2>
+        <p class="flow-now">${cards.map((x) => `<span class="nw">${esc(plain(x.label))}${x.required ? "＊" : ""}</span>`).join("／<wbr>")}</p>
+        <p class="sec-note bx">＊は必須。<wbr>ほかは「とばす」でOK。<wbr>答えは${kind === "headline" ? "自己紹介" : "見出し"}を作るときにも<wbr>引き継ぐで。</p>
+      </section>`;
   }
 
   // 写真の欄（最初の画面と、じぶん色の画面の両方で同じものを出す。写真は端末で小さくしてから持つ）
@@ -828,7 +961,7 @@
     const dockHtml = `
       <button type="button" class="btn btn-secondary btn-icon" data-act="back" aria-label="もどる">${ICON.back}</button>
       ${c.required ? "" : '<button type="button" class="btn btn-secondary btn-skip" data-act="skip">とばす</button>'}
-      <button type="button" class="btn btn-primary" id="nextBtn" data-act="next" aria-disabled="${!canNext}">${isLast ? (isProfile() ? "プロフィール文をつくる" : S.quick ? "書き方をえらぶ" : "じぶん色へ") : "つぎへ"}</button>`;
+      <button type="button" class="btn btn-primary" id="nextBtn" data-act="next" aria-disabled="${!canNext}">${isLast ? (S.kind === "headline" ? "見出しをつくる" : S.kind === "about" ? "自己紹介をつくる" : S.quick ? "書き方をえらぶ" : "じぶん色へ") : "つぎへ"}</button>`;
     return { html, dockHtml };
   }
 
@@ -946,68 +1079,89 @@
     return { html, dockHtml: "" };
   }
 
-  // ④ プロフィール文（見出し3案＋自己紹介）。見出しと自己紹介は別々にコピーして、LinkedInのプロフィールに貼る
+  // ④ 見出し（5案）／自己紹介。それぞれコピーして、LinkedInのプロフィールに貼る
   function viewProfileResult() {
-    const pr = S.results.profile;
+    const kind = S.kind;
+    const cfg = partCfg();
+    const r = S.presults[kind];
     const busy = !!T.refining;
-    const heads = pr.headlines
-      .map(
-        (h, i) => `<li class="p-head">
-          <p class="p-head-text bx">${esc(h)}</p>
-          <div class="p-head-foot"><span class="p-count">${count(h)}字</span><button type="button" class="btn btn-secondary btn-copy" data-act="pCopy" data-k="h${i}">${ICON.copy}<span>この見出しをコピー</span></button></div>
-        </li>`
-      )
-      .join("");
-    const about = T.editing
-      ? `<label class="edit-label" for="editBody">自己紹介を直す</label>
-         <textarea id="editBody" class="edit-body">${esc(pr.about)}</textarea>`
-      : `<article class="li-card p-about${busy ? " is-busy" : ""}" aria-label="自己紹介の案">
-          <div class="li-body" id="liBody">${esc(pr.about.trim())}</div>
-          ${busy ? '<div class="li-busy" role="status">書き直し中…</div>' : ""}
-        </article>
-        <div class="count-row"><span>${count(pr.about.trim())}字</span><span>2600字まで</span></div>
-        <p class="center"><button type="button" class="btn btn-secondary btn-copy" data-act="pCopy" data-k="about"${busy ? " disabled" : ""}>${ICON.copy}<span>自己紹介をコピー</span></button></p>
-        <div class="tweak" role="group" aria-label="自己紹介のちょい直し">
-          <button type="button" class="chip chip-edit" data-act="edit">${ICON.pen}<span>自分で直す</span></button>
-          ${(C.profile.refineActions || []).map((a) => `<button type="button" class="chip" data-act="refine" data-id="${esc(a.id)}"${busy ? " disabled" : ""}>${esc(a.label)}</button>`).join("")}
+    const other = kind === "headline" ? "about" : "headline";
+    const otherCfg = partCfg(other);
+    const left = profileCards(other).filter((c) => !(answerOf(c.id).text || "").trim() && !(answerOf(c.id).chips || []).length).length;
+    const tweak = `<div class="tweak" role="group" aria-label="${kind === "headline" ? "見出しのちょい直し（5案ぜんぶ）" : "自己紹介のちょい直し"}">
+          ${kind === "about" ? `<button type="button" class="chip chip-edit" data-act="edit">${ICON.pen}<span>自分で直す</span></button>` : ""}
+          ${(cfg.refineActions || []).map((a) => `<button type="button" class="chip" data-act="refine" data-id="${esc(a.id)}"${busy ? " disabled" : ""}>${esc(a.label)}</button>`).join("")}
         </div>
         <div class="ask">
           <label class="ask-label" for="askText">「こうしてほしい」を書いて直す</label>
           <div class="ask-row">
-            <input id="askText" class="phrase" type="text" maxlength="120" enterkeyhint="send" autocomplete="off" placeholder="例：サークル名を入れて" value="${esc(T.ask)}">
+            <input id="askText" class="phrase" type="text" maxlength="120" enterkeyhint="send" autocomplete="off" placeholder="${kind === "headline" ? "例：大学名は入れないで" : "例：サークル名を入れて"}" value="${esc(T.ask)}">
             <button type="button" class="btn btn-primary btn-ask" data-act="ask"${busy ? " disabled" : ""}>直す</button>
           </div>
-          <p class="field-note bx">直すのは自己紹介だけ。<wbr>見出しを変えたいときは<wbr>「もう一回つくる」で。</p>
+          <p class="field-note bx">${kind === "headline" ? "5案ぜんぶを<wbr>書き直すで。" : "自己紹介を<wbr>書き直すで。"}</p>
         </div>`;
-    const steps = (C.profile.steps || []).map((s, i) => `<li><span class="n" aria-hidden="true">${i + 1}</span><div>${fmt(s)}</div></li>`).join("");
+    let main = "";
+    if (kind === "headline") {
+      main = `<section class="block">
+        <h2 class="sec-title">見出しの案（5つ）</h2>
+        <p class="sec-note bx">名前のすぐ下に出る一行。<wbr>好きな案を1つ選んで<wbr>コピーしてな（220字まで）。</p>
+        <ol class="p-heads${busy ? " is-busy" : ""}">${r.list
+          .map(
+            (h, i) => `<li class="p-head">
+              <p class="p-head-text bx">${esc(h)}</p>
+              <div class="p-head-foot"><span class="p-count">${count(h)}字</span><button type="button" class="btn btn-secondary btn-copy" data-act="pCopy" data-k="h${i}"${busy ? " disabled" : ""}>${ICON.copy}<span>コピー</span></button></div>
+            </li>`
+          )
+          .join("")}</ol>
+        ${busy ? '<p class="li-busy-line" role="status">書き直し中…</p>' : ""}
+        ${tweak}
+      </section>`;
+    } else {
+      main = T.editing
+        ? `<section class="block"><label class="edit-label" for="editBody">自己紹介を直す</label>
+           <textarea id="editBody" class="edit-body">${esc(r.text)}</textarea></section>`
+        : `<section class="block">
+          <h2 class="sec-title">自己紹介（About）の案</h2>
+          <article class="li-card p-about${busy ? " is-busy" : ""}" aria-label="自己紹介の案">
+            <div class="li-body" id="liBody">${esc(r.text.trim())}</div>
+            ${busy ? '<div class="li-busy" role="status">書き直し中…</div>' : ""}
+          </article>
+          <div class="count-row"><span>${count(r.text.trim())}字</span><span>2600字まで</span></div>
+          <p class="center"><button type="button" class="btn btn-primary btn-copy" data-act="pCopy" data-k="about"${busy ? " disabled" : ""}>${ICON.copy}<span>自己紹介をコピー</span></button></p>
+          ${tweak}
+        </section>`;
+    }
+    const steps = (cfg.steps || []).map((x, i) => `<li><span class="n" aria-hidden="true">${i + 1}</span><div>${fmt(x)}</div></li>`).join("");
     const html = `
       <div class="stamp-row">
         <div class="stamp cloud${T.fresh ? " is-fresh" : ""}" data-bump="24" data-seed="5"><span>できたで！</span></div>
         <span class="scribble sc-honma" aria-hidden="true">ほんま</span>
       </div>
-      ${S.results.sample ? `<p class="notice">いまはサンプル文を表示中（AIの準備がまだ）</p>` : ""}
-      <section class="block">
-        <h2 class="sec-title">見出し（Headline）の案</h2>
-        <p class="sec-note bx">名前のすぐ下に出る一行。<wbr>好きな案を1つ選んでな。</p>
-        <ol class="p-heads">${heads}</ol>
+      ${r.sample ? `<p class="notice">いまはサンプル文を表示中（AIの準備がまだ）</p>` : ""}
+      <p class="cond-now bx">条件：${esc([S.pcond.role, S.pcond.year, condDirs().join("・"), S.pcond.lang, S.pcond.tone, kind === "headline" ? S.pcond.hLen : S.pcond.aLen].filter(Boolean).join("／"))}<button type="button" class="btn-text" data-act="condEdit"${busy ? " disabled" : ""}>条件を変える</button></p>
+      ${main}
+      ${steps && !T.editing ? `<section class="block"><h2 class="sec-title">LinkedInに入れるには</h2><ol class="guide">${steps}</ol></section>` : ""}
+      ${
+        T.editing
+          ? ""
+          : `<section class="next-part">
+        <p class="next-part-title">${S.presults[other] ? `作った「${esc(plain(otherCfg.label || ""))}」を見る` : `つぎは「${esc(plain(otherCfg.label || ""))}」も作る？`}</p>
+        <p class="next-part-note bx">${S.presults[other] ? "さっき作ったものに、<wbr>もどれるで。" : left ? `答えは引き継ぐで。<wbr>足りない質問（${left}問）だけ聞くで。` : "答えは引き継ぐで。<wbr>そのまま作れるで。"}</p>
+        <button type="button" class="btn btn-secondary btn-block" data-act="toKind" data-v="${other}"${busy ? " disabled" : ""}>${esc(plain(otherCfg.label || ""))}${S.presults[other] ? "を見る" : "を作る"}</button>
       </section>
-      <section class="block">
-        <h2 class="sec-title">自己紹介（About）の案</h2>
-        ${about}
-      </section>
-      ${steps ? `<section class="block"><h2 class="sec-title">LinkedInに入れるには</h2><ol class="guide">${steps}</ol></section>` : ""}
-      <p class="center"><button type="button" class="btn-text" data-act="pRegen"${busy ? " disabled" : ""}>もう一回つくる（見出しも自己紹介も）</button></p>`;
+      <p class="center"><button type="button" class="btn-text" data-act="pRegen"${busy ? " disabled" : ""}>同じ条件で、もう一回つくる</button></p>`
+      }`;
     const dockHtml = T.editing
       ? `<button type="button" class="btn btn-secondary" data-act="editCancel">やめる</button>
          <button type="button" class="btn btn-primary" data-act="editSave">この文にする</button>`
       : `<button type="button" class="btn btn-secondary btn-icon" data-act="back" aria-label="質問にもどる">${ICON.back}</button>
-         <a class="btn btn-primary" data-act="pOpen" href="${esc(C.profile.openUrl || "https://www.linkedin.com/")}" target="_blank" rel="noopener">LinkedInをひらく</a>`;
+         <a class="btn btn-primary" data-act="pOpen" href="${esc(PF.openUrl || "https://www.linkedin.com/")}" target="_blank" rel="noopener">LinkedInをひらく</a>`;
     return { html, dockHtml };
   }
 
   // ④ えらんで投稿
   function viewResult() {
-    if (S.results && S.results.kind === "profile") return viewProfileResult();
+    if (isProfile()) return viewProfileResult();
     const t = S.tab;
     const r = S.results[t];
     const tone = TONES.find((x) => x.id === t) || TONES[0];
@@ -2098,13 +2252,17 @@
 
   const API = {
     async generate(p) {
-      if (p.kind === "profile") {
-        if (MODE === "preview") return { ...sampleProfile(p), sample: true };
+      if (p.kind === "headline" || p.kind === "about") {
+        if (MODE === "preview") return { kind: p.kind, ...samplePart(p), sample: true };
         const data = await postJSON("api/generate", p, 60000);
-        if (data.sample) return { ...sampleProfile(p), sample: true };
-        const pr = data.profile;
-        if (!pr || !Array.isArray(pr.headlines) || !pr.headlines.length || !pr.about) throw Object.assign(new Error("empty"), { code: "empty" });
-        return { kind: "profile", profile: { headlines: pr.headlines.map(String), about: String(pr.about) }, model: data.model || "" };
+        if (data.sample) return { kind: p.kind, ...samplePart(p), sample: true };
+        if (p.kind === "headline") {
+          const list = Array.isArray(data.headlines) ? data.headlines.map(String).filter(Boolean) : [];
+          if (!list.length) throw Object.assign(new Error("empty"), { code: "empty" });
+          return { kind: "headline", list, model: data.model || "" };
+        }
+        if (!data.about) throw Object.assign(new Error("empty"), { code: "empty" });
+        return { kind: "about", text: String(data.about), model: data.model || "" };
       }
       if (MODE === "preview") return previewGenerate(p);
       const data = await postJSON("api/generate", withPhotos(p), photoTimeout(60000));
@@ -2216,21 +2374,19 @@
       },
     };
   }
-  // プロフィール文のサンプル（AIが使えないとき。回答をそのまま並べるだけ）
-  function sampleProfile(p) {
+  // 見出し・自己紹介のサンプル（AIが使えないとき。回答をそのまま並べるだけ）
+  function samplePart(p) {
     const say = (a) => (a ? a.text || (a.chips || []).join("、") : "");
     const by = (id) => say(p.answers.find((a) => a.id === id));
-    const now = by("p_now");
-    const focus = by("p_focus");
-    const future = by("p_future");
-    const head = (...xs) => xs.filter(Boolean).join("｜") || "学生";
-    return {
-      kind: "profile",
-      profile: {
-        headlines: [head(now, focus), head(focus, future), head(now, future)],
-        about: p.answers.map(say).filter(Boolean).join("\n\n") + "\n\nどうぞよろしくお願いします。",
-      },
-    };
+    const c = p.pcond || {};
+    const now = by("pf_now") || c.role || "学生";
+    const dirs = (c.dirs || []).join("・");
+    const head = (...xs) => xs.filter(Boolean).join("｜");
+    if (p.kind === "headline") {
+      const list = [head(now, by("pf_skill")), head(now, by("pf_exp")), head(now, dirs && `${dirs}志望`), head(by("pf_skill"), by("pf_future")), head(now, by("pf_future"))].filter(Boolean);
+      return { list: list.length ? list : [now] };
+    }
+    return { text: p.answers.map(say).filter(Boolean).join("\n\n") + "\n\nどうぞよろしくお願いします。" };
   }
   function sampleRefine(p) {
     const body = String(p.body || "");
@@ -2440,6 +2596,19 @@
     markPending(true);
     try {
       const r = await API.generate(payloadOverride || payload());
+      if (r.kind === "headline" || r.kind === "about") {
+        S.presults[r.kind] = r.kind === "headline" ? { list: r.list.slice(0, 5), edited: false, sample: !!r.sample } : { text: r.text, edited: false, sample: !!r.sample };
+        T.editing = false;
+        T.fresh = true;
+        S.step = "result";
+        histAdd({ at: Date.now(), theme: r.kind === "headline" ? "見出し" : "自己紹介", bodies: r.kind === "headline" ? r.list.map((h, i) => ({ id: `h${i}`, label: `見出し${i + 1}`, body: h })) : [{ id: "about", label: "自己紹介", body: r.text }] });
+        save();
+        render();
+        window.scrollTo(0, 0);
+        if (r.sample) toast("いまはサンプルの文やで。AIを紐づけると、本番の文章になるで", 4000);
+        setTimeout(() => (T.fresh = false), 800);
+        return;
+      }
       S.results = r;
       S.resultMode = S.mode || "";
       S.tab = TONES.some((x) => x.id === S.startTone) ? S.startTone : TONES[0].id;
@@ -2447,22 +2616,11 @@
       T.editing = false;
       T.fresh = true;
       S.step = "result";
-      histAdd(
-        r.kind === "profile"
-          ? {
-              at: Date.now(),
-              theme: "プロフィール文",
-              bodies: [
-                { id: "headline", label: "見出し", body: r.profile.headlines.join("\n") },
-                { id: "about", label: "自己紹介", body: r.profile.about },
-              ],
-            }
-          : {
-              at: Date.now(),
-              theme: String(S.customTheme || "").trim() || (setById(S.setId) || {}).label || "",
-              bodies: TONES.map((t) => ({ id: t.id, label: t.label, body: (S.results[t.id] && S.results[t.id].body) || "" })).filter((b) => b.body),
-            }
-      );
+      histAdd({
+        at: Date.now(),
+        theme: String(S.customTheme || "").trim() || (setById(S.setId) || {}).label || "",
+        bodies: TONES.map((t) => ({ id: t.id, label: t.label, body: (S.results[t.id] && S.results[t.id].body) || "" })).filter((b) => b.body),
+      });
       save();
       render();
       window.scrollTo(0, 0);
@@ -2478,14 +2636,14 @@
       }
       if (!loggedByServer(e)) clientLog("generate", e);
       T.error = errorText(e);
-      if (before === "result" && S.results) {
-        // 作り直しに失敗したときは、前の3つの文に戻す
+      if (before === "result" && (isProfile() ? S.presults[S.kind] : S.results)) {
+        // 作り直しに失敗したときは、前の文に戻す
         S.step = "result";
         render();
         toast(T.error, 3000);
         T.error = "";
       } else if (isProfile()) {
-        // プロフィール文は、じぶん色の画面がないので、最後の質問にもどしてエラーを出す
+        // 見出し・自己紹介は、じぶん色の画面がないので、最後の質問にもどしてエラーを出す
         S.step = "answer";
         S.cursor = Math.max(0, flowCards().length - 1);
         render();
@@ -2530,20 +2688,32 @@
   // サーバーが自分で記録している失敗（AIの失敗・連打・受付停止）以外は、端末から記録を送る
   const loggedByServer = (e) => ["failed", "rate", "stopped"].includes(e && e.code);
 
-  // プロフィール文：直すのは自己紹介（About）だけ
-  async function refineProfile(actionId, request) {
-    T.refining = "profile";
+  // 見出し（5案ぜんぶ）・自己紹介の書き直し
+  async function refinePart(actionId, request) {
+    const kind = S.kind;
+    const r = S.presults[kind];
+    if (!r) return;
+    T.refining = kind;
     render();
     try {
-      const cur = S.results.profile.about;
-      let body = cur;
+      const cur = kind === "headline" ? r.list.join("\n") : r.text;
       if (MODE !== "preview") {
         const data = await postJSON("api/refine", { ...payload(), body: cur, action: actionId, request: request || "" }, 45000);
-        if (!data.sample) body = data.body;
+        if (!data.sample) {
+          if (kind === "headline") {
+            const list = Array.isArray(data.headlines) ? data.headlines.map(String).filter(Boolean) : [];
+            if (!list.length) throw Object.assign(new Error("empty"), { code: "empty" });
+            S.presults.headline = { list: list.slice(0, 5), edited: false };
+          } else {
+            if (!data.body) throw Object.assign(new Error("empty"), { code: "empty" });
+            S.presults.about = { text: String(data.body), edited: false };
+          }
+        }
       }
-      if (!body) throw Object.assign(new Error("empty"), { code: "empty" });
-      S.results.profile.about = body;
-      if (actionId === "custom") T.ask = "";
+      if (actionId === "custom") {
+        prefsAdd(request);
+        T.ask = "";
+      }
       save();
       toast(actionId === "custom" ? "言われたとおり直したで" : "直したで", 1400);
     } catch (e) {
@@ -2558,19 +2728,20 @@
       render();
     }
   }
-  // プロフィール文をコピーした記録（件数だけ。プロフィールの画面には共有の確認がないので、中身は保存しない）
+  // 見出し・自己紹介をコピーした記録（件数だけ。中身は保存しない）
   function recordProfile(what, text) {
     const key = `profile|${what}|${count(text)}|${text.slice(0, 24)}`;
     if (S.sent.includes(key)) return;
     S.sent.push(key);
     save();
-    API.submit({ ...payload(), action: "copy", tone: "", finalText: "", edited: !!(S.results.profile && S.results.profile.edited), patterns: {}, consent: false, cardIds: flowCards().map((c) => c.id) });
+    const r = S.presults[S.kind] || {};
+    API.submit({ ...payload(), action: "copy", tone: "", finalText: "", edited: !!r.edited, patterns: {}, consent: false, cardIds: flowCards().map((c) => c.id) });
   }
 
   async function refine(actionId, request) {
     if (T.refining) return;
     if (!aiReady() && MODE !== "preview") return needKey("");
-    if (S.results && S.results.kind === "profile") return refineProfile(actionId, request);
+    if (isProfile()) return refinePart(actionId, request);
     const t = S.tab;
     T.refining = t;
     render();
@@ -2879,7 +3050,7 @@
     switch (act) {
       case "jump": {
         const i = Number(el.dataset.i);
-        const step = ["pick", "answer", "style", S.done ? "done" : "result"][i];
+        const step = ["pick", "answer", "style", !isProfile() && S.done ? "done" : "result"][i];
         if (step === "answer") S.cursor = 0;
         go(step);
         break;
@@ -3061,6 +3232,12 @@
         break;
       case "toAnswer": {
         if (needName()) break;
+        if (isProfile() && !S.pcond.role) {
+          const b = $("[data-k=role]");
+          if (b) b.closest(".field").scrollIntoView({ block: "center" });
+          toast("まず「あなたの立場」を選んでな", 2200);
+          break;
+        }
         // 「じぶんで決める」のときは、テーマを書くのが必須
         const customRow = $('[data-act=themeCustom]');
         if (!isProfile() && customRow && customRow.getAttribute("aria-checked") === "true" && !String(S.customTheme || "").trim()) {
@@ -3243,12 +3420,65 @@
         break;
       }
       case "kind": {
-        const k = el.dataset.v === "profile" && profileOn() ? "profile" : "post";
+        const k = PARTS.includes(el.dataset.v) && profileOn() ? el.dataset.v : "post";
         if (S.kind === k) break;
         S.kind = k;
         S.cursor = 0;
         save();
         keepScroll(render);
+        break;
+      }
+      // 見出し・自己紹介の条件
+      case "cond": {
+        const k = el.dataset.k;
+        if (!S.pcond || !(k in S.pcond)) break;
+        S.pcond[k] = k === "focus" && S.pcond[k] === el.dataset.v ? "" : el.dataset.v;
+        T.condMissing = false;
+        save();
+        keepScroll(render);
+        break;
+      }
+      case "condYear":
+        S.pcond.year = S.pcond.year === el.dataset.v ? "" : el.dataset.v;
+        save();
+        keepScroll(render);
+        break;
+      case "condDir": {
+        const v = el.dataset.v;
+        const list = S.pcond.dirs || [];
+        const max = ((PF.conds || {}).dirs || {}).max || 3;
+        if (list.includes(v)) S.pcond.dirs = list.filter((x) => x !== v);
+        else if (list.length >= max) {
+          toast(`${max}つまでやで。先にどれか外してな`, 2000);
+          break;
+        } else S.pcond.dirs = [...list, v];
+        save();
+        keepScroll(render);
+        break;
+      }
+      case "condEdit":
+        go("pick");
+        setTimeout(() => {
+          const b = $(".cond-block");
+          if (b) b.scrollIntoView({ block: "start" });
+        }, 50);
+        break;
+      // 見出し → 自己紹介（または逆）。答えは引き継ぐ。作ってあれば、その結果を見せる
+      case "toKind": {
+        const k = PARTS.includes(el.dataset.v) ? el.dataset.v : "";
+        if (!k || T.refining || T.busy) break;
+        S.kind = k;
+        T.editing = false;
+        T.ask = "";
+        if (S.presults[k]) {
+          go("result");
+          break;
+        }
+        const list = flowCards();
+        const first = list.findIndex((c) => !(answerOf(c.id).text || "").trim() && !(answerOf(c.id).chips || []).length);
+        S.cursor = first === -1 ? list.length - 1 : first;
+        go("answer");
+        toast(first === -1 ? "答えはそろってるで。確かめて、最後の質問で「つくる」を押してな" : "答えは引き継いだで。足りないところだけ答えてな", 2600);
         break;
       }
       case "mode": {
@@ -3415,9 +3645,9 @@
           toast("空っぽにはできへんで");
           break;
         }
-        if (S.results.kind === "profile") {
-          S.results.profile.edited = S.results.profile.edited || v !== S.results.profile.about;
-          S.results.profile.about = v;
+        if (isProfile()) {
+          const pa = S.presults.about;
+          if (pa) S.presults.about = { text: v, edited: pa.edited || v !== pa.text };
         } else {
           const prev = S.results[S.tab].body;
           S.results[S.tab] = { body: v, edited: S.results[S.tab].edited || v !== prev };
@@ -3432,10 +3662,10 @@
         refine(el.dataset.id);
         break;
       case "pCopy": {
-        const pr = S.results && S.results.profile;
+        const pr = S.presults[S.kind];
         if (!pr) break;
         const k = el.dataset.k || "";
-        const text = k === "about" ? pr.about.trim() : pr.headlines[Number(k.slice(1))] || "";
+        const text = k === "about" ? String(pr.text || "").trim() : (pr.list || [])[Number(k.slice(1))] || "";
         if (!text) break;
         if (copyNow(text)) {
           toast(k === "about" ? "自己紹介をコピーしたで。LinkedInの「概要（About）」に貼り付けてな" : "見出しをコピーしたで。LinkedInの「見出し」に貼り付けてな", 3200);
@@ -3653,6 +3883,18 @@
       $$('[role=radio][data-act=theme]').forEach((b) => b.setAttribute("aria-checked", "false"));
       const row = $('[data-act=themeCustom]');
       if (row) row.setAttribute("aria-checked", String(on));
+      saveSoon();
+    }
+    if (e.target.id === "condYear") {
+      S.pcond.year = e.target.value.slice(0, 20);
+      saveSoon();
+    }
+    if (e.target.id === "condDirOther") {
+      S.pcond.dirOther = e.target.value.slice(0, 20);
+      saveSoon();
+    }
+    if (e.target.id === "condKeywords") {
+      S.pcond.keywords = e.target.value.slice(0, 80);
       saveSoon();
     }
     if (e.target.id === "photoWhat") T.photoWhat = e.target.value.slice(0, 60);

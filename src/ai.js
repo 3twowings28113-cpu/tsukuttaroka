@@ -39,7 +39,7 @@ const ALLOWED = {
 };
 
 export const SYSTEM_PROMPT = `あなたは、LinkedInの投稿づくりを手伝う、関西出身の編集者です。
-回答と好みだけを材料に、その人らしいLinkedIn投稿文を3パターン書きます。投稿は、ビジネスの場で本人が自分の言葉で語るものです。
+回答と好みだけを材料に、その人らしいLinkedIn投稿文を1本書きます（トーンは【トーン】の指定どおり）。投稿は、ビジネスの場で本人が自分の言葉で語るものです。
 
 # 必ず守ること
 1. 事実は回答から取る（写真が付いているときは決まり23も）。回答にない人名・数字・発言・エピソード・感想を作らない。材料が少ないときは、盛らずに短くまとめる。
@@ -50,15 +50,15 @@ export const SYSTEM_PROMPT = `あなたは、LinkedInの投稿づくりを手伝
 6. 失敗・つまずきの回答があるときは、言い訳を減らし、そこから得た学びと次の行動で締める。失敗の話より学びが残る分量にする。
 7. おすすめ・紹介の回答があるときは、押し売りにならず「何に困ってる人に、どう役に立つか」で語る。
 8. 「読者に聞いてみる」で締めるときは、誰でも2〜3語で答えられる軽い問いかけにする。
-9. 特定のイベント名・会社名は、回答に書かれたときだけ入れる。
+9. 特定のイベント名・会社名は、回答か【参加したイベント】に書かれたときだけ入れる。【参加したイベント】があるときは、そのイベント名を本文に1回、自然に入れる（書き出しの3行の中か、締めの近く）。
 10. ハッシュタグ（#）は書かない。あとで自動で付く。メンション（@）は、人の名前の直前にだけ付ける（決まり4と20のとおり）。
 11. マークダウンを使わない。LinkedInは太字や見出しを表示できないので、**、#、行頭の「-」「*」は使わない。区切りが必要なら【】や「・」を使う。
 12. 書き出しの1文で手を止めさせる。スマホでは最初の3行ほどしか見えないので、3行以内で続きを読みたくさせる。
 13. 2〜3文ごとに改行し、段落の間に空行を1つ入れる。
 14. 締めを毎回、問いかけやコメントのお願いにしない。「コメントで教えてください」のようなお願いは、「読者に聞いてみる」の回答があるときか、話の流れでどうしても自然なときだけにする。それ以外は、本人の次の一歩や、いまの気持ちで締める。
-15. 好みに従う（文体、関西弁、長さ、絵文字、入れたい一言）。「入れたい一言」は言い回しを変えずに、作るパターンすべてにそのまま入れる。
+15. 好みに従う（文体、関西弁、長さ、絵文字、入れたい一言）。「入れたい一言」は言い回しを変えずに、そのまま入れる。
 16. 立場の指定があれば、その立場の人が書いたと自然に読める視点にする。ただし回答にない事実は足さない。
-17. 3パターンは書き出しを変え、同じ文を使い回さない。
+17. 同じ言い回しや同じ語尾を、3回以上くり返さない。
 18. 「もらった魅力」の回答は、相手から受け取った言葉として書く（例：「〇〇と言ってもらえた」）。自慢に聞こえないよう、うれしさや意外さ、言葉をくれた相手への感謝と一緒に書く。回答にない褒め言葉を足さない。
 19. カレンダーの予定の回答があるときは、予定の名前を勝手に詳しく説明しない。本人の回答と合わせて、やったこと・学びとして自然に書く。
 20. アプリの宣伝が「入れる」のときは、本文の終わりのほうに、このアプリを作った人への一文を1回だけ入れる。形は「ちなみにこの文章は、@山下 翼 が作ったアプリ『投稿、つくったろか。』で作りました」のような文。名前の直前に「@」を付ける。「なし」のときは、絶対に入れない。
@@ -192,6 +192,175 @@ export function buildProfileRefineInput(p, about, action, request) {
   ].join("\n");
 }
 
+// ---------- 見出し（Headline）だけ／自己紹介（About）だけ。先に【条件】を決めてから、質問に答えて作る ----------
+const COND_ALLOWED = {
+  role: ["", "大学生", "大学院生", "専門・短大生", "高校生", "既卒・第二新卒", "社会人"],
+  focus: ["", "学んでいること", "できること・スキル", "経験・実績", "目指す姿・夢", "人柄・価値観"],
+  lang: ["日本語", "英語", "日本語＋英語"],
+  tone: ["誠実・きちんと", "親しみやすく", "熱意強め"],
+  hLen: ["短め", "ふつう", "長め"],
+  aLen: ["短め", "ふつう", "しっかり"],
+  aForm: ["文章（ストーリー）", "見出し＋箇条書き", "シンプル"],
+  aClose: ["つながり歓迎", "メッセージ歓迎", "なし"],
+};
+const H_LEN = { 短め: "1案60字まで", ふつう: "1案60〜120字", 長め: "1案120〜220字" };
+const A_LEN = { 短め: "200〜350字", ふつう: "400〜700字", しっかり: "800〜1200字" };
+export function sanitizeCond(raw) {
+  const c = raw && typeof raw === "object" ? raw : {};
+  const pick = (k, fb) => (COND_ALLOWED[k].includes(c[k]) ? c[k] : fb);
+  const dirs = (Array.isArray(c.dirs) ? c.dirs : [])
+    .map((d) => fixLinkedIn(clean(d, 20)))
+    .filter(Boolean)
+    .slice(0, 3);
+  return {
+    role: pick("role", ""),
+    year: fixLinkedIn(clean(c.year, 20)),
+    dirs,
+    focus: pick("focus", ""),
+    lang: pick("lang", "日本語"),
+    tone: pick("tone", "誠実・きちんと"),
+    hLen: pick("hLen", "ふつう"),
+    aLen: pick("aLen", "ふつう"),
+    aForm: pick("aForm", "文章（ストーリー）"),
+    aClose: pick("aClose", "つながり歓迎"),
+    keywords: fixLinkedIn(clean(c.keywords, 80)),
+  };
+}
+
+export const HEADLINE_PROMPT = `あなたは、LinkedInのプロフィールづくりを手伝う編集者です。
+【条件】と【回答】だけを材料に、LinkedInの「見出し（Headline）」の案を5つ書きます。見出しは名前のすぐ下に出る一行で、検索結果やつながり申請のときに最初に読まれます。
+
+# 必ず守ること
+1. 事実は【条件】と【回答】から取る。回答にない学校名・学部・学年・会社名・役職・団体名・数字・実績・資格・受賞・スキルを作らない。材料が少ないときは、盛らずに短くまとめる。
+2. 【条件】の「目指す方向」は本人の希望。「〇〇志望」「〇〇に関心」「〇〇を目指す」のように書き、すでにその仕事をしているようには書かない。
+3. 1案は1行。長さは【条件】の長さに合わせる（LinkedInの上限は220字）。
+4. 区切りには「｜」を使ってよい（例：「所属｜取り組み｜目指す姿」）。区切りは1案に3つまで。
+5. 5案は主役を変える。1案目は【条件】の「いちばん伝えたいこと」を主役にする（指定なしなら、回答でいちばん具体的なもの）。残りは、所属・学んでいること／スキル・経験や数字・目指す姿・人柄のうち、回答にあるものを主役にする。同じ言い回しを使い回さない。
+6. 「〜をしています」のような文ではなく、名詞で言い切る形を中心にする。
+7. 「頑張ります」「よろしくお願いします」、中身のない流行語、根拠のない最上級（「No.1」「最強」など）は使わない。
+8. 言語は【条件】に従う。「英語」は自然な英語で書く（学校名・会社名は回答の表記のまま、または一般的な英語表記）。「日本語＋英語」は、日本語のあとに「｜」で英語を続け、全体で220字以内にする。
+9. 雰囲気は【条件】に合わせる（誠実・きちんと／親しみやすく／熱意強め）。
+10. 【条件】の「入れたいキーワード」があれば、5案のうち3案以上に自然に入れる。
+11. マークダウン、ハッシュタグ（#）、メンション（@）、絵文字は使わない。
+12. 表記と出典は、次のとおりにする。
+${NOTATION_RULES}
+
+# 出力
+次のJSONだけを返す。前後に説明を書かない。
+{"headlines":["…","…","…","…","…"]}`;
+
+export const ABOUT_PROMPT = `あなたは、LinkedInのプロフィールづくりを手伝う編集者です。
+【条件】と【回答】だけを材料に、LinkedInの「自己紹介（概要・About）」を1つ書きます。本人が一人称で書くプロフィールです。
+
+# 必ず守ること
+1. 事実は【条件】と【回答】から取る。回答にない学校名・学部・学年・会社名・役職・団体名・数字・実績・資格・受賞・スキル・人名・エピソードを作らない。材料が少ないときは、盛らずに短くまとめる。
+2. 【条件】の「目指す方向」は本人の希望として書く（「〇〇に関心があります」「〇〇を目指しています」）。
+3. 書き出しの2行で「いま何をしている、どんな人か」が分かるようにする。LinkedInでは最初の数行しか見えず「…もっと見る」で続きが開くので、ここで続きを読みたくさせる。
+4. 長さは【条件】の長さに合わせる（LinkedInの上限は2600字）。
+5. 形は【条件】に従う。
+・文章（ストーリー）：いまの取り組み → 力を入れてきた経験（具体的に）→ そこから得た強み・学び → これからの目標 → 最後の一言、の流れ。1〜2文ごとに改行し、段落の間に空行を1つ入れる。
+・見出し＋箇条書き：短い導入の2行のあと、【いま取り組んでいること】【強み】【これから】のような【】の小見出しと「・」の箇条書きで整理する。回答にない項目の小見出しは作らない。
+・シンプル：3〜5文の短い自己紹介。
+6. 雰囲気は【条件】に合わせる（誠実・きちんと／親しみやすく／熱意強め）。です・ます調。「〜と思います」を続けて使わない。
+7. 最後の一言は【条件】に従う。「つながり歓迎」は「〇〇に関心のある方と、ぜひつながりたいです」のように回答に合わせて書く。「メッセージ歓迎」は、気軽にメッセージをもらえるとうれしい、という一文を入れる。「なし」は締めの呼びかけを書かない。
+8. 言語は【条件】に従う。「英語」は自然な英語で書く。「日本語＋英語」は、日本語の全文のあとに空行を入れ、「English」の1行と、同じ内容の英語版を続ける（合わせて2600字以内。長くなるときは英語版を短くまとめる）。
+9. 【条件】の「入れたいキーワード」があれば、自然な文の中に入れる。
+10. 学生は、学生らしく背伸びしすぎない。社会人は、仕事の中身が伝わる言葉で書く。専門用語やカタカナのビジネス語を並べない。
+11. マークダウン（**、#の見出し、行頭の-）、ハッシュタグ（#）、メンション（@）、絵文字は使わない。区切りは【】と「・」と空行。
+12. 表記と出典は、次のとおりにする。
+${NOTATION_RULES}
+
+# 出力
+次のJSONだけを返す。前後に説明を書かない。
+{"about":"…"}`;
+
+export const HEADLINES_SCHEMA = {
+  type: "object",
+  properties: { headlines: { type: "array", minItems: 5, maxItems: 5, items: { type: "string" } } },
+  required: ["headlines"],
+};
+export const ABOUT_SCHEMA = { type: "object", properties: { about: { type: "string" } }, required: ["about"] };
+
+export function normalizeHeadlines(json) {
+  const list = json && Array.isArray(json.headlines) ? json.headlines : Array.isArray(json) ? json : [];
+  const out = [];
+  for (const h of list.map(cleanHeadline)) if (h.length >= 4 && !out.includes(h)) out.push(h);
+  return out.length >= 3 ? out.slice(0, 5) : null;
+}
+export function normalizeAbout(json) {
+  const about = cleanBody(json && (json.about || json.body), "").slice(0, 2600);
+  return about.length >= 60 ? about : null;
+}
+
+function condBlock(c, kind) {
+  const lines = ["【条件】（本人が選んだもの。立場・学年・目指す方向・キーワードは、本人が書いた事実として使ってよい）"];
+  lines.push(`・立場：${c.role || "指定なし"}${c.year ? `（${c.year}）` : ""}`);
+  lines.push(`・目指す方向（本人の希望）：${c.dirs.length ? c.dirs.join("／") : "指定なし"}`);
+  lines.push(`・いちばん伝えたいこと：${c.focus || "指定なし"}`);
+  lines.push(`・言語：${c.lang}`);
+  lines.push(`・雰囲気：${c.tone}`);
+  if (kind === "headline") lines.push(`・長さ：${c.hLen}（${H_LEN[c.hLen]}）`);
+  else {
+    lines.push(`・長さ：${c.aLen}（${A_LEN[c.aLen]}${c.lang === "日本語＋英語" ? "。日本語の部分の長さ" : ""}）`);
+    lines.push(`・形：${c.aForm}`);
+    lines.push(`・最後の一言：${c.aClose}`);
+  }
+  lines.push(`・入れたいキーワード：${c.keywords || "なし"}`);
+  return lines.join("\n");
+}
+function answersBlock(p) {
+  const lines = ["【回答】"];
+  for (const a of p.answers) {
+    lines.push(`■${a.label}（質問：${a.question || a.label}）`);
+    if (a.chips.length) lines.push(`・選んだ候補：${a.chips.join("／")}`);
+    if (a.text) lines.push(`・本人のことば：${a.text}`);
+  }
+  return lines.join("\n");
+}
+export function buildPartInput(p, kind) {
+  const parts = [condBlock(p.cond, kind), answersBlock(p)];
+  if (p.prefs && p.prefs.length) parts.push(`【本人の好み（過去に本人が頼んだ直し指示）】\n${p.prefs.map((s) => `・${s}`).join("\n")}`);
+  if (p.eventNote) parts.push(`${eventNoteBlock(p.eventNote)}\n※いま作っているのは投稿ではなく、プロフィールの${kind === "headline" ? "見出し" : "自己紹介"}。イベントの説明は参考にとどめ、イベント名や参加したことは、回答に書かれていなければ入れない。`);
+  return parts.join("\n\n");
+}
+
+export const HEADLINE_ACTIONS = {
+  shorter: "5案とも、いまより短くする。いちばん伝えたいことは残す。",
+  concrete: "回答にある具体的な言葉・数字・取り組みを使って、5案とも具体的にする。回答にない事実は足さない。",
+  english: "5案とも、自然な英語にする。",
+  bilingual: "5案とも「日本語｜English」の形にする（1案220字以内）。",
+  another: "同じ材料で、いまの5案とはちがう切り口の5案を新しく書く。",
+  custom: "本人の希望どおりに、5案を書き直す。",
+};
+export const ABOUT_ACTIONS = {
+  shorter: "今の7割くらいの長さに縮める。書き出しの2行と、最後の一言は残す。",
+  concrete: "回答にある具体的な言葉・場面・行動・数字を増やして、具体的にする。回答にない事実は足さない。",
+  friendly: "事実は変えずに、もっと親しみやすい言い回しにする。です・ます調は保つ。",
+  english: "日本語の自己紹介のあとに空行と「English」の1行を入れ、同じ内容の英語版を続ける（全体で2600字以内）。すでに英語版があれば整える。",
+  another: "同じ材料のまま、書き出しと構成を変えて書き直す。",
+  custom: "本人の希望どおりに書き直す。",
+};
+export function buildPartRefineInput(p, kind, current, action, request) {
+  const acts = kind === "headline" ? HEADLINE_ACTIONS : ABOUT_ACTIONS;
+  const cur = kind === "headline" ? `【いまの見出し案】\n${String(current || "").split("\n").filter(Boolean).map((h, i) => `${i + 1}. ${h}`).join("\n")}` : `【いまの自己紹介（About）】\n${current}`;
+  return [
+    buildPartInput(p, kind),
+    "",
+    cur,
+    "",
+    "【やってほしいこと】",
+    action === "custom"
+      ? [
+          `本人の希望：「${cleanRequest(request)}」。この希望どおりに書き直す。`,
+          "希望に書かれていない部分は、できるだけ今の文を残す。",
+          "希望の中で本人が書いた事実（学校名・団体名・数字など）は使ってよい。それ以外の事実は足さない。",
+        ].join("\n")
+      : acts[action] || acts.another,
+    "ルールはシステムの指示と同じ。",
+    kind === "headline" ? '出力は {"headlines":["…","…","…","…","…"]} のJSONだけ。' : '出力は {"about":"…"} のJSONだけ。',
+  ].join("\n");
+}
+
 // 「書き方」（作る前に選ぶ）。空はおまかせ
 export const MODES = ["", "first", "ishizaka", "custom"];
 const MODE_RULE = {
@@ -217,8 +386,10 @@ ${style}`;
 // 運営ページで書きかえられる指示文の初期値（書きかえを消すと、これに戻る）
 export const PROMPT_DEFAULTS = {
   system: SYSTEM_PROMPT,
-  profile: PROFILE_PROMPT,
+  headline: HEADLINE_PROMPT,
+  about: ABOUT_PROMPT,
   ishizaka: ISHIZAKA_STYLE,
+  profile: PROFILE_PROMPT,
 };
 export const PROMPT_KEYS = Object.keys(PROMPT_DEFAULTS);
 
@@ -315,9 +486,11 @@ export function sanitizePayload(raw) {
     .slice(0, 8)
     .map((s) => clean(s, 80))
     .filter(Boolean);
-  const kind = src.kind === "profile" ? "profile" : "post";
+  // kind：post＝投稿文／headline＝見出しだけ／about＝自己紹介だけ／profile＝見出しと自己紹介をまとめて（前の版）
+  const kind = ["profile", "headline", "about"].includes(src.kind) ? src.kind : "post";
+  const cond = sanitizeCond(src.pcond);
   // eventNote（イベントごとのAIへの追加の指示）と ishizakaStyle（石坂さん風の型の書きかえ）は、サーバーが入れる。端末からは受け取らない
-  return { answers, style, profile: { role }, name: who, theme, voice, mode, intro, stylePrompt, prefs, tone, photos: 0, kind, eventNote: "", ishizakaStyle: "" };
+  return { answers, style, profile: { role }, name: who, theme, voice, mode, intro, stylePrompt, prefs, tone, photos: 0, kind, cond, eventNote: "", eventName: "", ishizakaStyle: "" };
 }
 
 // 写真（端末で長辺1024pxのJPEGにしてから届く）。形と大きさだけ確かめる。中身の確認はAI側に任せる
@@ -359,6 +532,10 @@ export function buildUserInput(p) {
   if (p.prefs && p.prefs.length) {
     lines.push("【本人の好み（過去に本人が頼んだ直し指示。今回もこの傾向で、最初から）】");
     for (const s of p.prefs) lines.push(`・${s}`);
+    lines.push("");
+  }
+  if (p.eventName) {
+    lines.push(`【参加したイベント】${p.eventName}（本人がこのイベントに参加して書く投稿。決まり9のとおり、名前を1回入れる）`);
     lines.push("");
   }
   lines.push(`【立場】${p.profile.role || "指定なし"}`);

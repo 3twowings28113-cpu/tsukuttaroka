@@ -858,3 +858,25 @@ main > .key-on { color: var(--on-ground-soft); }
 .sch-main { display: grid; gap: 2px; font-size: 15px; line-height: 1.5; }
 .sch-note { font-size: 13px; color: var(--ink-soft); }
 .sch-foot { margin: 0; font-size: 13px; font-weight: 700; color: var(--ink-soft); }
+
+/* ---------- 見出し・自己紹介（条件 → 質問 → できあがり） ---------- */
+.kind-q { margin: 16px 0 6px; font-family: var(--f-display); font-weight: 900; font-size: 15px; }
+.kind-switch { margin-top: 0; }
+.kind-switch button { display: grid; place-content: center; gap: 0; min-height: 56px; padding: 4px 6px; font-size: 15px; line-height: 1.25; }
+.kind-sub { display: block; font-size: 11px; font-weight: 700; opacity: 0.75; letter-spacing: 0.02em; }
+.cond-fields { gap: 16px; }
+.cond-block .chips { gap: 6px; }
+.chip[aria-disabled="true"] { opacity: 0.45; box-shadow: none; }
+.cond-now {
+  margin: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 10px;
+  font-size: 13px; font-weight: 700; color: var(--on-ground-soft);
+}
+.cond-now .btn-text { min-height: 40px; padding: 0 4px; font-size: 14px; color: var(--on-ground); }
+.p-heads.is-busy { opacity: 0.4; }
+.li-busy-line { margin: 0; text-align: center; font-family: var(--f-display); font-weight: 900; color: var(--on-ground); }
+.next-part {
+  display: grid; gap: 6px; padding: 14px;
+  background: var(--paper); border: var(--line) solid var(--ink); border-radius: var(--r); box-shadow: var(--shadow);
+}
+.next-part-title { margin: 0; font-family: var(--f-display); font-weight: 900; font-size: 17px; }
+.next-part-note { margin: 0 0 4px; font-size: 14px; color: var(--ink-soft); }

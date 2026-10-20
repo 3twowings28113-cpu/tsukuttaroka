@@ -42,11 +42,19 @@ import {
   buildProfileRefineInput,
   PROMPT_DEFAULTS,
   PROMPT_KEYS,
+  HEADLINES_SCHEMA,
+  ABOUT_SCHEMA,
+  normalizeHeadlines,
+  normalizeAbout,
+  buildPartInput,
+  buildPartRefineInput,
+  HEADLINE_ACTIONS,
+  ABOUT_ACTIONS,
 } from "./ai.js";
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { extractLinkedInUrl, cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-16.lscw-2";
+const VERSION = "2026-10-20.lscw-3";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -430,8 +438,10 @@ const PROMPT_MAX = 20000;
 const OUTPUT_TAIL = {
   system: '\n\n# 出力\n次のJSONだけを返す。前後に説明を書かない。\n{"patterns":[{"tone":"emo","body":"…"}]}',
   profile: '\n\n# 出力\n次のJSONだけを返す。前後に説明を書かない。\n{"headlines":["…","…","…"],"about":"…"}',
+  headline: '\n\n# 出力\n次のJSONだけを返す。前後に説明を書かない。\n{"headlines":["…","…","…","…","…"]}',
+  about: '\n\n# 出力\n次のJSONだけを返す。前後に説明を書かない。\n{"about":"…"}',
 };
-const OUTPUT_MARK = { system: '"patterns"', profile: '"headlines"' };
+const OUTPUT_MARK = { system: '"patterns"', profile: '"headlines"', headline: '"headlines"', about: '"about"' };
 function finishPrompt(key, text) {
   const t = String(text || "").trim();
   if (!t) return PROMPT_DEFAULTS[key];
@@ -639,6 +649,11 @@ async function eventNoteOf(env, id) {
   const ev = await readEvent(env, cleanEventId(id)).catch(() => null);
   return eventActive(ev) ? multiLine(ev.aiNote, 1500) : "";
 }
+// 投稿文に入れてよいイベント名（イベントのページから作ったときだけ）
+async function eventNameOf(env, id) {
+  const ev = await readEvent(env, cleanEventId(id)).catch(() => null);
+  return eventActive(ev) ? oneLine(ev.name, 60) : "";
+}
 // 参加者の画面用（あいことばとキーは返さない）
 async function eventPublic(env, url) {
   const ev = await readEvent(env, cleanEventId(url.searchParams.get("e")));
@@ -793,8 +808,20 @@ async function generate(request, env, ctx) {
   }
   const prompts = await promptsOf(env);
   p.eventNote = await eventNoteOf(env, evId);
+  p.eventName = p.kind === "post" ? await eventNameOf(env, evId) : "";
   p.ishizakaStyle = prompts.ishizaka;
-  // プロフィール文（見出し3案＋自己紹介）。写真は使わない
+  // 見出しだけ（5案）／自己紹介だけ。先に決めた【条件】と回答から作る。写真は使わない
+  if (p.kind === "headline" || p.kind === "about") {
+    const isH = p.kind === "headline";
+    const r = await callAI(env, { userKey: key, adv: aiCfg, system: isH ? prompts.headline : prompts.about, input: buildPartInput(p, p.kind), schema: isH ? HEADLINES_SCHEMA : ABOUT_SCHEMA, validate: isH ? normalizeHeadlines : normalizeAbout });
+    if (!r.ok) {
+      logEvent(env, ctx, "error", { where: p.kind, status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey, u: base.u, event: evId });
+      return json({ ok: false, code: "failed", message: ukey ? explainFailure(r) : "生成に失敗しました" }, 502);
+    }
+    logEvent(env, ctx, "generate", { ...base, cards, model: r.model, ms: r.ms, mode: p.kind, ownKey: !!(ukey || aiCfg) });
+    return json({ ok: true, [isH ? "headlines" : "about"]: r.value, model: r.model });
+  }
+  // プロフィール文（見出し3案＋自己紹介。前の版の画面から）。写真は使わない
   if (p.kind === "profile") {
     const r = await callAI(env, { userKey: key, adv: aiCfg, system: prompts.profile, input: buildProfileInput(p), schema: PROFILE_SCHEMA, validate: normalizeProfile });
     if (!r.ok) {
@@ -951,10 +978,12 @@ async function refine(request, env, ctx) {
   const body = await readAiBody(request, env, ctx, "refine");
   if (!body) return json({ ok: false, code: "input", message: "入力が読めませんでした" }, 400);
   const p = sanitizePayload(body);
-  const isProfile = p.kind === "profile";
+  const part = p.kind === "headline" || p.kind === "about" ? p.kind : "";
+  const isProfile = p.kind === "profile" || !!part;
   const images = isProfile ? [] : sanitizeImages(body.images);
   const tone = isProfile ? "emo" : TONE_IDS.includes(body.tone) ? body.tone : null;
-  const action = (isProfile ? PROFILE_ACTIONS : REFINE_ACTIONS)[body.action] ? body.action : null;
+  const ACTS = part === "headline" ? HEADLINE_ACTIONS : part === "about" ? ABOUT_ACTIONS : isProfile ? PROFILE_ACTIONS : REFINE_ACTIONS;
+  const action = ACTS[body.action] ? body.action : null;
   const current = String(body.body || "").slice(0, isProfile ? 2600 : 1500);
   const ask = cleanRequest(body.request);
   if (!tone || !action || current.length < 10) return json({ ok: false, code: "input", message: "入力が足りません" }, 400);
@@ -975,8 +1004,19 @@ async function refine(request, env, ctx) {
   const evId = ev.id || cleanEventId(body.event);
   const prompts = await promptsOf(env);
   p.eventNote = await eventNoteOf(env, evId);
+  p.eventName = p.kind === "post" ? await eventNameOf(env, evId) : "";
   p.ishizakaStyle = prompts.ishizaka;
 
+  if (part) {
+    const isH = part === "headline";
+    const r = await callAI(env, { userKey: key, adv: aiCfg, system: isH ? prompts.headline : prompts.about, input: buildPartRefineInput(p, part, current, action, ask), schema: isH ? HEADLINES_SCHEMA : ABOUT_SCHEMA, validate: isH ? normalizeHeadlines : normalizeAbout });
+    if (!r.ok) {
+      logEvent(env, ctx, "error", { where: `refine:${part}`, status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey, u: uidOf(cid), event: evId });
+      return json({ ok: false, code: "failed", message: ukey ? explainFailure(r) : "書き直しに失敗しました" }, 502);
+    }
+    logEvent(env, ctx, "refine", { action, tone: "", model: r.model, name: cleanName(body.name), mode: part, kind: part, u: uidOf(cid), event: evId, page: oneLine(body.page, 20) });
+    return json({ ok: true, [isH ? "headlines" : "body"]: r.value, model: r.model });
+  }
   const opts = (imgs) => ({
     userKey: key,
     adv: aiCfg,
@@ -1495,7 +1535,7 @@ async function adminStats(env, url) {
 }
 
 // ---------- 運営用：AIへの指示文（書きかえ・元に戻す・ためしに作る） ----------
-const PROMPT_LABEL = { system: "投稿文の指示文", profile: "プロフィール文の指示文", ishizaka: "石坂さん風の型" };
+const PROMPT_LABEL = { system: "投稿文の指示文", headline: "見出し（Headline）の指示文", about: "自己紹介（About）の指示文", ishizaka: "石坂さん風の型", profile: "見出し＋自己紹介まとめて（前の版）" };
 async function adminPrompts(env) {
   const s = await readSettings(env, true);
   const prompts = {};
@@ -1541,10 +1581,11 @@ async function adminPromptTest(request, env) {
   const key = PROMPT_KEYS.includes(body.key) ? body.key : "system";
   const text = String(body.text || "").trim().slice(0, PROMPT_MAX);
   if (text) prompts[key] = finishPrompt(key, text);
-  const kind = key === "profile" ? "profile" : "post";
-  const sample = String(body.sample || "").trim().slice(0, 400) || (kind === "profile" ? "経済学部の2年生。ゼミでマーケティングを学びながら、学園祭の広報を担当している" : "企業のブースで、若手社員さんの「失敗してもいいから手を挙げる」という話を聞いて、まず一歩やってみようと思えた");
+  const kind = ["profile", "headline", "about"].includes(key) ? key : "post";
+  const sample = String(body.sample || "").trim().slice(0, 400) || (kind !== "post" ? "〇〇大学 経済学部の3年生。ゼミでマーケティングを学びながら、学園祭の広報を担当してSNSのフォロワーを1年で2倍にした" : "企業のブースで、若手社員さんの「失敗してもいいから手を挙げる」という話を聞いて、まず一歩やってみようと思えた");
   const p = sanitizePayload({
-    answers: kind === "profile" ? [{ id: "p_focus", label: "力を入れていること", question: "いま、力を入れてることは？", text: sample }] : [{ id: "learn", label: "今日の学び・気づき", question: "今日、「これは学びやわ」って思ったことは？", text: sample }],
+    answers: kind !== "post" ? [{ id: "pf_now", label: "いまの取り組み", question: "いま、何をしている？力を入れていることは？", text: sample }] : [{ id: "learn", label: "今日の学び・気づき", question: "今日、「これは学びやわ」って思ったことは？", text: sample }],
+    pcond: { role: "大学生", year: "3年", dirs: ["広告・マーケ"], focus: "経験・実績", lang: "日本語", tone: "誠実・きちんと" },
     mode: key === "ishizaka" ? "ishizaka" : body.mode === "first" ? "first" : "",
     kind,
     tone: "emo",
@@ -1555,9 +1596,14 @@ async function adminPromptTest(request, env) {
   const r =
     kind === "profile"
       ? await callAI(env, { system: prompts.profile, input: buildProfileInput(p), schema: PROFILE_SCHEMA, validate: normalizeProfile })
+      : kind === "headline"
+      ? await callAI(env, { system: prompts.headline, input: buildPartInput(p, "headline"), schema: HEADLINES_SCHEMA, validate: normalizeHeadlines })
+      : kind === "about"
+      ? await callAI(env, { system: prompts.about, input: buildPartInput(p, "about"), schema: ABOUT_SCHEMA, validate: normalizeAbout })
       : await callAI(env, { system: prompts.system, input: buildUserInput(p), schema: patternsSchema(1, "emo"), validate: (j) => normalizePatterns(j, "", 1, "emo") });
   if (!r.ok) return json({ ok: false, code: "failed", message: explainFailure(r), model: r.model, reason: r.reason });
-  const out = kind === "profile" ? `【見出し】\n${r.value.headlines.join("\n")}\n\n【自己紹介】\n${r.value.about}` : r.value[0].body;
+  const out =
+    kind === "profile" ? `【見出し】\n${r.value.headlines.join("\n")}\n\n【自己紹介】\n${r.value.about}` : kind === "headline" ? r.value.map((h, i) => `${i + 1}. ${h}`).join("\n") : kind === "about" ? r.value : r.value[0].body;
   return json({ ok: true, text: out, model: r.model, ms: r.ms, sample });
 }
 
