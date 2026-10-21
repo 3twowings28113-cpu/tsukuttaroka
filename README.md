@@ -24,6 +24,8 @@ LSCW（10/31）は専用ページ /lscw。参加企業のロゴを押すと、�
 | 富士通ラーニングメディアのフォローボタンを出す | public/config.js の followUrl にLinkedInページのURL |
 | 文章の書き方を変える | src/ai.js の SYSTEM_PROMPT |
 | AIモデルを変える | wrangler.jsonc の GEMINI_MODEL |
+| 最初の画面の「便利な機能」を出す・出さない | public/config.js の features（イベントは運営ページの「出す機能」） |
+| イベントの概要をAIに渡す | 運営ページの「イベント」→「イベントの概要」（「質問セットの案内から下書きを入れる」で下書きできる） |
 | LSCWのテーマ（どんな投稿にする？）を変える | public/config.js の lscw の sets（aiTheme はAIに渡すテーマ） |
 | LSCWの参加企業のロゴ・採用ページを変える | public/config.js の lscw の companies（ロゴは public/logos/） |
 | 「困ったら」の案内を変える | public/config.js の help |

@@ -111,12 +111,13 @@
   .ev-side h3 { margin: 0; font-size: 16px; }
   .ev-side p { margin: 0; font-size: 14px; overflow-wrap: anywhere; }
   .ev-side input { width: 100%; min-height: 38px; padding: 0 10px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; font-size: 13px; }
-  .ev-form { display: grid; gap: 10px; margin-top: 12px; padding: 12px; border: 2px solid var(--blue); border-radius: 10px; }
-  .ev-form label { display: grid; gap: 4px; font-size: 14px; font-weight: 700; }
+  .ev-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: 12px; padding: 12px; border: 2px solid var(--blue); border-radius: 10px; }
+  .ev-form label { display: grid; gap: 4px; min-width: 0; font-size: 14px; font-weight: 700; }
+  .ev-form input[type=text], .ev-form input[type=password], .ev-form select { width: 100%; min-width: 0; }
   .ev-form label.chk { display: flex; align-items: center; gap: 8px; }
   .ev-form input[type=text], .ev-form input[type=password], .ev-form select { min-height: 42px; padding: 0 10px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; font: inherit; font-size: 15px; font-weight: 500; }
   .ev-form small { font-weight: 500; color: var(--sub); }
-  .ev-form fieldset { display: grid; gap: 10px; margin: 0; padding: 10px 12px 12px; border: 1px solid var(--rule); border-radius: 10px; }
+  .ev-form fieldset { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; gap: 10px; margin: 0; padding: 10px 12px 12px; border: 1px solid var(--rule); border-radius: 10px; }
   .ev-form legend { padding: 0 6px; font-weight: 700; font-size: 14px; }
   .ev-form textarea, .pr-text { width: 100%; padding: 8px 10px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; font: inherit; font-size: 14px; font-weight: 500; line-height: 1.6; resize: vertical; }
   .ev-form .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
@@ -283,6 +284,18 @@
             <label>ページの名前<input type="text" id="aevFollowName" maxlength="40" autocomplete="off" placeholder="例：株式会社〇〇"></label>
           </div>
           <label class="chk"><input type="checkbox" id="aevFollowRequired"> フォローを必須にする（オフなら「よかったらフォロー」の案内だけ）</label>
+        </fieldset>
+        <fieldset>
+          <legend>イベントの概要（AIに最初から渡す情報）</legend>
+          <label>概要<small>どんなイベントか・日時・会場・セッション・登壇者・参加企業など。AIが参加者の回答を正しく読むための参考にします（3000字まで）。回答に書かれていないことは、投稿には足しません</small><textarea id="aevOverview" rows="8" placeholder="例：イベント名：〇〇&#10;日時：10/31(土) 9:30〜18:00&#10;会場：〇〇&#10;セッション：〇〇さんのパネルトーク（13:00〜）&#10;参加企業：〇〇、〇〇"></textarea></label>
+          <div class="row"><button class="btn btn-sm" type="button" id="aevDraft">質問セットの案内から下書きを入れる</button><span class="msg" id="aevDraftMsg"></span></div>
+        </fieldset>
+        <fieldset>
+          <legend>参加者の画面に出す機能</legend>
+          <p class="empty" style="margin:0">イベントでは、予定がもう決まっているので「カレンダーから作る」と「じぶんの書き方」は、ふつうは出さなくてOKです。AIのキーの設定は、イベントのキーがあれば参加者には出しません。</p>
+          <label class="chk"><input type="checkbox" id="aevFeatNotes" checked> ネタ帳（投稿のネタを日付つきでメモ。メモはその人のスマホの中だけ）</label>
+          <label class="chk"><input type="checkbox" id="aevFeatCal"> カレンダーから作る（Googleカレンダーの予定から投稿を作る）</label>
+          <label class="chk"><input type="checkbox" id="aevFeatVoice"> じぶんの書き方をおぼえさせる（これまでの投稿から書きぐせをまねる）</label>
         </fieldset>
         <fieldset>
           <legend>AIへの追加の指示（このイベントだけ）</legend>
@@ -571,6 +584,7 @@
             <p>ハッシュタグ：${ev.hashtags.length ? esc(ev.hashtags.join(" ")) : "（質問セットの初期のもの）"}</p>
             <p>メンション：${ev.mentions.length ? esc(ev.mentions.map((m) => "@" + m.name).join(" ")) + (ev.mentionInText ? "（本文の最後に入れる）" : "（手順だけ出す）") : "なし"}${ev.followUrl ? `　フォロー：${esc(ev.followName || "LinkedInページ")}（${ev.followRequired ? "必須" : "おすすめ"}）` : ""}</p>
             <p>AIキー：${ev.keySet ? `登録ずみ（…${esc(ev.keyTail)}）` : "サーバーのキーを使う"}</p>
+            <p>イベントの概要：${ev.overview ? "あり" : "<b>なし</b>（入れるとAIが会場のことを分かって書けます）"}　出す機能：${(() => { const ft = { notes: true, calendar: false, voice: false, ...(ev.features || {}) }; return [ft.notes && "ネタ帳", ft.calendar && "カレンダー", ft.voice && "じぶんの書き方"].filter(Boolean).join("・") || "なし"; })()}</p>
             <p>LinkedInの一文：${ev.cheerAlways ? "すべての投稿に入れる" : "参加者が選ぶ"}　AIへの追加の指示：${ev.aiNote ? "あり" : "なし"}　タイムスケジュール：${ev.schedule.length ? ev.schedule.length + "行" : "初期のまま"}</p>
             <label class="msg" for="evu-${esc(ev.id)}">QR用URL（開いた人は、だれでも作れます）</label>
             <input id="evu-${esc(ev.id)}" readonly value="${esc(qrUrl)}">
@@ -598,6 +612,12 @@
     $("#aevFollowName").value = f.followName || "";
     $("#aevFollowRequired").checked = !!f.followRequired;
     $("#aevAiNote").value = f.aiNote || "";
+    $("#aevOverview").value = f.overview || "";
+    $("#aevDraftMsg").textContent = "";
+    const feat = { notes: true, calendar: false, voice: false, ...(f.features || {}) };
+    $("#aevFeatNotes").checked = feat.notes !== false;
+    $("#aevFeatCal").checked = feat.calendar === true;
+    $("#aevFeatVoice").checked = feat.voice === true;
     $("#aevInfoTitle").value = info.title || "";
     $("#aevInfoWhen").value = info.when || "";
     $("#aevInfoPlace").value = info.place || "";
@@ -641,6 +661,8 @@
       followName: $("#aevFollowName").value,
       followRequired: $("#aevFollowRequired").checked,
       aiNote: $("#aevAiNote").value,
+      overview: $("#aevOverview").value,
+      features: { notes: $("#aevFeatNotes").checked, calendar: $("#aevFeatCal").checked, voice: $("#aevFeatVoice").checked },
       info: {
         title: $("#aevInfoTitle").value,
         when: $("#aevInfoWhen").value,
@@ -919,6 +941,16 @@
   $("#testBtn").addEventListener("click", test);
   $("#csvBtn").addEventListener("click", csv);
   $("#moreBtn").addEventListener("click", () => loadRows(false));
+  // イベントの概要の下書き（質問セットの案内・タイムスケジュール・参加企業から）
+  $("#aevDraft").addEventListener("click", () => {
+    const p = PRESETS.find((x) => x.id === $("#aevPreset").value) || {};
+    const draft = p.overviewDraft || "";
+    if (!draft) { $("#aevDraftMsg").textContent = "この質問セットには、下書きにできる案内がありません"; return; }
+    const box = $("#aevOverview");
+    if (box.value.trim() && !confirm("いまの概要を、下書きで置きかえますか？")) return;
+    box.value = draft;
+    $("#aevDraftMsg").textContent = "下書きを入れました。直してから「保存」してください";
+  });
   $("#wipeBtn").addEventListener("click", () => { $("#wipeConfirm").hidden = false; });
   $("#wipeNo").addEventListener("click", () => { $("#wipeConfirm").hidden = true; });
   $("#wipeYes").addEventListener("click", wipe);

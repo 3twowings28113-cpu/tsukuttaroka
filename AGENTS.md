@@ -39,6 +39,8 @@
 - 運営ページ → `public/admin.html`（合言葉なし。URLを知っている人はだれでも開ける）／会場スクリーン → `public/qr.html`
 - LSCWのテーマ（どんな投稿にする？）→ `public/config.js` の lscw の `sets`／参加企業のロゴと採用ページ → lscw の `companies`（ロゴの画像は `public/logos/`。/lscw のいちばん上で右から左へ流れる）
 - 終わったイベントの記録（10/6 の富士通の回など）→ 過去の記録ページ（/archive・`public/archive.html`）。運営ページは「いまの期間」だけを出す。区切りは運営ページの「データ・過去の記録」→「ここまでを過去のイベントにする」
+- 最初の画面の「便利な機能」（ネタ帳・カレンダー・じぶんの書き方）→ `public/config.js` の `features`。イベントごとの出す・出さないとイベントの概要（AIに最初から渡す情報）→ 運営ページの「イベント」。イベントのページでは、イベントのキーで作るので「作るAI」の設定は出さない
+- ネタ帳（投稿のネタのメモ）は、その人のブラウザ（localStorage の tsukuttaroka.notes）にだけ保存する。サーバー（Cloudflare）には保存しない。メモから作るときだけ、回答と一緒にAIに渡す（/api/submit の記録からは外す）
 - 「投稿したで！」の報告・パネラーの★・受付の停止は 2026-10-22 になくした（10/6 の記録は /archive で見るだけ）
 - サーバー → `src/worker.js`／Gemini の呼び出し → `src/gemini.js`
 - 使うAIモデル → `wrangler.jsonc` の `vars`（GEMINI_MODEL・GEMINI_FALLBACK_MODEL）
