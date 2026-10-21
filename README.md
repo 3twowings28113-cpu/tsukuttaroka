@@ -1,8 +1,9 @@
 # 投稿、つくったろか。
 
-「関西を、おもろくする夜。」（2026/10/6）の参加者が、スマホでLinkedIn投稿文を作るアプリ。
-QRを読む → ネタを選ぶ → しゃべる（音声入力OK）→ 3パターン（エモい／ユーモア／学び）→ コピーしてLinkedInへ → 「投稿したで！」と報告。
-報告された投稿は、パネラー用ページに音つきで届き、パネラーが読んで★（表彰の候補）を付けられる。
+イベントの参加者が、スマホでLinkedIn投稿文（とプロフィールの見出し・自己紹介）を作るアプリ。
+QRを読む → テーマを選ぶ → しゃべる（音声入力OK）→ 3パターン（エモい／ユーモア／学び）→ コピーしてLinkedInへ。
+LSCW（10/31）は専用ページ /lscw。参加企業のロゴを押すと、その会社の採用ページがひらく。
+（10/6「関西を、おもろくする夜。」で使った「投稿したで！」の報告・パネラーの★・受付の停止は、2026-10-22 になくした。当日の記録は /archive で見られる）
 
 ## 公開のしかた
 このフォルダで `npm run setup` を実行するだけ（GenCode に「AGENTS.md を読んで、最初の公開をして」と頼めばOK）。
@@ -11,9 +12,8 @@ QRを読む → ネタを選ぶ → しゃべる（音声入力OK）→ 3パタ�
 - LSCW（LinkedIn Student Career Week 2026 Autumn）専用ページ（QRにするURL）：`https://tsukuttaroka.<サブドメイン>.workers.dev/lscw`
 - 普段使い：`https://tsukuttaroka.<サブドメイン>.workers.dev/`
 - 会場スクリーン用QR：`…/qr?preset=lscw&url=…/lscw`（運営ページの「イベント」→「会場スクリーン用QR」からも開ける）
-- 運営ページ：`…/admin`（合言葉は .dev.vars の ADMIN_PASSCODE）
+- 運営ページ：`…/admin`（合言葉なし。URLを知っている人はだれでも開ける）
 - 過去の記録：`…/archive`（10/6「関西を、おもろくする夜。」など、終わったイベントの投稿報告・★・集まった投稿。運営ページの「データ・過去の記録」からも開ける）
-- パネラー用ページ：運営ページの「パネラー用リンク」からコピー（`…/judge?k=…`。鍵は合言葉から自動で作られる）
 - リハーサル用（例文入り）：`…/?demo=1`
 
 ## よくある変更
@@ -24,16 +24,16 @@ QRを読む → ネタを選ぶ → しゃべる（音声入力OK）→ 3パタ�
 | 富士通ラーニングメディアのフォローボタンを出す | public/config.js の followUrl にLinkedInページのURL |
 | 文章の書き方を変える | src/ai.js の SYSTEM_PROMPT |
 | AIモデルを変える | wrangler.jsonc の GEMINI_MODEL |
-| パネラーの名前を変える | public/config.js の judges |
-| 報告シートの文言を変える | public/config.js の report |
+| LSCWのテーマ（どんな投稿にする？）を変える | public/config.js の lscw の sets（aiTheme はAIに渡すテーマ） |
+| LSCWの参加企業のロゴ・採用ページを変える | public/config.js の lscw の companies（ロゴは public/logos/） |
 | 「困ったら」の案内を変える | public/config.js の help |
-| イベントのハッシュタグ・メンション・AIキー・あいことば・タイムスケジュールを変える | 運営ページの「イベント」（デプロイ不要） |
+| イベントのハッシュタグ・メンション・AIキー・タイムスケジュールを変える | 運営ページの「イベント」（デプロイ不要） |
 | AIへの指示文をその場で直す | 運営ページの「AIへの指示文」（デプロイ不要・初期の文に戻せる） |
 変えたあとは `npm run deploy`。
 
 ## 中身
-- public/：画面（index.html・app.js・app.css・config.js、運営ページ admin.html、会場QR qr.html、パネラー用 judge.html）
-- src/：サーバー（worker.js）、AIへの指示文（ai.js）、Gemini呼び出し（gemini.js）、報告の小道具（report.js）
+- public/：画面（index.html・app.js・app.css・config.js、運営ページ admin.html、会場QR qr.html、過去の記録 archive.html、参加企業のロゴ logos/）
+- src/：サーバー（worker.js）、AIへの指示文（ai.js）、Gemini呼び出し（gemini.js）、名前の小道具（report.js）
 - scripts/：setup.mjs（公開まで全自動）、check-gemini.mjs（AIの動作確認）
 - AGENTS.md：GenCode 用のルール／SPEC.md：仕様書
 
@@ -43,5 +43,5 @@ main ブランチに入ると、GitHub Actions（`.github/workflows/deploy.yml`�
 2. GitHub のこのリポジトリ → Settings → Secrets and variables → Actions →「New repository secret」→ 名前 `CLOUDFLARE_API_TOKEN`、値に1のトークンを貼って保存
 3. GitHub の Actions →「Cloudflareに公開」→「Run workflow」で、すぐ公開もできる
 
-GEMINI_API_KEY と ADMIN_PASSCODE は、Cloudflare に登録ずみのものがそのまま使われます（GitHub には入れません）。
+GEMINI_API_KEY は、Cloudflare に登録ずみのものがそのまま使われます（GitHub には入れません）。
 

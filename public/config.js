@@ -379,18 +379,15 @@ window.APP_CONFIG = {
     "文章とハッシュタグを確認した",
   ],
 
-  // パネラー用ページ（/judge）の「どなたですか？」に出す名前（普段使いでは使わない）
-  judges: ["ゲストさん"],
-
-  // 「投稿したで！」の報告（イベントで使うときだけ設定。普段は null でOFF）
-  report: null,
+  // 過去の記録（/archive）の表彰リストで、★を付けた人を並べる順（10/6 の富士通の回だけ。報告・審査の機能は 2026-10-22 になくした）
+  judges: [],
 
   // 「困ったら」で出す案内（画面ごと）。staff はどの画面でもいちばん上に出る
   help: {
     staff: "わからへんときは、/下のヒントをみてな",
     staffSub: "順番どおりで進めたら、必ずできるで。",
     tips: {
-      pick: ["最初に、お名前を入れてください（報告などに使うで）", "「じぶんのAIのキーを入れる」は、最初の1回だけ。手順どおりなら5分ぐらい", "ネタは何も選ばんでOK。「このネタで始める」ですすめます", "質問に答えると、LinkedInの投稿文ができます"],
+      pick: ["最初に、お名前を入れてください", "「じぶんのAIのキーを入れる」は、最初の1回だけ。手順どおりなら5分ぐらい", "ネタは何も選ばんでOK。「このネタで始める」ですすめます", "質問に答えると、LinkedInの投稿文ができます"],
       answer: ["マイクを押して話すと、文字になります", "うまく入らないときは、キーボードのマイクでも話せます", "ひとことでOK。必須でない質問は「とばす」で次へ"],
       style: ["そのままでOK。下の「つくってもらう」を押してください", "じぶん色は、あとで変えられるから、さらっとでOK"],
       loading: ["10秒ほど待ってください"],
@@ -462,6 +459,22 @@ window.APP_CONFIG = {
         cheer: { ...B.style.cheer, default: "入れる" },
       },
       cards: [
+        {
+          id: "intro",
+          label: "自己紹介",
+          caption: "大学・学年・/興味のあること",
+          question: "はじめての投稿やね。/あなたのことを/かんたんに教えて",
+          placeholder: "例：〇〇大学 経済学部の3年生。マーケティングに興味がある",
+          chips: ["大学・学部・学年", "興味のある業界", "力を入れてること", "LinkedInを始めたばかり"],
+        },
+        {
+          id: "why",
+          label: "参加した/きっかけ",
+          caption: "なんで来た？",
+          question: "LSCWに/参加したきっかけは？",
+          placeholder: "例：外資系企業の人の話を、直接聞いてみたかった",
+          chips: ["企業の人と話したかった", "セミナーが気になった", "友だちに誘われて", "LinkedInを始めたくて", "就活の情報集め"],
+        },
         {
           id: "learn",
           label: "今日の/学び・気づき",
@@ -552,19 +565,62 @@ window.APP_CONFIG = {
           placeholder: "例：次は自分が話す側になってみたい",
         },
       ],
+      // どんな投稿にする？（会場で使いやすい順）。aiTheme はAIに渡すテーマ。質問はセットに書いた順で聞く（keepSetOrder）
+      keepSetOrder: true,
       sets: [
-        { id: "one", size: 1, theme: "basic", label: "学び・気づきだけ", who: "いちばん大事なところだけ、ぎゅっと書く", cards: ["learn"], recommended: true },
-        { id: "basic3", size: 3, theme: "basic", label: "今日の3つ", who: "迷ったらこれ。今日の流れのまま書ける", cards: ["learn", "session", "next"], recommended: true },
+        { id: "one", size: 1, theme: "basic", label: "参加した感想", aiTheme: "LSCWに参加した感想", who: "いちばん大事な学びだけ、ぎゅっと書く", cards: ["learn"], recommended: true },
+        { id: "basic3", size: 3, theme: "basic", label: "参加した感想", aiTheme: "LSCWに参加した感想", who: "迷ったらこれ。来たきっかけ→学び→次の一歩で、今日の感想がまとまる", cards: ["why", "learn", "next"], recommended: true },
+        { id: "first3", size: 3, theme: "first", label: "はじめての投稿", aiTheme: "LinkedInではじめての投稿。かんたんな自己紹介と、LSCWに参加して学んだこと", who: "LinkedInにはじめて投稿する人に。自己紹介と今日のことを、ちょうどよく", cards: ["intro", "learn", "next"] },
+        { id: "company3", size: 3, theme: "company", label: "企業ブースで話したこと", aiTheme: "LSCWの企業ブースで、企業の人と話したこと", who: "ブースで話した企業のことを、お礼も込めて残したい人に", cards: ["company", "learn", "thanks"] },
+        { id: "session3", size: 3, theme: "session", label: "セミナー・パネルの学び", aiTheme: "LSCWのセミナー・パネルトークで学んだこと", who: "登壇者の話で心に残ったことを、学びとして残したい人に", cards: ["session", "learn", "next"] },
+        { id: "people3", size: 3, theme: "people", label: "出会い・つながり", aiTheme: "LSCWでの出会いと、新しいつながり", who: "話した人・つながった人のことを書きたい人に", cards: ["person", "learn", "thanks"] },
         { id: "dream3", size: 3, theme: "dream", label: "私の夢を書く", who: "LSCWで話題の「私の夢」。将来やりたいことと、今日の学びをつなげる", cards: ["dream", "learn", "next"] },
-        { id: "company3", size: 3, theme: "company", label: "企業との出会い", who: "ブースやセミナーで話した企業のこと、お礼も込めて残したい人に", cards: ["company", "learn", "thanks"] },
-        { id: "career3", size: 3, theme: "career", label: "就活・キャリア", who: "いま考えてることも、正直に残したい人に", cards: ["learn", "career", "next"] },
-        { id: "self3", size: 3, theme: "self", label: "自己紹介も", who: "はじめて投稿する人に。自分のことも知ってほしい人に", cards: ["focus", "learn", "next"] },
-        { id: "basic5", size: 5, theme: "basic", label: "今日をじっくり", who: "今日の流れが、まるごと伝わる", cards: ["learn", "session", "company", "career", "next"], recommended: true },
+        { id: "career3", size: 3, theme: "career", label: "就活・キャリアのいま", who: "いま考えてることも、正直に残したい人に", cards: ["career", "learn", "next"] },
+        { id: "basic5", size: 5, theme: "basic", label: "参加した感想をじっくり", aiTheme: "LSCWに参加した感想", who: "今日の流れが、まるごと伝わる", cards: ["why", "learn", "session", "company", "next"], recommended: true },
+        { id: "first5", size: 5, theme: "first", label: "はじめての投稿をじっくり", aiTheme: "LinkedInではじめての投稿。自己紹介と、LSCWに参加したきっかけ・学び・これから", who: "はじめて読む人に、自分のことと今日のことをしっかり伝えたい人に", cards: ["intro", "why", "learn", "focus", "next"] },
+        { id: "company5", size: 5, theme: "company", label: "企業ブースをじっくり", aiTheme: "LSCWの企業ブースで、企業の人と話したこと", who: "話した企業・人のことを、感謝と一緒にしっかり残したい人に", cards: ["why", "company", "learn", "thanks", "next"] },
+        { id: "session5", size: 5, theme: "session", label: "セミナーの学びをじっくり", aiTheme: "LSCWのセミナー・パネルトークで学んだこと", who: "話の中身と、自分の考えまでしっかり書きたい人に", cards: ["session", "learn", "career", "mood", "next"] },
+        { id: "people5", size: 5, theme: "people", label: "出会いをじっくり", aiTheme: "LSCWでの出会いと、新しいつながり", who: "出会った人・企業と、そこからの学びをしっかり残したい人に", cards: ["why", "person", "company", "learn", "next"] },
         { id: "dream5", size: 5, theme: "dream", label: "私の夢をじっくり", who: "夢と、いま力を入れていることと、今日の学びをつなげたい人に", cards: ["dream", "focus", "learn", "career", "next"] },
-        { id: "company5", size: 5, theme: "company", label: "企業との出会いをじっくり", who: "話した企業・人のことを、感謝と一緒にしっかり残したい人に", cards: ["company", "session", "learn", "thanks", "next"] },
         { id: "career5", size: 5, theme: "career", label: "就活・キャリアじっくり", who: "考えてることと、今日の学びをつなげたい人に", cards: ["career", "learn", "session", "focus", "next"] },
-        { id: "self5", size: 5, theme: "self", label: "自己紹介もじっくり", who: "はじめて読む人に、自分のことをしっかり伝えたい人に", cards: ["focus", "learn", "person", "career", "next"] },
       ],
+      // 参加企業（最初の画面の「どんな投稿にする？」に並べる）。ロゴを押すと採用ページがひらく
+      // ロゴは public/logos/（公式サイトの協賛一覧から切り出し）。LinkedIn のロゴは使わない（デザインのルール）
+      // url は 2026/10 に検索で確かめたもの。採用ページが見つからなかった会社は LSCW の公式サイトへ
+      companies: {
+        title: "今日の参加企業",
+        note: "ロゴを押すと、その会社の採用ページがひらくで。/気になった会社のことを書くなら、/上の「企業ブースで話したこと」へ。",
+        list: [
+          { name: "パナソニック", logo: "panasonic", url: "https://recruit.jpn.panasonic.com/newgrads/" },
+          { name: "ジョンソン・エンド・ジョンソン", logo: "jnj", url: "https://www.jnj.co.jp/careers/newgrads" },
+          { name: "アストラゼネカ", logo: "astrazeneca", url: "https://www.astrazeneca.co.jp/recruit/new_graduates_recruitment.html" },
+          { name: "アデコ", logo: "adecco", url: "https://www.adeccogroup.jp/recruit/recruit/freshers/info" },
+          { name: "アデコグループ（Adecco・Akkodis・LHH）", logo: "adecco-group", url: "https://www.adeccogroup.jp/recruit" },
+          { name: "アルファサイツ", logo: "alphasights", url: "https://www.alphasights.com/careers/students-and-interns/" },
+          { name: "JACインターナショナル", logo: "jac-international", url: "https://corp.jac-recruitment.jp/recruit/entry/international.html" },
+          { name: "JACリクルートメント", logo: "jac-recruitment", url: "https://corp.jac-recruitment.jp/recruit/entry/new-graduate/internship/" },
+          { name: "サンスター", logo: "sunstar", url: "https://jp.sunstar.com/recruit/" },
+          { name: "土屋鞄製造所", logo: "tsuchiya-kaban", url: "https://tsuchiya-kaban.jp/pages/recruit" },
+          { name: "YKK AP", logo: "ykkap", url: "https://www.ykkap.co.jp/company/jp/recruit/index.html" },
+          { name: "NEC", logo: "nec", url: "https://jpn.nec.com/recruit/newgraduate/index.html" },
+          { name: "トレジャーAI", logo: "treasure-ai", url: "https://jobs.treasure.ai/" },
+          { name: "JICA海外協力隊", logo: "jica", url: "https://www.jica.go.jp/volunteer/application/" },
+          { name: "アンカー・ジャパン", logo: "anker", url: "https://corp.ankerjapan.com/careers" },
+          { name: "ソニー・インタラクティブエンタテインメント", logo: "sie", url: "https://www.sie.com/jp/saiyo/newgrad.html" },
+          { name: "フィリップ モリス ジャパン", logo: "pmj", url: "https://www.pmi.com/markets/japan/ja/careers" },
+          { name: "ヌーベルメディア（NOUVELLE MÉDIAS）", logo: "nouvelle-medias", url: "" },
+          { name: "シンプレクス", logo: "simplex", url: "https://recruit.simplex.holdings/" },
+          { name: "Diggle", logo: "diggle", url: "https://corp.diggle.jp/recruit/newgrads" },
+          { name: "楽天グループ", logo: "rakuten", url: "https://corp.rakuten.co.jp/careers/graduates/" },
+          { name: "ブルード（BLUED）", logo: "blued", url: "https://blued.jp/recruit" },
+          { name: "キンドリルジャパン", logo: "kyndryl", url: "https://www.kyndryl.com/us/en/careers/early-careers" },
+          { name: "ティムタム（Arnott's）", logo: "timtam", url: "" },
+          { name: "デル・テクノロジーズ", logo: "dell", url: "https://jobs.dell.com/ja" },
+          { name: "ベネッセ i-キャリア", logo: "benesse-icareer", url: "https://note.com/bic252/m/mfec8245cdf5c" },
+          { name: "Beyond Technologies", logo: "beyond", url: "https://hrmos.co/pages/beyond-t" },
+          { name: "ダイレクトソーシング", logo: "direct-sourcing", url: "https://recruit.directsourcing-lab.com/" },
+        ],
+      },
       lastCards: ["next", "free"],
       help: {
         ...B.help,
@@ -572,7 +628,7 @@ window.APP_CONFIG = {
         staffSub: "いっしょにやります。",
         tips: {
           ...B.help.tips,
-          pick: ["最初に、お名前を入れてください", "作るもの（投稿文・見出し・自己紹介）を選んでください。見出しと自己紹介は、先に条件を決めると質問がかんたんになります", "ネタは何も選ばんでOK。下のボタンで始められます", "写真があれば「写真から作る」で入れてな（10枚まで）", "イベントの時間は「タイムスケジュールを見る」で見られます"],
+          pick: ["最初に、お名前を入れてください", "作るもの（投稿文・見出し・自己紹介）を選んでください。見出しと自己紹介は、先に条件を決めると質問がかんたんになります", "ネタは何も選ばんでOK。下のボタンで始められます", "LinkedInにはじめて投稿する人は、「どんな投稿にする？」で「はじめての投稿」を選んでな", "写真があれば「写真から作る」で入れてな（10枚まで）", "参加企業のロゴを押すと、その会社の採用ページがひらきます", "イベントの時間は「タイムスケジュールを見る」で見られます"],
           done: ["LinkedInアプリの入力欄を長押しして「貼り付け」", "選んだ写真は、LinkedInの投稿画面で添付してな", "ほかのセッションの時間は「タイムスケジュールを見る」で"],
         },
       },
@@ -732,13 +788,6 @@ window.APP_CONFIG = {
         { id: "ishizaka", label: "石坂さん風" },
       ],
       judges: ["薬袋さん", "高山 将一さん", "井上 奈央さん", "Machi Wadaさん", "松本 淳さん", "山下 翼さん", "石坂 誠さん"],
-      report: {
-        screenDefault: true, // 会場スクリーンに名前を出す（初期値）
-        screenLabel: "会場スクリーンに/名前を出す",
-        screenNote: "「◯◯さんが投稿したで！」と出るで。本文は出えへん。",
-        linkHelp: "LinkedInの自分の投稿の/「…」か「共有」から、/リンクをコピーできるで。/なくてもOK。",
-        note: "報告した投稿は、パネラーと運営が読むで。",
-      },
       help: {
         staff: "近くのスタッフに、/この画面を見せてください",
         staffSub: "いっしょにやります。",
@@ -748,7 +797,7 @@ window.APP_CONFIG = {
           style: ["そのままでOK。下の「つくってもらう」を押してください", "はじめて投稿する人は「書き方」で「はじめての投稿」を選んでください"],
           loading: ["10秒ほど待ってください"],
           result: ["好きな案を選んで「この案でいく」を押してください", "「こうしてほしい」に書くと、そのとおりに直します", "文章は「自分で直す」で直せます"],
-          done: ["投稿の前に、富士通ラーニングメディアをフォローしてください", "LinkedInアプリの入力欄を長押しして「貼り付け」", "投稿したら、この画面の「報告する」を押してください。審査員に届きます"],
+          done: ["投稿の前に、富士通ラーニングメディアをフォローしてください", "LinkedInアプリの入力欄を長押しして「貼り付け」"],
         },
       },
       consentLabel: "イベント運営にも/回答と投稿文を/共有する",

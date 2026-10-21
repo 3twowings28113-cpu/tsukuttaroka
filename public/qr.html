@@ -72,7 +72,6 @@
       <li><span class="n">1</span>ネタを選ぶ</li>
       <li><span class="n">2</span>しゃべる</li>
       <li><span class="n">3</span>コピーして投稿</li>
-      <li id="stepReport"><span class="n">4</span>アプリで報告</li>
     </ol>
     <p class="feedtag" id="feedTagLine" hidden></p>
     <p class="feedtag" id="followLine" hidden></p>
@@ -81,7 +80,6 @@
     <div class="qr" id="qr" role="img" aria-label="アプリのQRコード"></div>
     <div class="url" id="url"></div>
     <div class="count" id="count" aria-live="polite"></div>
-    <div class="ticker cloud" id="ticker" data-bump="46" hidden><span id="tickerText"></span></div>
   </section>
   <span class="sc sc1" aria-hidden="true">なんやて</span>
   <span class="sc sc2" aria-hidden="true">ほんま</span>
@@ -105,7 +103,6 @@
   eb.textContent = cfg.eventSub || "";
   if (cfg.eventName) eb.append(document.createElement("br"), `「${cfg.eventName}」`);
   eb.hidden = !cfg.eventSub && !cfg.eventName;
-  if (!cfg.report) document.getElementById("stepReport").hidden = true;
   if (cfg.feedTag) {
     const ft = document.getElementById("feedTagLine");
     ft.textContent = `アプリを使わずに投稿する人は ${cfg.feedTag} を付けてな`;
@@ -161,42 +158,12 @@
       .catch(() => {});
   }
 
-  // 件数と「◯◯さんが投稿したで！」（本人がOKした名前だけ。?ticker=0 で出さない）
-  const useTicker = params.get("ticker") !== "0";
-  const honor = (n) => (/(さん|様|さま|くん|ちゃん)$/.test(n) ? n : `${n}さん`);
-  const seen = new Set();
-  let latest = [], idx = 0, first = true, rot = null;
-  function showName(name, pop) {
-    const el = document.getElementById("ticker");
-    document.getElementById("tickerText").textContent = `${honor(name)}が投稿したで！`;
-    el.hidden = false;
-    if (pop) { el.classList.remove("pop"); void el.offsetWidth; el.classList.add("pop"); }
-    paint();
-  }
-  function rotate() {
-    clearInterval(rot);
-    rot = setInterval(() => {
-      if (latest.length < 2) return;
-      idx = (idx + 1) % latest.length;
-      showName(latest[idx].name, false);
-    }, 5000);
-  }
+  // できた投稿の数
   async function refresh() {
     try {
       const d = await (await fetch(evId ? `api/stats?e=${encodeURIComponent(evId)}` : "api/stats", { cache: "no-store" })).json();
       const made = (d.copied || 0) + (d.later || 0);
-      const lines = [];
-      if (made > 0) lines.push(`できた投稿 <b>${made}</b>本`);
-      if (d.reported > 0) lines.push(`投稿したで！ <b>${d.reported}</b>人`);
-      document.getElementById("count").innerHTML = lines.join("<br>");
-      if (!useTicker) return;
-      latest = d.latest || [];
-      const fresh = latest.filter((x) => !seen.has(x.name + "|" + x.at));
-      latest.forEach((x) => seen.add(x.name + "|" + x.at));
-      if (!latest.length) document.getElementById("ticker").hidden = true;
-      else if (!first && fresh.length) { idx = latest.indexOf(fresh[0]); showName(fresh[0].name, true); rotate(); }
-      else if (document.getElementById("ticker").hidden) { idx = 0; showName(latest[0].name, false); rotate(); }
-      first = false;
+      document.getElementById("count").innerHTML = made > 0 ? `できた投稿 <b>${made}</b>本` : "";
     } catch {}
   }
   refresh();

@@ -23,7 +23,6 @@
   const PAGE = window.APP_PAGE && window.APP_PAGE.preset === C.presetId ? window.APP_PAGE : null;
   const PAGE_NS = PAGE ? `.${PAGE.id}` : "";
   const STORE_KEY = "tsukuttaroka.v1" + PAGE_NS;
-  const REPORT_KEY = "tsukuttaroka.report" + PAGE_NS; // 「投稿したで！」の報告（最初からつくり直しても残す）
   const CARD = Object.fromEntries(C.cards.map((c) => [c.id, c]));
   // プロフィール文を作る（LinkedInの見出し＋自己紹介）の質問。config.js の profile
   // 見出し（headline）と自己紹介（about）は、別々に作る。先に条件（S.pcond）を決めてから質問。答えは両方で引き継ぐ
@@ -90,23 +89,7 @@
     },
   };
 
-  const reportStore = {
-    get() {
-      try {
-        const v = JSON.parse(localStorage.getItem(REPORT_KEY) || "null");
-        return v && v.id && v.name ? v : null;
-      } catch {
-        return null;
-      }
-    },
-    set(v) {
-      try {
-        localStorage.setItem(REPORT_KEY, JSON.stringify(v));
-      } catch {}
-    },
-  };
-  let REP = reportStore.get();
-  const RC = C.report || {};
+
 
   // 最初の画面で入れる名前（集計と、報告の名前に使う。最初からつくり直しても残す）
   const NAME_KEY = "tsukuttaroka.name";
@@ -169,26 +152,19 @@
     } catch {}
   }
 
-  // イベント（運営ページで作る。?e=イベントID で開く）。あいことばが合えば、主催のAIキーで作れる（参加者はキーを作らなくていい）
+  // イベント（運営ページで作る。?e=イベントID で開く）。URLを開いた人は、主催のAIキーで作れる（参加者はキーを作らなくていい）
   const EV_KEY = "tsukuttaroka.event" + PAGE_NS;
   const QS = new URLSearchParams(location.search);
   let EVID = "";
-  let EVPASS = "";
-  let EVENT = null; // サーバーから読んだもの {id, name, hashtags, cheerAlways, preset, needsPass, hasKey, open, mentions, followUrl, info, schedule, theme}
+  let EVENT = null; // サーバーから読んだもの {id, name, hashtags, cheerAlways, preset, hasKey, open, mentions, followUrl, info, schedule, theme}
   try {
     const v = JSON.parse(localStorage.getItem(EV_KEY) || "null");
-    if (v && v.id) {
-      EVID = String(v.id);
-      EVPASS = String(v.pass || "");
-    }
+    if (v && v.id) EVID = String(v.id);
   } catch {}
   if (QS.has("e")) {
-    const id = String(QS.get("e") || "").trim().toLowerCase().slice(0, 40);
-    if (id !== EVID) EVPASS = "";
-    EVID = id; // ?e= を空で開くと、イベントから外れる
+    EVID = String(QS.get("e") || "").trim().toLowerCase().slice(0, 40); // ?e= を空で開くと、イベントから外れる
   } else if (!EVID && PAGE && PAGE.event) EVID = PAGE.event; // イベント専用ページは、そのページのイベントで動く
-  // QRに入れたあいことば（?p=）は、読んだらアドレス欄から消す（スクショや共有で広がらないように）
-  const URL_PASS = String(QS.get("p") || "").trim().slice(0, 60);
+  // 前の版のQRに入っていたあいことば（?p=）は、もう使わないのでアドレス欄から消す
   if (QS.has("p")) {
     QS.delete("p");
     try {
@@ -197,13 +173,12 @@
   }
   function saveEvent() {
     try {
-      if (EVID) localStorage.setItem(EV_KEY, JSON.stringify({ id: EVID, pass: EVPASS }));
+      if (EVID) localStorage.setItem(EV_KEY, JSON.stringify({ id: EVID }));
       else localStorage.removeItem(EV_KEY);
     } catch {}
   }
-  const eventNeedsPass = () => !!(EVENT && EVENT.needsPass);
-  // あいことばのないイベントは、URLを開いただけで、イベントのAIキー（なければサーバーのキー）で作れる
-  const eventKeyReady = () => !!(EVENT && EVENT.hasKey && (!EVENT.needsPass || EVPASS));
+  // イベントのURLを開いただけで、イベントのAIキー（なければサーバーのキー）で作れる
+  const eventKeyReady = () => !!(EVENT && EVENT.hasKey);
 
   // Googleカレンダー（秘密のiCalアドレス）。URLはこの端末にだけ保存する
   const CAL_KEY = "tsukuttaroka.cal";
@@ -392,7 +367,6 @@
     micBlocked: !SR,
     micReason: SR ? "" : "unsupported",
     swapOpen: false,
-    reporting: false,
     ask: "", // 「こうしてほしい」の下書き
     modeFrom: "", // 書き方シートをどこから開いたか（gen＝作る前／regen＝作り直し）
     rep: null, // 報告シートの下書き
@@ -468,6 +442,8 @@
   function flowCards() {
     if (isProfile()) return profileCards();
     const sel = S.selected.map((id) => CARD[id]).filter(Boolean);
+    // keepSetOrder のプリセット（LSCW）は、テーマのセットを config.js に書いた順で聞く（「はじめての投稿」は自己紹介から）。それ以外とじぶんで選ぶときは必須を先に
+    if (C.keepSetOrder && S.setId && !S.free && setById(S.setId)) return [...sel, FEEL_CARD];
     return [...sel.filter((c) => c.required), ...sel.filter((c) => !c.required), FEEL_CARD];
   }
   // 見出し・自己紹介の質問：条件に合わせて、聞き方・例・候補を変える。「いちばん伝えたいこと」の質問は2問目で必須
@@ -539,7 +515,8 @@
     }
     return {
       answers,
-      theme: String(S.customTheme || "").trim().slice(0, 60),
+      // 「じぶんで決める」のテーマ。なければ、選んだテーマのAI向けの説明（config.js の aiTheme。LSCW の「はじめての投稿」など）
+      theme: (String(S.customTheme || "").trim() || (S.free ? "" : (setById(S.setId) || {}).aiTheme || "")).slice(0, 60),
       voice: VOICE.on && VOICE.text ? VOICE.text.slice(0, 2000) : "",
       profile: { role: S.style.role || "" },
       style: {
@@ -702,7 +679,7 @@
     const html = `
       <div class="big-row"><button type="button" class="big-toggle" data-act="bigText" aria-pressed="${isBig()}"><span class="big-a" aria-hidden="true">あ</span>${isBig() ? "文字を元にもどす" : "文字を大きくする"}</button></div>
       ${eventHeadHtml()}
-      ${aiReady() && (MYKEY || advOn() || EVENT.needsPass) ? `<p class="key-on bx">${advOn() ? `じぶんのAI（${esc(AISET.model)}）で文章を作るで` : MYKEY ? "じぶんのGeminiで文章を作るで" : "イベントのあいことばで作るで"}</p>` : ""}
+      ${aiReady() && (MYKEY || advOn()) ? `<p class="key-on bx">${advOn() ? `じぶんのAI（${esc(AISET.model)}）で文章を作るで` : "じぶんのGeminiで文章を作るで"}</p>` : ""}
       <section class="hero cloud" data-bump="46" data-seed="3">
         ${C.eventPage || !(C.eventSub || C.eventName) ? "" : `<p class="hero-eyebrow">${esc(C.eventSub || "")}${C.eventName ? `<br>「${esc(C.eventName)}」` : ""}</p>`}
         <h1 class="hero-title bx" tabindex="-1">${fmt(C.appName)}</h1>
@@ -720,14 +697,14 @@
         <div class="name-box${T.nameMissing ? " is-missing" : ""}">
           <label class="name-label" for="myName">まず、お名前<span class="req-inline">必須</span></label>
           <input id="myName" class="name-input" type="text" maxlength="40" autocomplete="name" enterkeyhint="done" placeholder="例：山下 翼" value="${esc(MYNAME)}">
-          <p class="name-note bx">LinkedInと同じ名前で。<wbr>投稿の報告にも使うで</p>
+          <p class="name-note bx">LinkedInと同じ名前で</p>
         </div>
         ${followNeeded() ? followGateHtml() : ""}
         <p class="hero-note bx">${isProfile() ? "下で条件を決めると、<wbr>あなたに合わせた質問になるで。<wbr>書いたことだけ使うで" : "何も選ばんでOK。<wbr>質問に答えるだけで<wbr>投稿文ができるで"}</p>
         ${
           eventKeyReady() && !MYKEY
             ? ""
-            : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block${aiReady() ? "" : " is-unset"}" data-act="openKey">${aiReady() ? "作るAIを見る・変える" : eventNeedsPass() ? '<span class="badge-unset">未設定</span>イベントのあいことばを入れる' : '<span class="badge-unset">未設定</span>文章を作るAIを紐づける（無料・約5分）'}</button></p>`
+            : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block${aiReady() ? "" : " is-unset"}" data-act="openKey">${aiReady() ? "作るAIを見る・変える" : '<span class="badge-unset">未設定</span>文章を作るAIを紐づける（無料・約5分）'}</button></p>`
         }
         ${isProfile() ? "" : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block bx" data-act="cal">カレンダーから<wbr>投稿をつくる<wbr>${CALURL ? "（つないでる）" : "（まずつなぐ・1分）"}<span class="badge-opt">任意</span></button></p>`}
         ${histGet().length ? `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block" data-act="hist">マイ投稿記録（${histGet().length}件）</button></p>` : ""}
@@ -752,6 +729,7 @@
           <input id="customTheme" class="phrase" type="text" maxlength="60" autocomplete="off" placeholder="例：娘の運動会の話を書きたい" value="${esc(S.customTheme || "")}">
           <p class="field-note bx">ここに書いたテーマがAIにそのまま伝わるで。<wbr>${customOn ? "「じぶんで決める」のときは、<wbr>テーマを書くのが必須やで。" : "当てはまるテーマが無いときは、<wbr>ここに書いてな。"}</p>
         </div>
+        ${companiesHtml()}
       </section>
       <section class="block">
         <h2 class="sec-title">いま選んでる質問（この順で聞くで）</h2>
@@ -765,16 +743,33 @@
       </section>
       ${swap}`
       }
-      ${C.report ? `<p class="self-report">${
-        REP
-          ? `<button type="button" class="btn-text" data-act="reportSelf">${ICON.check}<span class="bx">投稿の報告ずみ<wbr>（直す・リンクを足す）</span></button>`
-          : '<button type="button" class="btn-text bx" data-act="reportSelf">アプリを使わずに<wbr>投稿した人は、<wbr>ここから報告</button>'
-      }</p>` : ""}
       ${MODE === "preview" ? '<p class="center"><button type="button" class="btn-text" data-act="demo">例文を入れて試す</button></p>' : ""}`;
     const dockHtml = isProfile()
       ? `<button type="button" class="btn btn-primary" data-act="toAnswer">この条件で質問へ<span class="btn-sub">${flowCards().length}問</span></button>`
       : `<button type="button" class="btn btn-primary" data-act="toAnswer">このネタで始める<span class="btn-sub">${n}問</span></button>`;
     return { html, dockHtml };
+  }
+
+  // 参加企業のロゴ（イベントのプリセットに companies があるときだけ）。押すと採用ページ（無ければイベントの公式サイト）
+  function companiesHtml() {
+    const co = C.companies;
+    if (!co || !Array.isArray(co.list) || !co.list.length) return "";
+    const site = (C.eventPage && C.eventPage.siteUrl) || "";
+    const items = co.list
+      .map((c) => {
+        const url = c.url || site;
+        const img = `<img src="logos/${esc(c.logo)}.png" alt="" loading="lazy" decoding="async">`;
+        const label = `${c.name}${c.url ? "の採用ページ" : "（イベントの公式サイト）"}（新しいタブでひらく）`;
+        return url
+          ? `<li><a class="co" href="${esc(url)}" target="_blank" rel="noopener" aria-label="${esc(label)}">${img}</a></li>`
+          : `<li><span class="co" role="img" aria-label="${esc(c.name)}">${img}</span></li>`;
+      })
+      .join("");
+    return `<div class="companies">
+          <h3 class="co-title">${esc(co.title || "参加企業")}<span class="co-count">${co.list.length}社</span></h3>
+          <p class="sec-note bx">${fmt(co.note || "")}</p>
+          <ul class="co-grid">${items}</ul>
+        </div>`;
   }
 
   // 見出し・自己紹介の条件（最初の画面の下）。決めた条件で、質問の聞き方と候補が変わる
@@ -1241,9 +1236,7 @@
 
   // 投稿のしかた（LinkedInをひらく前に読む）。step は自動で番号を振る
   function guideSteps(after) {
-    const lastNote = C.report
-      ? (S.sendJudge !== false && myName() ? "審査員には、下のボタンを押したときに届くで" : "おわったら、この画面にもどって「報告する」を押してな")
-      : (after ? "これで完了。おつから！" : "投稿できたら、この画面をとじてもOK");
+    const lastNote = after ? "これで完了。おつから！" : "投稿できたら、この画面をとじてもOK";
     const steps = [
       `<b>LinkedInがひらいたら、下の「投稿」をタップ</b><span class="sub">パソコンは、ホーム上の「投稿を開始」</span>`,
       `<b>入力欄を長押しして「貼り付け」</b><span class="sub">もう文章が入ってたら、そのままでOK</span>`,
@@ -1289,15 +1282,10 @@
   function viewDone() {
     const d = S.done;
     const tag = C.feedTag || C.hashtags[0];
-    const reported = C.report && REP && REP.source === "app" && REP.doneText === d.text;
     const title = d.action === "later" ? (d.shared ? "送ったで！" : "コピーしたで！") : "いってらっしゃい！";
     const lead =
       d.action === "later"
         ? "投稿するときは、この順番でどうぞ。"
-        : reported
-        ? "もう報告も済んでるで。<wbr>投稿のリンクを足したい人は、<wbr>下のボタンから。"
-        : C.report
-        ? "投稿できたら、<wbr>下の「報告する」を押してな。<wbr>審査員が読むで！"
         : "無事に投稿できたら完璧やで。<wbr>つぎの投稿も、<wbr>また作りに来てな。";
     const html = `
       <div class="done-cloud cloud" data-bump="34" data-seed="9">
@@ -1321,18 +1309,13 @@
       </details>
       <div class="tips">
         <p><b>みんなの投稿も見てみよ</b><br>LinkedInで <span class="key">${esc(tag)}</span> をタップすると並んでるで。コメントし合うと、つながりが続くで。</p>
-        ${C.report ? '<p><b>表彰は会場で</b><br>表彰は、会場で投稿して審査員に届いた人から選ばれるで。</p>' : ""}
       </div>
       <p class="center small"><a href="${esc(C.signupUrl)}" target="_blank" rel="noopener">LinkedInのアカウントがまだの人はこちら</a></p>
       <div class="done-foot">
         <button type="button" class="btn-text" data-act="toResult">別のパターンにする</button>
         <button type="button" class="btn-text" data-act="restart">最初からつくる</button>
       </div>`;
-    const dockHtml = reported
-      ? `<button type="button" class="btn btn-secondary btn-block btn-reported" data-act="report">${ICON.check}<span>報告ずみ（直す・リンクを足す）</span></button>`
-      : C.report
-      ? '<button type="button" class="btn btn-primary" data-act="report">投稿できたら、報告する</button>'
-      : '<button type="button" class="btn btn-primary" data-act="restart">もう一本つくる</button>';
+    const dockHtml = '<button type="button" class="btn btn-primary" data-act="restart">もう一本つくる</button>';
     return { html, dockHtml };
   }
 
@@ -1371,10 +1354,6 @@
         <button type="button" class="switch" role="switch" aria-checked="${S.consent}" aria-labelledby="consentLabel" data-act="consent"></button>
         <div><div class="consent-label bx" id="consentLabel">${fmt(C.consentLabel)}</div><div class="consent-note">${esc(C.consentNote)}</div></div>
       </div>
-      ${C.report && myName() ? `<div class="consent consent-judge">
-        <button type="button" class="switch" role="switch" aria-checked="${S.sendJudge !== false}" aria-labelledby="judgeLabel" data-act="sendJudge"></button>
-        <div><div class="consent-label bx" id="judgeLabel">審査員にも、<wbr>この文章を送る</div><div class="consent-note bx">${esc(myName())}さんの投稿として、<wbr>表彰の候補になるで。<wbr>あとで直すこともできるで。</div></div>
-      </div>` : ""}
       <div class="stack">
         <button type="button" class="btn btn-primary btn-block" id="toGuide" data-act="toGuide" aria-disabled="${!ready}">つぎへ（投稿のしかた）</button>
         <button type="button" class="btn-text" data-act="closeSheet">もどって直す</button>
@@ -1388,94 +1367,6 @@
     if (sc2) sc2.scrollTop = y;
   }
 
-  // ---------- 「投稿したで！」の報告 ----------
-  // LinkedInの投稿リンクを、貼り付けた文の中から取り出す（サーバーの src/report.js と同じ考え方）
-  function pickLinkedInUrl(text) {
-    const t = String(text || "").trim();
-    if (!t) return { url: "" };
-    const m = t.match(/https?:\/\/[^\s<>"'）」』]+/i) || t.match(/(?:www\.)?(?:linkedin\.com|lnkd\.in)\/[^\s<>"'）」』]+/i);
-    if (!m) return { error: "url" };
-    let raw = m[0];
-    if (!/^https?:\/\//i.test(raw)) raw = "https://" + raw;
-    try {
-      const u = new URL(raw);
-      if (!/(^|\.)linkedin\.com$|^lnkd\.in$/i.test(u.hostname)) return { error: "url" };
-      u.protocol = "https:";
-      for (const k of [...u.searchParams.keys()]) if (/^(utm_|trk|rcm$)/i.test(k)) u.searchParams.delete(k);
-      u.hash = "";
-      return { url: u.toString() };
-    } catch {
-      return { error: "url" };
-    }
-  }
-  const canPaste = () => !!(navigator.clipboard && navigator.clipboard.readText && window.isSecureContext);
-
-  // entry：「done」＝投稿ガイドから（アプリで作った投稿）／「pick」＝最初の画面から（自分で書いた人・報告を直す人）
-  function openReport(entry) {
-    let mode, keep;
-    if (entry === "done") {
-      mode = "app";
-      keep = !!(REP && REP.source === "app" && S.done && REP.doneText === S.done.text);
-    } else {
-      mode = REP ? REP.source : "self";
-      keep = !!REP;
-    }
-    T.rep = {
-      mode,
-      editing: keep,
-      name: (REP && REP.name) || myName(),
-      url: keep ? REP.url || "" : "",
-      body: keep ? REP.body || "" : mode === "app" ? (S.done && S.done.text) || "" : "",
-      tone: keep ? REP.tone || "" : mode === "app" && S.done ? S.done.tone || "" : "",
-      doneText: keep ? REP.doneText || "" : mode === "app" && S.done ? S.done.text : "",
-      screenOk: REP ? REP.screenOk !== false : RC.screenDefault !== false,
-    };
-    openSheet(reportSheetHtml(), !T.rep.name ? "#rName" : T.rep.mode === "self" ? "#rUrl" : "#rSend");
-  }
-  function reportSheetHtml() {
-    const r = T.rep;
-    const self = r.mode === "self";
-    const linkField = `<div class="field">
-          <label class="field-label" for="rUrl">投稿のリンク<span class="field-hint">あれば</span></label>
-          <div class="paste-row">
-            <input id="rUrl" class="phrase" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://www.linkedin.com/posts/…" value="${esc(r.url)}">
-            ${canPaste() ? '<button type="button" class="btn btn-secondary btn-paste" data-act="rPaste">貼り付け</button>' : ""}
-          </div>
-          <p class="field-note bx">${fmt(RC.linkHelp || "")}</p>
-        </div>`;
-    const bodyField = self
-      ? `<div class="field">
-          <label class="field-label" for="rBody">投稿した文章<span class="field-hint">貼り付け。リンクがあれば省略OK</span></label>
-          <textarea id="rBody" class="r-text" rows="6" maxlength="3500" placeholder="LinkedInに投稿した文章を貼り付け">${esc(r.body)}</textarea>
-        </div>`
-      : `<details class="r-body">
-          <summary>パネラーに届く本文を見る・直す</summary>
-          <textarea id="rBody" class="r-text" rows="8" maxlength="3500">${esc(r.body)}</textarea>
-          <p class="field-note">LinkedInで書き直した人は、ここも同じに直してな。</p>
-        </details>`;
-    return `
-      <div class="sheet-grip" aria-hidden="true"></div>
-      <h2 class="sheet-title" id="sheetTitle">${r.editing ? "報告を直す" : self ? "投稿したことを報告" : "投稿できた？"}</h2>
-      <p class="sheet-lead bx">${r.editing ? "直して、もう一回送ってな。" : self ? "報告すると、<wbr>パネラーが読んで<wbr>表彰の候補にするで！" : "名前を入れて「報告する」を<wbr>押すだけでOK。<wbr>パネラーが読んで<wbr>表彰の候補にするで！"}</p>
-      <div class="r-fields">
-        <div class="field">
-          <label class="field-label" for="rName">お名前<span class="field-hint">LinkedInと同じ名前</span></label>
-          <input id="rName" class="phrase" type="text" maxlength="40" autocomplete="name" placeholder="例：山下 翼" value="${esc(r.name)}">
-        </div>
-        ${self ? linkField : `<details class="r-more"${r.url ? " open" : ""}><summary>リンクも送る（できる人だけ）</summary>${linkField}</details>`}
-        ${bodyField}
-      </div>
-      <div class="consent">
-        <button type="button" class="switch" role="switch" aria-checked="${r.screenOk}" aria-labelledby="rScreenLabel" data-act="rScreen"></button>
-        <div><div class="consent-label bx" id="rScreenLabel">${fmt(RC.screenLabel || "会場スクリーンに名前を出す")}</div><div class="consent-note bx">${fmt(RC.screenNote || "")}</div></div>
-      </div>
-      <p class="r-note bx">${fmt(RC.note || "")}</p>
-      <p class="r-error" id="rError" role="alert"></p>
-      <div class="stack">
-        <button type="button" class="btn btn-primary btn-block" id="rSend" data-act="rSend">${r.editing ? "直して送る" : "報告する"}</button>
-        <button type="button" class="btn-text" data-act="closeSheet">${r.editing ? "やめとく" : "あとで"}</button>
-      </div>`;
-  }
   function modeOpts() {
     return MODES.map(
       (m) => `<button type="button" class="opt" role="radio" aria-checked="${(S.mode || "") === m.id && (!m.tone || (S.startTone || "emo") === m.tone)}" data-act="mode" data-id="${esc(m.id)}" data-tone="${esc(m.tone || "")}">
@@ -1580,8 +1471,7 @@
     return `
       <div class="sheet-grip" aria-hidden="true"></div>
       <h2 class="sheet-title" id="sheetTitle">文章を作るAIを紐づける</h2>
-      ${eventPassHtml()}
-      <p class="sheet-lead bx">投稿文を作るAI（Gemini）を、<wbr>あなた自身のアカウントで使えるようにするで。<wbr>キーは無料で作れて、<wbr>一度紐づけたら二度と入らなくていい。</p>
+      <p class="sheet-lead bx">投稿文を作るAI（Gemini）を、<wbr>あなた自身のアカウントで使えるようにするで。<wbr>キーは無料で作れて、<wbr>一度紐づけたら二度と入らなくていい。<wbr>ただ、無料のキーは<b>1日に使える回数に上限</b>があるで（くわしくは下の「何回まで使える？」）。</p>
       ${advOn() ? `<p class="key-on bx">いま：<b>Gemini以外のAI（${esc(AISET.model)}）で作ってるで</b>。<wbr>Geminiに戻すときは、下の「上級者向け」でやめる。</p>` : MYKEY ? '<p class="key-on bx">いま：<b>Gemini（じぶんのキー）で作ってるで</b>。設定ずみ（この端末）</p>' : '<p class="key-off bx">いまは、<b>まだAIがつながってへん</b>。<wbr>このままだと投稿文が作れへんから、<wbr>下の手順どおりに約5分でつなげてな。</p>'}
       <ol class="key-steps">
         <li class="bx">下の「Google AI Studioをひらく」を押して、いつもGmailで使ってる自分のGoogleアカウントでログインする</li>
@@ -1601,6 +1491,26 @@
         <p class="key-on" id="keyStatus" hidden></p>
         ${MYKEY && !advOn() ? '<button type="button" class="btn-text" data-act="clearKey">この端末のキーを消す</button>' : ""}
       </div>
+      <details class="key-trouble key-limit" id="keyLimit">
+        <summary>無料のキーは、何回まで使える？（上限と、たくさん使いたいとき）</summary>
+        <div class="key-box">
+          <p class="key-note bx"><b>無料のキーには、Googleが決めた回数の上限があるで。</b><wbr>1日に作れるのは、だいたい数十回まで。<wbr>いちばん賢いモデルは1日20回ほどしかない（2026年10月時点。<wbr>Googleがときどき変える）。<wbr>上限に当たったら、このアプリは回数の多い軽いモデルに自動で切りかえるで。</p>
+          <p class="key-note bx"><b>1分あたりの上限</b>もあるから、続けて何回も作ると止まることがある。<wbr>そのときは1分待てば直る。</p>
+          <p class="key-note bx"><b>1日の回数は、日本時間の夕方（16〜17時ごろ）にリセット</b>される<wbr>（アメリカ西海岸の夜0時）。</p>
+          <p class="key-note bx"><b>何回でも気にせず使いたい人は、課金の設定をするだけでOK。</b><wbr>前払いで5ドル（約750円）チャージすると、<wbr>上限がぐっと上がる。<wbr>投稿1本はだいたい1〜5円やから、<wbr>5ドルで数百本作れるで。</p>
+          <ol class="key-steps">
+            <li class="bx">下の「AI Studioの上限・課金をひらく」を押す（キーを作ったのと同じGoogleアカウント）</li>
+            <li class="bx">「APIキー」のページで、自分のプロジェクトの<b>「課金を設定」</b>（Set up billing）を押す</li>
+            <li class="bx">国・カードの情報を入れて、<b>5ドル（最低額）をチャージ</b>する。自動でチャージする設定は、オフのままでOK</li>
+            <li class="bx">「Tier 1」（有料の1段目）になったら完成。キーはそのまま使える（入れ直しはいらん）</li>
+          </ol>
+          <p class="key-note bx">使いすぎが心配なら、<wbr>Google Cloud の「お支払い」→「予算とアラート」で、<wbr>使った金額のお知らせを出せる。<wbr>前払いやから、チャージした分より多くは払わへん。</p>
+          <p class="key-note bx">無料のキーで作ると、<wbr>入れた文章や写真がGoogleのAIの改善に使われることがある。<wbr>課金を設定すると使われへん。<wbr>個人情報は入れすぎんようにな。</p>
+          <div class="key-actions">
+            <a class="btn btn-secondary" href="https://aistudio.google.com/rate-limit" target="_blank" rel="noopener">AI Studioの上限・課金をひらく</a>
+          </div>
+        </div>
+      </details>
       <details class="key-trouble" ${advOn() ? "open" : ""}>
         <summary>上級者向け：Gemini以外のAIをつなぐ（Claude・GPTなど）</summary>
         <div class="key-box">
@@ -1913,132 +1823,6 @@
     rd.readAsText(f);
   }
 
-  function reportDoneHtml() {
-    return `
-      <div class="r-done">
-        <div class="stamp cloud is-fresh" data-bump="24" data-seed="13"><span>届いたで！</span></div>
-        <h2 class="sheet-title" id="sheetTitle">パネラーに届いたで！</h2>
-        <p class="sheet-lead bx">表彰、お楽しみに。<wbr>リンクはあとから<wbr>足すこともできるで。</p>
-        <div class="stack"><button type="button" class="btn btn-primary btn-block" data-act="closeSheet">とじる</button></div>
-      </div>`;
-  }
-  function reportError(msg, focusSel) {
-    const e = $("#rError", sheet);
-    if (e) e.textContent = msg;
-    const f = focusSel && $(focusSel, sheet);
-    if (f) f.focus();
-  }
-  async function pasteUrl() {
-    try {
-      const t = await navigator.clipboard.readText();
-      const u = pickLinkedInUrl(t);
-      const box = $("#rUrl", sheet);
-      if (!box) return;
-      box.value = u.url || String(t || "").trim();
-      reportError(u.error ? "コピーしたのがLinkedInのリンクやないみたい。もう一回コピーしてな" : "");
-    } catch {
-      toast("入力欄を長押しして「貼り付け」してな", 2200);
-      const box = $("#rUrl", sheet);
-      if (box) box.focus();
-    }
-  }
-  async function sendReport() {
-    if (T.reporting) return;
-    const r = T.rep;
-    const self = r.mode === "self";
-    const name = ($("#rName", sheet).value || "").replace(/\s+/g, " ").trim();
-    const rawUrl = ($("#rUrl", sheet).value || "").trim();
-    const bodyBox = $("#rBody", sheet);
-    const body = ((bodyBox && bodyBox.value) || "").trim();
-    if (!name) return reportError("名前を入れてな。LinkedInと同じ名前やと、パネラーが見つけやすいで", "#rName");
-    const u = pickLinkedInUrl(rawUrl);
-    if (u.error) return reportError("LinkedInの投稿のリンクを貼ってな（なくてもOK）", "#rUrl");
-    if (self && !u.url && !body) return reportError("リンクか文章の、どっちかを入れてな", "#rUrl");
-    if (!self && !body && !u.url) return reportError("本文が空っぽみたい。「パネラーに届く本文」を見てな");
-    T.reporting = true;
-    const btn = $("#rSend", sheet);
-    if (btn) {
-      btn.setAttribute("aria-disabled", "true");
-      btn.textContent = "送ってるで…";
-    }
-    const payload = {
-      clientId: S.clientId,
-      name,
-      url: u.url,
-      body,
-      source: self ? "self" : "app",
-      tone: self ? "" : r.tone,
-      screenOk: r.screenOk,
-      event: EVENT ? EVENT.id : "",
-    };
-    try {
-      const res =
-        MODE === "preview"
-          ? await new Promise((ok) => setTimeout(() => ok({ ok: true, id: "preview", url: u.url }), 450))
-          : await postJSON("api/report", payload, 15000);
-      REP = {
-        id: res.id,
-        name,
-        url: res.url || u.url,
-        body,
-        source: payload.source,
-        tone: payload.tone,
-        screenOk: r.screenOk,
-        doneText: self ? "" : r.doneText,
-        at: Date.now(),
-      };
-      reportStore.set(REP);
-      T.rep = null;
-      openSheet(reportDoneHtml(), "[data-act=closeSheet]");
-      keepScroll(render);
-    } catch (e) {
-      const code = e && e.code;
-      reportError(
-        code === "rate"
-          ? "ちょっと待ってから、もう一回押してな"
-          : code === "url"
-          ? "LinkedInの投稿のリンクを貼ってな（なくてもOK）"
-          : code === "name"
-          ? "名前を入れてな"
-          : code === "empty"
-          ? "リンクか文章の、どっちかを入れてな"
-          : code === "timeout"
-          ? "時間がかかりすぎて止まってしもた。もう一回押してな"
-          : "送られへんかった。電波のええとこで、もう一回押してな"
-      );
-      if (btn) {
-        btn.setAttribute("aria-disabled", "false");
-        btn.textContent = r.editing ? "直して送る" : "報告する";
-      }
-    } finally {
-      T.reporting = false;
-    }
-  }
-
-  // 「コピーしてLinkedInをひらく」と同時に、審査員へ報告する（LinkedInに行ったまま戻らない人のため）
-  function autoReport(text) {
-    if (MODE === "preview") return;
-    const keep = REP && REP.source === "app";
-    const payload = {
-      clientId: S.clientId,
-      name: myName(),
-      url: keep ? REP.url || "" : "",
-      body: text,
-      source: "app",
-      tone: S.tab,
-      screenOk: REP ? REP.screenOk !== false : RC.screenDefault !== false,
-      event: EVENT ? EVENT.id : "",
-    };
-    postJSON("api/report", payload, 15000)
-      .then((res) => {
-        REP = { id: res.id, name: payload.name, url: res.url || payload.url, body: text, source: "app", tone: payload.tone, screenOk: payload.screenOk, doneText: text, at: Date.now() };
-        reportStore.set(REP);
-        if (S.step === "done") keepScroll(render);
-        toast("審査員にも届いたで！", 1800);
-      })
-      .catch(() => toast("審査員への送信に失敗したで。下の「報告する」を押してな", 3000));
-  }
-
   // ---------- コピー ----------
   // ボタンを押したその場で実行する（ブラウザの制限のため）。古い方法と新しい方法の両方を試す
   function copyNow(text) {
@@ -2198,11 +1982,8 @@
     if (/api\/(generate|refine|style)/.test(url)) {
       if (MYKEY) headers["x-user-key"] = MYKEY;
       if (advOn()) headers["x-ai-config"] = b64utf8(JSON.stringify(AISET));
-      // イベントのあいことば（日本語でも送れるように、ヘッダーでは文字をエスケープする）。あいことばのないイベントは、イベントIDだけ
-      if (!MYKEY && !advOn() && eventKeyReady()) {
-        headers["x-event"] = EVENT.id;
-        if (EVPASS) headers["x-event-pass"] = encodeURIComponent(EVPASS);
-      }
+      // イベントのページから作るときは、イベントIDを送る（サーバーがイベントのキーで作る）
+      if (!MYKEY && !advOn() && eventKeyReady()) headers["x-event"] = EVENT.id;
     }
     try {
       const res = await fetch(url, {
@@ -2400,11 +2181,6 @@
   // キーが無いと作れない。シートを出して、保存したら続きを自動でやる
   function needKey(after) {
     T.keyAfter = after || "";
-    if (eventNeedsPass()) {
-      openSheet(keyHtml(), "#evPass");
-      toast("作るには、イベントのあいことばを入れてな（ブースのスタッフが教えてくれるで）", 4000);
-      return;
-    }
     openSheet(keyHtml(), "#apiKeyInput");
     toast("作るには、まず文章を作るAIを紐づけるで。シートの手順どおりなら5分ぐらいでできる", 4000);
   }
@@ -2419,7 +2195,6 @@
         // 消された・止められたイベントからは外れる
         if (res.status === 404) {
           EVID = "";
-          EVPASS = "";
           saveEvent();
         }
         return;
@@ -2429,7 +2204,6 @@
       // 専用ページのあるプリセット（LSCW → /lscw）は、そのページで開き直す。専用ページの中では開き直さない
       const target = (window.APP_PRESETS || []).find((p) => p.id === EVENT.preset);
       if (!PAGE && target && EVENT.preset !== C.presetId && !QS.has("preset")) {
-        if (URL_PASS) QS.set("p", URL_PASS);
         if (target.pagePath) {
           QS.set("e", EVENT.id);
           location.replace(`${target.pagePath}?${QS}`);
@@ -2441,7 +2215,6 @@
       }
       applyEvent(EVENT);
       saveEvent();
-      if (URL_PASS && !MYKEY && !advOn()) await unlockEvent(URL_PASS, true).catch(() => {});
     } catch {}
   }
   // 運営ページで決めたイベントの中身を、画面の設定に重ねる（空の項目は config.js のまま）
@@ -2472,51 +2245,7 @@
     }
     if (ev.theme) applyTheme(ev.theme);
   }
-  // あいことばを確かめて、この端末に覚える（ちがうときは、サーバーの説明つきのエラーを投げる）
-  async function unlockEvent(pass, silent) {
-    const v = String(pass || "").trim().slice(0, 60);
-    if (!v) throw Object.assign(new Error("あいことばを入れてな"), { code: "input" });
-    await postJSON("api/event/unlock", { e: EVID, pass: v, clientId: S.clientId }, 15000);
-    EVPASS = v;
-    saveEvent();
-    if (!silent) toast("あいことば、OKや！これで作れるで", 2400);
-  }
-  function eventPassHtml() {
-    if (!eventNeedsPass()) return "";
-    return `<div class="key-box ev-box">
-        <label class="key-label" for="evPass">イベントのあいことば${eventKeyReady() ? '<span class="key-ok">入れずみ</span>' : ""}</label>
-        <p class="key-note bx">会場のスタッフが教えてくれるで。<wbr>これを入れたら、じぶんのキーは作らんでOK。</p>
-        <input id="evPass" class="name-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="60" enterkeyhint="done" placeholder="あいことば" value="${esc(eventKeyReady() ? EVPASS : "")}">
-        <button type="button" class="btn btn-primary btn-block" data-act="evUnlock">あいことばで使う</button>
-        <p class="key-on" id="evStatus" role="status" hidden></p>
-      </div>
-      <h3 class="ev-or"><span>じぶんのキーで使う人は、こちら</span></h3>`;
-  }
-  async function evUnlockFlow() {
-    const box = $("#evPass", sheet);
-    const st = $("#evStatus", sheet);
-    const btn = $("[data-act=evUnlock]", sheet);
-    if (btn) btn.disabled = true;
-    try {
-      await unlockEvent(box && box.value, false);
-      if (T.keyAfter === "generate" && S.step) {
-        T.keyAfter = "";
-        closeSheet();
-        generate();
-        return;
-      }
-      T.keyAfter = "";
-      closeSheet();
-      if (S.step === "pick") keepScroll(render);
-    } catch (e) {
-      if (st) {
-        st.hidden = false;
-        st.classList.add("is-ng");
-        st.textContent = errorText(e);
-      }
-      if (btn) btn.disabled = false;
-    }
-  }
+
 
   // 「これで紐づける」：まずキーが使えるか確かめてから、端末に保存する
   async function saveKeyFlow() {
@@ -2630,10 +2359,6 @@
       if (h) h.focus({ preventScroll: true });
       setTimeout(() => (T.fresh = false), 800);
     } catch (e) {
-      if (e && e.code === "pass") {
-        EVPASS = "";
-        saveEvent();
-      }
       if (!loggedByServer(e)) clientLog("generate", e);
       T.error = errorText(e);
       if (before === "result" && (isProfile() ? S.presults[S.kind] : S.results)) {
@@ -2675,7 +2400,6 @@
   }
   function errorText(e) {
     const code = e && e.code;
-    if (code === "stopped") return "いまは受付を止めてるみたい。運営に声かけてな。";
     if (code === "rate") return "ちょっと連打しすぎかも。5秒おいて、もう一回どうぞ。";
     if (code === "timeout") return "時間がかかりすぎて止まってしもた。入力は残ってるで。もう一回押してみて。";
     if (code === "input") return "回答が空っぽみたい。ひとことだけでも書いてな。";
@@ -2685,8 +2409,8 @@
     if (code && e.message && e.message !== "request failed") return e.message;
     return "混み合ってて作れへんかった。入力はそのまま残ってるで。もう一回押してみて。";
   }
-  // サーバーが自分で記録している失敗（AIの失敗・連打・受付停止）以外は、端末から記録を送る
-  const loggedByServer = (e) => ["failed", "rate", "stopped"].includes(e && e.code);
+  // サーバーが自分で記録している失敗（AIの失敗・連打）以外は、端末から記録を送る
+  const loggedByServer = (e) => ["failed", "rate"].includes(e && e.code);
 
   // 見出し（5案ぜんぶ）・自己紹介の書き直し
   async function refinePart(actionId, request) {
@@ -2717,10 +2441,6 @@
       save();
       toast(actionId === "custom" ? "言われたとおり直したで" : "直したで", 1400);
     } catch (e) {
-      if (e && e.code === "pass") {
-        EVPASS = "";
-        saveEvent();
-      }
       if (!loggedByServer(e)) clientLog("refine", e);
       toast(errorText(e), 2600);
     } finally {
@@ -2758,10 +2478,6 @@
       save();
       toast(actionId === "custom" ? "言われたとおり直したで" : "直したで", 1400);
     } catch (e) {
-      if (e && e.code === "pass") {
-        EVPASS = "";
-        saveEvent();
-      }
       if (!loggedByServer(e)) clientLog("refine", e);
       toast(errorText(e), 2600);
     } finally {
@@ -3261,7 +2977,7 @@
         openSheet(scheduleHtml(), "[data-act=closeSheet]");
         break;
       case "openKey":
-        openSheet(keyHtml(), eventNeedsPass() && !MYKEY ? "#evPass" : "#apiKeyInput");
+        openSheet(keyHtml(), "#apiKeyInput");
         break;
       case "cal":
         T.calEvents = [];
@@ -3345,9 +3061,6 @@
         generate(p);
         break;
       }
-      case "evUnlock":
-        evUnlockFlow();
-        break;
       case "saveKey":
         saveKeyFlow();
         break;
@@ -3700,11 +3413,6 @@
         closeSheet();
         go("guide");
         break;
-      case "sendJudge":
-        S.sendJudge = S.sendJudge === false;
-        save();
-        el.setAttribute("aria-checked", String(S.sendJudge));
-        break;
       case "consent":
         S.consent = !S.consent;
         save();
@@ -3720,7 +3428,6 @@
         const text = finalText(S.tab);
         copyNow(text);
         record("copy");
-        if (C.report && S.sendJudge !== false && myName()) autoReport(text);
         S.done = { action: "copy", tone: S.tab, text, shared: false };
         save();
         setTimeout(() => {
@@ -3780,24 +3487,6 @@
         break;
       case "closeSheet":
         closeSheet();
-        break;
-      case "report":
-        openReport("done");
-        break;
-      case "reportSelf":
-        openReport("pick");
-        break;
-      case "rPaste":
-        pasteUrl();
-        break;
-      case "rScreen":
-        if (T.rep) {
-          T.rep.screenOk = !T.rep.screenOk;
-          el.setAttribute("aria-checked", String(T.rep.screenOk));
-        }
-        break;
-      case "rSend":
-        sendReport();
         break;
       case "recopy":
         if (S.done) {
@@ -3899,10 +3588,6 @@
     }
     if (e.target.id === "photoWhat") T.photoWhat = e.target.value.slice(0, 60);
     if (e.target.id === "photoWant") T.photoWant = e.target.value.slice(0, 60);
-    if (["rName", "rUrl", "rBody"].includes(e.target.id)) {
-      const err = $("#rError", sheet);
-      if (err && err.textContent) err.textContent = "";
-    }
   });
 
   // 写真をえらんだら、その場でプレビュー（写真データ本体は送らない・保存しない）
@@ -3950,11 +3635,6 @@
       e.preventDefault();
       const b = $("[data-act=ask]");
       if (b && !b.disabled) b.click();
-      return;
-    }
-    if (e.key === "Enter" && !e.isComposing && e.target.id === "evPass") {
-      e.preventDefault();
-      evUnlockFlow();
       return;
     }
     if (e.key === "Enter" && !e.isComposing && e.target.id === "myName") {

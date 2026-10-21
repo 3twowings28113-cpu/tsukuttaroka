@@ -154,7 +154,7 @@ export function explainFailure(r) {
   if (status === 401) return "認証が通りません。AI Studio でキーを作り直すと直ることがあります。";
   if (status === 402) return "前払いの残高がなくなりました。AI Studio の「課金」で残高を追加すると、すぐ直ります。";
   if (status === 404) return "このモデル名は使えません（次の候補を試します）。";
-  if (status === 429 || reason === "RESOURCE_EXHAUSTED") return "回数の上限に当たりました。AI Studio で課金（お支払い方法）を設定すると、ほぼ解消します。";
+  if (status === 429 || reason === "RESOURCE_EXHAUSTED") return "無料のキーの回数の上限に当たったみたい（Googleの決まりで、アプリの故障やないで）。1分待つと直ることもある。1日の上限なら、日本時間の夕方（16〜17時ごろ）にリセットされる。すぐ使いたいなら、AI Studio で「課金を設定」（前払い5ドル〜）すると上限がぐっと上がるで。くわしくは「文章を作るAIを紐づける」の「無料のキーは、何回まで使える？」へ。";
   if (status >= 500) return "Google側が混み合っています。少し待つと直ります。";
   if (reason === "TIMEOUT") return "時間切れ。回線か Google 側が遅いです。";
   if (reason === "NETWORK") return "インターネットにつながりません。";
