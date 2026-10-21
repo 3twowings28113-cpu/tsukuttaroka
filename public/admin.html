@@ -124,7 +124,7 @@
   .ev-badges { display: flex; flex-wrap: wrap; gap: 4px; }
   /* 利用状況：数字のタイル → 流れ（開いた→作った→コピー→報告）→ 日ごと・時間ごとの棒 → イベントごとの表 */
   .st-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
-  .st-filters select { min-height: 38px; padding: 0 8px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; font: inherit; font-size: 14px; }
+  .st-filters select { max-width: 100%; min-height: 38px; padding: 0 8px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; font: inherit; font-size: 14px; }
   .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
   .tile { border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; background: #FBFAF7; }
   .tile b { display: block; font-size: 28px; line-height: 1.15; font-variant-numeric: tabular-nums; }
@@ -135,12 +135,14 @@
   .funnel { display: grid; gap: 6px; }
   .funnel .brow { grid-template-columns: 9em minmax(0, 1fr) 5.5em; }
   .chart { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 140px; padding: 0 0 2px; border-bottom: 1px solid var(--rule); }
-  .chart .col { position: relative; flex: 1; height: 100%; display: flex; align-items: flex-end; }
-  .chart .bar { width: 100%; min-height: 0; background: var(--blue); border-radius: 4px 4px 0 0; }
-  .chart .col:hover .bar, .chart .col:focus .bar { background: var(--blue-press); }
+  .chart .col { position: relative; flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: flex-end; }
+  .chart .cbar { display: block; width: 100%; min-height: 0; background: var(--blue); border-radius: 4px 4px 0 0; }
+  .chart .col:hover .cbar, .chart .col:focus .cbar { background: var(--blue-press); }
   .chart .col:focus { outline: none; }
   .chart .tip { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); z-index: 2; white-space: nowrap; padding: 4px 8px; border-radius: 6px; background: var(--ink); color: #fff; font-size: 12px; font-weight: 700; pointer-events: none; opacity: 0; }
   .chart .col:hover .tip, .chart .col:focus .tip { opacity: 1; }
+  .chart .col:nth-child(-n+3) .tip { left: 0; transform: none; }
+  .chart .col:nth-last-child(-n+3) .tip { left: auto; right: 0; transform: none; }
   .axis { display: flex; justify-content: space-between; margin-top: 4px; font-size: 11px; color: var(--sub); font-variant-numeric: tabular-nums; }
   .st-note { margin: 8px 0 0; font-size: 12px; color: var(--sub); }
   table.st td.n, table.st th.n { text-align: right; font-variant-numeric: tabular-nums; }
@@ -148,9 +150,27 @@
   .pr-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
   .pr-tabs button[aria-pressed="true"] { background: var(--blue); color: #fff; }
   .pr-text { min-height: 360px; font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "BIZ UDGothic", monospace; font-size: 13px; }
-  .pr-test { display: grid; gap: 8px; margin-top: 10px; padding: 10px 12px; border: 1px dashed var(--rule); border-radius: 10px; }
+  .pr-test { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 10px; padding: 10px 12px; border: 1px dashed var(--rule); border-radius: 10px; }
   .pr-test input, .pr-test select { min-height: 38px; padding: 0 10px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; font: inherit; font-size: 14px; }
+  /* タブ（ようす／イベント／投稿報告／AIの指示文／データ） */
+  .tabs { position: sticky; top: 58px; z-index: 4; display: flex; gap: 6px; overflow-x: auto; padding: 6px; background: var(--bg); border: 1px solid var(--rule); border-radius: 12px; }
+  .tabs button { flex: none; min-height: 42px; padding: 0 14px; border: 2px solid transparent; border-radius: 9px; background: transparent; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .tabs button[aria-selected="true"] { background: var(--blue); color: #fff; border-color: var(--ink); }
+  [data-pane][data-off] { display: none !important; }
+  .period { margin: 0; padding: 10px 14px; border-left: 6px solid var(--blue); border-radius: 8px; background: #EEF4FB; font-size: 14px; font-weight: 700; }
+  .period a { color: var(--blue-press); }
+  .key-help { margin-top: 10px; padding: 12px 14px; border: 2px solid var(--ink); border-radius: 10px; background: #FFFBE6; }
+  .key-help h3 { margin: 0 0 6px; font-size: 15px; }
+  .key-help ol { margin: 0 0 6px; padding-left: 20px; display: grid; gap: 6px; font-size: 14px; }
+  .linkbtn { padding: 0; border: 0; background: none; color: var(--blue-press); font-weight: 700; text-decoration: underline; cursor: pointer; }
+  .archive-list { display: grid; gap: 8px; }
+  .archive-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 10px; background: #FBFAF7; font-size: 14px; }
+  .archive-item b { font-size: 15px; }
+  .ev-form .key-field { padding: 8px; border-radius: 8px; transition: background-color .3s; }
+  .ev-form .key-field.is-flash { background: #FFF1BF; }
   @media (max-width: 720px) {
+    .tabs { position: static; flex-wrap: wrap; }
+    .tabs button { flex: 1 1 auto; padding: 0 10px; }
     .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .st-grid, .ev-form .two { grid-template-columns: 1fr; }
     .ev-item { grid-template-columns: 1fr; }
@@ -183,20 +203,38 @@
     <p class="msg bad" id="loginMsg" role="alert"></p>
   </section>
 
-  <div id="dash" hidden style="display:grid;gap:16px">
+  <div id="dash" hidden style="display:grid;grid-template-columns:minmax(0,1fr);gap:16px">
     <section class="panel">
       <div class="status" id="status"></div>
       <div class="row" style="margin-top:10px">
         <button class="btn btn-primary" id="testBtn" type="button">AIの接続テスト</button>
-        <button class="btn" id="csvBtn" type="button">CSVをダウンロード</button>
+        <button class="btn" id="keyHelpBtn" type="button" aria-expanded="false" aria-controls="keyHelp">AIのキーを入れる・変える</button>
         <button class="btn" id="toggleBtn" type="button">受付を止める</button>
+      </div>
+      <div class="key-help" id="keyHelp" hidden>
+        <h3>AIのキー（Gemini APIキー）を入れる場所は2つ</h3>
+        <ol>
+          <li><b>サーバー全体のキー（おすすめ）</b>：GitHub の <a href="https://github.com/3twowings28113-cpu/tsukuttaroka/actions/workflows/set-gemini-key.yml" target="_blank" rel="noopener">「Geminiのキーを登録」</a> を開く →「Run workflow」→ キーを貼って実行。どのイベントも、このキーで動きます。</li>
+          <li><b>イベントだけのキー</b>：<button class="linkbtn" type="button" data-goto="event">「イベント」タブ</button> → そのイベントの「AIのキーを入れる」→ キーを貼って「保存」。そのイベントだけ、こちらのキーを使います。</li>
+        </ol>
+        <p class="empty" style="margin:0">キーは「AIza」か「AQ.」で始まる文字です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> で作れます。</p>
       </div>
       <p class="msg" id="opMsg" role="status" aria-live="polite"></p>
     </section>
 
-    <section class="nums" id="nums" aria-label="件数"></section>
+    <p class="period" id="periodLine" hidden></p>
 
-    <section class="panel" id="stPanel" aria-labelledby="stTitle">
+    <nav class="tabs" role="tablist" aria-label="運営ページの中身">
+      <button type="button" role="tab" data-tab="home" aria-selected="true">ようす</button>
+      <button type="button" role="tab" data-tab="event" aria-selected="false">イベント</button>
+      <button type="button" role="tab" data-tab="report" aria-selected="false">投稿報告・集まった投稿</button>
+      <button type="button" role="tab" data-tab="prompt" aria-selected="false">AIの指示文</button>
+      <button type="button" role="tab" data-tab="data" aria-selected="false">データ・過去の記録</button>
+    </nav>
+
+    <section class="nums" id="nums" aria-label="件数" data-pane="home"></section>
+
+    <section class="panel" id="stPanel" aria-labelledby="stTitle" data-pane="home">
       <div class="rep-head"><h2 id="stTitle">利用状況（どれくらい使われてるか）</h2></div>
       <div class="st-filters">
         <label class="msg" for="stDays">期間</label>
@@ -217,7 +255,7 @@
       <p class="st-note" id="stNote"></p>
     </section>
 
-    <section class="panel" id="evPanel">
+    <section class="panel" id="evPanel" data-pane="event">
       <div class="rep-head">
         <h2>イベント（参加者用のURL・あいことば・ハッシュタグ）</h2>
         <button class="btn btn-primary" id="evNewBtn" type="button">イベントを作る</button>
@@ -237,7 +275,7 @@
         <fieldset>
           <legend>AIのキーとあいことば</legend>
           <label>あいことば<small>空にすると「あいことばなし」：URL（QR）を開いた人は、だれでも下のAIキーで作れます。入れると、あいことばを知っている人だけ（QR用URLには最初から入っています）</small><input type="text" id="aevPass" maxlength="60" autocomplete="off"></label>
-          <label>Gemini APIキー<small id="aevKeyHint">空のままなら、サーバーのキー（GEMINI_API_KEY）を使います</small><input type="password" id="aevKey" maxlength="300" autocomplete="off" placeholder="AIza… / AQ.…"></label>
+          <label class="key-field" id="aevKeyField">Gemini APIキー<small id="aevKeyHint">空のままなら、サーバーのキー（GEMINI_API_KEY）を使います</small><input type="password" id="aevKey" maxlength="300" autocomplete="off" placeholder="AIza… / AQ.…"></label>
           <label class="chk"><input type="checkbox" id="aevClearKey"> 登録してあるキーを消す</label>
         </fieldset>
         <fieldset>
@@ -285,7 +323,7 @@
       </form>
     </section>
 
-    <section class="panel" id="prPanel" aria-labelledby="prTitle">
+    <section class="panel" id="prPanel" aria-labelledby="prTitle" data-pane="prompt">
       <div class="rep-head"><h2 id="prTitle">AIへの指示文（文章の書き方）</h2><span class="msg" id="prState"></span></div>
       <p class="empty" style="margin:0 0 10px">ここを書きかえると、すべての参加者の文章の作り方が変わります（保存して15秒ほどで反映）。イベントだけの指示は「イベント」の「AIへの追加の指示」へ。「# 出力」の部分を消しても、自動で足されるので動きは止まりません。</p>
       <div class="pr-tabs" id="prTabs" role="group" aria-label="指示文の種類"></div>
@@ -308,7 +346,7 @@
       <p class="msg" id="prMsg" role="status" aria-live="polite"></p>
     </section>
 
-    <section class="panel" id="repPanel">
+    <section class="panel" id="repPanel" data-pane="report">
       <div class="rep-head">
         <h2>投稿報告（パネラーが読む投稿）<span id="repCount" class="empty"></span></h2>
         <div class="row">
@@ -345,13 +383,13 @@
       </details>
     </section>
 
-    <div class="cols">
+    <div class="cols" data-pane="home">
       <section class="panel"><h2>よく選ばれたネタ TOP5</h2><div class="bars" id="topCards"></div></section>
       <section class="panel"><h2>選ばれたパターン</h2><div class="bars" id="tones"></div></section>
       <section class="panel"><h2>書き方（作るときに選んだもの）</h2><div class="bars" id="modes"></div></section>
     </div>
 
-    <section class="panel" id="peoplePanel">
+    <section class="panel" id="peoplePanel" data-pane="report">
       <h2>アプリを使った人（最初に入れた名前）<span id="peopleCount" class="empty"></span></h2>
       <div class="table-wrap"><table class="people">
         <thead><tr><th>名前</th><th>フォロー</th><th>作った</th><th>コピー</th><th>報告</th></tr></thead>
@@ -360,9 +398,10 @@
       <p class="empty" id="noPeople" hidden>まだいません。参加者が名前を入れて投稿文を作ると、ここに並びます。</p>
     </section>
 
-    <section class="panel" id="errPanel" hidden><h2>最近のエラー</h2><div class="errs" id="errs"></div></section>
+    <section class="panel" id="errPanel" data-pane="home" hidden><h2>最近のエラー</h2><div class="errs" id="errs"></div></section>
 
-    <section class="panel">
+    <section class="panel" data-pane="report">
+      <div class="row" style="justify-content:flex-end;float:right"><button class="btn" id="csvBtn" type="button">投稿のCSV</button></div>
       <h2>集まった投稿（共有ONの人だけ）<span id="postCount" class="empty"></span></h2>
       <div class="table-wrap">
         <table>
@@ -374,9 +413,25 @@
       <div class="row" style="margin-top:10px"><button class="btn" id="moreBtn" type="button" hidden>もっと見る</button></div>
     </section>
 
-    <section class="panel">
+    <section class="panel" data-pane="data">
+      <h2>過去の記録（終わったイベント）</h2>
+      <p class="empty" style="margin:0 0 8px">終わったイベントの投稿報告・★・集まった投稿・件数は、ここで分けて見られます。運営ページには「いまの期間」のデータだけが出ます。</p>
+      <div id="archiveList" class="archive-list"></div>
+      <p style="margin:10px 0"><a class="btn" style="display:inline-flex;align-items:center;text-decoration:none;color:inherit" href="archive">過去の記録のページをひらく</a></p>
+      <details class="roster">
+        <summary>イベントが終わったら：ここまでを過去のイベントにする</summary>
+        <p class="empty" style="margin:0">いまの期間のデータ（投稿報告・★・集まった投稿・件数）を、名前をつけて「過去の記録」に移します。データは消えません。運営ページは空の状態から始まります。</p>
+        <div class="row" style="margin-top:8px">
+          <input id="archiveName" type="text" maxlength="80" placeholder="例：LSCW 2026 Autumn（10/31）" style="min-height:42px;padding:0 10px;border:1px solid var(--rule);border-radius:8px;flex:1;min-width:220px" aria-label="過去のイベントの名前">
+          <button class="btn btn-primary" id="archiveBtn" type="button">過去のイベントにする</button>
+        </div>
+        <p class="msg" id="archiveMsg" role="status"></p>
+      </details>
+    </section>
+
+    <section class="panel" data-pane="data">
       <h2>データの削除</h2>
-      <p class="empty" style="margin:0 0 8px">リハーサルのテストデータを消すときに使います。集まった投稿・件数・投稿報告・★がすべて消えます（参加者名簿は残ります）。</p>
+      <p class="empty" style="margin:0 0 8px">リハーサルのテストデータを消すときに使います。いまの期間の集まった投稿・件数・投稿報告・★が消えます（過去の記録と参加者名簿は残ります）。</p>
       <button class="btn btn-danger" id="wipeBtn" type="button">全データを削除</button>
       <div class="confirm" id="wipeConfirm" hidden style="margin-top:8px">
         <span class="msg bad">本当に消す？元に戻せません。</span>
@@ -431,6 +486,7 @@
       loadEvents().catch(() => {});
       loadStats().catch(() => {});
       loadPrompts().catch(() => {});
+      loadArchives().catch(() => {});
     } catch (e) {
       $("#loginMsg").textContent = e.auth ? e.message : "つながりませんでした。URLを確認してください。";
     }
@@ -453,11 +509,16 @@
   function renderSummary() {
     const s = summary;
     $("#status").innerHTML = [
-      `<span class="pill"><span class="dotc ${s.hasKey ? "on" : "off"}"></span>AI：${s.hasKey ? esc(s.model) + "（予備 " + esc(s.fallback) + "）" : "キー未設定（サンプル文で動作中）"}</span>`,
+      `<span class="pill"><span class="dotc ${s.hasKey ? "on" : "off"}"></span>AI：${s.hasKey ? esc(s.model) + "（予備 " + esc(s.fallback) + "）" : "サーバーのキーなし（イベントにキーを入れたときだけ動く）→「AIのキーを入れる・変える」"}</span>`,
       `<span class="pill"><span class="dotc ${s.generation === "on" ? "on" : "off"}"></span>受付：${s.generation === "on" ? "受付中" : "停止中"}</span>`,
       `<span class="pill"><span class="dotc ${s.db ? "on" : "off"}"></span>データベース：${s.db ? "OK" : "未設定"}</span>`,
     ].join("");
     $("#toggleBtn").textContent = s.generation === "on" ? "受付を止める" : "受付を再開する";
+    if (!s.hasKey && !keyHelpShown) {
+      keyHelpShown = true;
+      $("#keyHelp").hidden = false;
+      $("#keyHelpBtn").setAttribute("aria-expanded", "true");
+    }
     const c = s.counts;
     const cell = (label, n, warn, hot) => `<div class="num${warn && n ? " warn" : ""}${hot ? " hot" : ""}"><b>${n}</b><span>${label}</span></div>`;
     $("#nums").innerHTML = cell("生成", c.generate) + cell("書き直し", c.refine) + cell("コピー", c.copy) + cell("あとで投稿", c.later) + cell("投稿報告", c.report || 0, false, true) + cell("エラー", c.error, true);
@@ -714,6 +775,7 @@
               <a class="btn btn-sm" style="display:inline-flex;align-items:center;text-decoration:none;color:inherit" target="_blank" rel="noopener" href="qr?${esc(new URLSearchParams({ preset: ev.preset || "", url: qrUrl }).toString())}">会場スクリーン用QR</a>
               <a class="btn btn-sm" style="display:inline-flex;align-items:center;text-decoration:none;color:inherit" target="_blank" rel="noopener" href="${esc(qrUrl)}">開いてみる</a>
               <button class="btn btn-sm" type="button" data-evstats="${esc(ev.id)}">利用状況</button>
+              <button class="btn btn-sm" type="button" data-evkey="${esc(ev.id)}">AIのキーを入れる</button>
               <button class="btn btn-sm" type="button" data-evedit="${esc(ev.id)}">直す</button>
               <button class="btn btn-sm btn-danger" type="button" data-evdel="${esc(ev.id)}">消す</button>
             </div>
@@ -723,6 +785,7 @@
       .join("");
   }
   function openEventForm(ev) {
+    setTab("event");
     const f = ev || { id: "", name: "", hashtags: [], preset: (PRESETS.find((p) => p.default) || { id: "" }).id, pass: "", keySet: false, keyTail: "", cheerAlways: false, active: true, mentions: [], mentionInText: true, followUrl: "", followName: "", followRequired: false, aiNote: "", info: {}, scheduleText: "", theme: null };
     const info = f.info || {};
     $("#aevMentions").value = (f.mentions || []).map((m) => (m.typeHint && m.typeHint !== "@" + m.name ? `${m.name} | ${m.typeHint}` : m.name)).join("\n");
@@ -831,6 +894,18 @@
       $("#stPanel").scrollIntoView({ block: "start", behavior: "smooth" });
       return;
     }
+    const kb = e.target.closest("[data-evkey]");
+    if (kb) {
+      openEventForm(events.find((x) => x.id === kb.dataset.evkey));
+      const f = $("#aevKeyField");
+      setTimeout(() => {
+        f.scrollIntoView({ block: "center", behavior: "smooth" });
+        $("#aevKey").focus({ preventScroll: true });
+        f.classList.add("is-flash");
+        setTimeout(() => f.classList.remove("is-flash"), 1600);
+      }, 120);
+      return;
+    }
     const ed = e.target.closest("[data-evedit]");
     if (ed) {
       openEventForm(events.find((x) => x.id === ed.dataset.evedit));
@@ -857,7 +932,7 @@
   function barChart(el, items, label) {
     const max = Math.max(1, ...items.map((x) => x.v));
     el.innerHTML = items
-      .map((x) => `<div class="col" tabindex="0" aria-label="${esc(x.k)}：${x.v}${label}"><span class="bar" style="height:${x.v ? Math.max(2, (x.v / max) * 100) : 0}%"></span><span class="tip">${esc(x.k)}　${x.v}${label}</span></div>`)
+      .map((x) => `<div class="col" tabindex="0" aria-label="${esc(x.k)}：${x.v}${label}"><span class="cbar" style="height:${x.v ? Math.max(2, (x.v / max) * 100) : 0}%"></span><span class="tip">${esc(x.k)}　${x.v}${label}</span></div>`)
       .join("");
   }
   async function loadStats() {
@@ -975,6 +1050,7 @@
   $("#stDays").addEventListener("change", () => loadStats().catch(() => {}));
   $("#stEvent").addEventListener("change", () => loadStats().catch(() => {}));
   function loadAll() {
+    loadArchives().catch(() => {});
     loadSummary().catch(() => {});
     loadRows(true).catch(() => {});
     loadReports().catch(() => {});
@@ -982,6 +1058,62 @@
     loadStats().catch(() => {});
     loadPrompts().catch(() => {});
   }
+
+  // ---------- タブ ----------
+  const TAB_KEY = "tsukuttaroka.admin.tab";
+  function setTab(t) {
+    document.querySelectorAll("[role=tab][data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
+    document.querySelectorAll("[data-pane]").forEach((el) => {
+      if (el.dataset.pane === t) el.removeAttribute("data-off");
+      else el.setAttribute("data-off", "");
+    });
+    try { sessionStorage.setItem(TAB_KEY, t); } catch {}
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[role=tab][data-tab], [data-goto]");
+    if (!b) return;
+    setTab(b.dataset.tab || b.dataset.goto);
+    if (b.dataset.goto) window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+  let tab0 = "home";
+  try { tab0 = sessionStorage.getItem(TAB_KEY) || "home"; } catch {}
+  setTab(tab0);
+  let keyHelpShown = false;
+  $("#keyHelpBtn").addEventListener("click", () => {
+    const box = $("#keyHelp");
+    box.hidden = !box.hidden;
+    $("#keyHelpBtn").setAttribute("aria-expanded", String(!box.hidden));
+  });
+
+  // ---------- 過去の記録（期間の区切り） ----------
+  async function loadArchives() {
+    const d = await (await api("api/admin/archives")).json();
+    if (!d.ok) return;
+    const list = d.archives || [];
+    const line = $("#periodLine");
+    line.hidden = !list.length;
+    if (list.length) line.innerHTML = `この運営ページは <b>${esc(d.currentFromJst)}</b> からのデータです。それより前（${esc(list[0].name)}${list.length > 1 ? " など" : ""}）は <a href="archive">過去の記録</a> で見られます。`;
+    $("#archiveList").innerHTML = list.length
+      ? list.map((a) => `<div class="archive-item"><div><b>${esc(a.name)}</b><br><span class="empty">${a.fromJst ? esc(a.fromJst) + " 〜 " : "〜 "}${esc(a.untilJst)}　報告 ${a.reports}件・作った ${a.made}回</span></div><a class="btn btn-sm" style="display:inline-flex;align-items:center;text-decoration:none;color:inherit" href="archive?a=${encodeURIComponent(a.id)}">記録を見る</a></div>`).join("")
+      : '<p class="empty">まだありません。</p>';
+  }
+  $("#archiveBtn").addEventListener("click", async () => {
+    const name = $("#archiveName").value.trim();
+    if (!name) {
+      $("#archiveMsg").className = "msg bad";
+      $("#archiveMsg").textContent = "イベントの名前を入れてください";
+      return;
+    }
+    if (!confirm(`いまの期間のデータを「${name}」として過去の記録に移します。運営ページは空から始まります。よろしいですか？（データは消えません）`)) return;
+    const res = await api("api/admin/archive", { method: "POST", body: JSON.stringify({ name }) });
+    const d = await res.json().catch(() => ({}));
+    $("#archiveMsg").className = "msg " + (d.ok ? "good" : "bad");
+    $("#archiveMsg").textContent = d.ok ? "過去の記録に移しました。" : d.message || "できませんでした";
+    if (d.ok) {
+      $("#archiveName").value = "";
+      loadAll();
+    }
+  });
 
   $("#loginBtn").addEventListener("click", login);
   $("#pass").addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
