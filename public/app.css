@@ -890,14 +890,23 @@ a.co:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 @media (min-width: 560px) { .co-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (prefers-reduced-motion: reduce) { .co { transition: none; } }
 
-/* 「どんな投稿にする？」⇄「どれだけ書く？」を、右上のボタンでその場で切りかえる */
-.sec-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; }
-.pane-switch { display: inline-flex; flex: none; margin-left: auto; padding: 3px; gap: 3px; background: var(--paper); border: var(--line) solid var(--ink); border-radius: 999px; box-shadow: 2px 2px 0 var(--ink); }
-.pane-switch button { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--ink); font-weight: 800; font-size: 15px; cursor: pointer; white-space: nowrap; }
-.pane-switch button b { font-weight: 900; }
-.pane-switch button[aria-selected="true"] { background: var(--blue); color: #fff; }
-.pane-switch button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-#pickPane { display: grid; gap: 12px; }
+/* 「どんな投稿にする？」：「1 テーマ」「2 質問数」のタブで、下の中身をその場で切りかえる */
+.pane-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pane-tab { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 8px; align-items: center; min-height: 72px; padding: 10px 10px 8px; text-align: left; background: var(--paper); color: var(--ink); border: var(--line) solid var(--ink); border-radius: 14px; box-shadow: 3px 3px 0 var(--ink); cursor: pointer; }
+.pane-tab:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+.pane-tab:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.pane-tab-n { grid-row: 1 / span 2; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--ink); color: var(--on-ink); font-size: 14px; font-weight: 900; }
+.pane-tab-txt { display: grid; min-width: 0; }
+.pane-tab-k { font-size: 13px; font-weight: 800; color: var(--ink-soft); }
+.pane-tab-v { font-size: 16px; font-weight: 900; line-height: 1.35; overflow-wrap: anywhere; }
+.pane-tab-go { grid-column: 2; justify-self: start; margin-top: 4px; padding: 1px 8px; border-radius: 999px; border: 1.5px solid var(--ink); font-size: 12px; font-weight: 800; background: var(--blue-tint); }
+.pane-tab[aria-selected="true"] { background: var(--blue); color: #fff; }
+.pane-tab[aria-selected="true"] .pane-tab-k { color: rgba(255, 255, 255, 0.85); }
+.pane-tab[aria-selected="true"] .pane-tab-n { background: #fff; color: var(--blue); }
+.pane-tab[aria-selected="true"] .pane-tab-go { background: #fff; color: var(--blue); border-color: #fff; }
+/* 選んでいるタブから、下の中身へ「▼」でつなぐ */
+.pane-tab[aria-selected="true"]::after { content: ""; position: absolute; left: 50%; bottom: -12px; transform: translateX(-50%); border: 9px solid transparent; border-top-color: var(--ink); border-bottom: 0; }
+.pane-body { display: grid; gap: 12px; margin-top: 6px; }
 
 /* 参加企業のロゴが右から左へ流れる帯（LSCW）。いちばん上。指でスワイプもできる */
 .co-marquee { margin: 0 -16px 4px; padding: 10px 0 12px; background: var(--paper); border-bottom: var(--line) solid var(--ink); }

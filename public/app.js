@@ -676,11 +676,22 @@
         </button>`;
     // 「どんな投稿にする？」と「どれだけ書く？」は同じ枠で、右上のボタンでその場で切りかえる（スクロールしなくていいように）
     const pane = T.pickPane === "size" ? "size" : "theme";
+    // タブ：いま選んでいるもの（テーマ名・質問数）を見せる。選んでいないほうは「押すと切りかわる」と分かるように
+    const paneTab = (key, no, label, now) => {
+      const on = pane === key;
+      return `<button type="button" role="tab" class="pane-tab" id="${key === "size" ? "paneSize" : "paneTheme"}" aria-controls="pickPane" aria-selected="${on}" data-act="pickPane" data-v="${key}">
+            <span class="pane-tab-n" aria-hidden="true">${no}</span>
+            <span class="pane-tab-txt"><span class="pane-tab-k">${label}</span><span class="pane-tab-v">${esc(now)}</span></span>
+            <span class="pane-tab-go" aria-hidden="true">${on ? "えらび中" : "変える ›"}</span>
+          </button>`;
+    };
     // どんな投稿にする？（テーマ。size=3のセットを代表に出す。3問のセットがないテーマは最初のセット）
     const customOn = !!String(S.customTheme || "").trim();
     const themeReps = [];
     for (const s of C.sets) if (!themeReps.some((t) => t.theme === s.theme)) themeReps.push(C.sets.find((x) => x.theme === s.theme && x.size === 3) || s);
     const curTheme = (setById(S.setId) || {}).theme || "";
+    const themeNow = String(S.customTheme || "").trim() ? "じぶんで決める" : S.free ? "じぶんでネタを選ぶ" : (themeReps.find((t) => t.theme === curTheme) || {}).label || "おまかせ";
+    const sizeNow = S.free ? `じぶんで選ぶ（${S.selected.length}問）` : `${S.size}問`;
     const themeRows =
       themeReps
         .map(
@@ -757,20 +768,19 @@
           ? condFormHtml()
           : `<h2 class="pick-divider"><span>自分で選ぶ人は、こちら</span></h2>
       <section class="block pick-pane-block">
-        <div class="sec-head">
-          <h2 class="sec-title" id="pickTitle">${pane === "size" ? "どれだけ書く？" : "どんな投稿にする？"}</h2>
-          <div class="pane-switch" role="tablist" aria-label="テーマと問数の切りかえ">
-            <button type="button" role="tab" id="paneTheme" aria-controls="pickPane" aria-selected="${pane === "theme"}" data-act="pickPane" data-v="theme">テーマ</button>
-            <button type="button" role="tab" id="paneSize" aria-controls="pickPane" aria-selected="${pane === "size"}" data-act="pickPane" data-v="size">問数<b>${S.free ? "自由" : `${S.size}問`}</b></button>
-          </div>
+        <h2 class="sec-title" id="pickTitle">どんな投稿にする？</h2>
+        <p class="sec-note bx">「テーマ」と「質問数」の2つを決めるで。<wbr>タブを押すと、下の中身が切りかわる。</p>
+        <div class="pane-tabs" role="tablist" aria-label="テーマと質問数">
+          ${paneTab("theme", "1", "テーマ", themeNow)}
+          ${paneTab("size", "2", "質問数", sizeNow)}
         </div>
-        <div id="pickPane" role="tabpanel" aria-labelledby="${pane === "size" ? "paneSize" : "paneTheme"}">
+        <div id="pickPane" class="pane-body" role="tabpanel" aria-labelledby="${pane === "size" ? "paneSize" : "paneTheme"}">
         ${
           pane === "size"
-            ? `<div class="opts" role="radiogroup" aria-labelledby="pickTitle">${sizeRows}</div>
-        <p class="sec-note">問数を変えても、選んだテーマのまま切り替わるで。<wbr>テーマは右上の「テーマ」で選びなおせる。</p>`
-            : `<div class="opts" role="radiogroup" aria-labelledby="pickTitle">${themeRows}</div>
-        <p class="sec-note">テーマを押すと、質問の並びが自動で切り替わるで。<wbr>何問にするかは、右上の「問数」でその場で変えられる。</p>
+            ? `<div class="opts" role="radiogroup" aria-label="質問数">${sizeRows}</div>
+        <p class="sec-note bx">質問数を変えても、テーマはそのまま。<wbr>テーマを変えるときは、上の「1 テーマ」のタブへ。</p>`
+            : `<div class="opts" role="radiogroup" aria-label="テーマ">${themeRows}</div>
+        <p class="sec-note bx">テーマを押すと、質問の並びが自動で切りかわるで。<wbr>何問にするかは、上の「2 質問数」のタブで選べる。</p>
         <div class="field custom-theme">
           <label class="field-label" for="customTheme">じぶんで決める${customOn ? '<span class="req-inline">必須</span>' : "（任意）"}</label>
           <input id="customTheme" class="phrase" type="text" maxlength="60" autocomplete="off" placeholder="例：娘の運動会の話を書きたい" value="${esc(S.customTheme || "")}">
