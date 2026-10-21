@@ -737,7 +737,6 @@
     const html = `
       <div class="big-row"><button type="button" class="big-toggle" data-act="bigText" aria-pressed="${isBig()}"><span class="big-a" aria-hidden="true">あ</span>${isBig() ? "文字を元にもどす" : "文字を大きくする"}</button></div>
       ${eventHeadHtml()}
-      ${!eventKeyReady() && aiReady() && (MYKEY || advOn()) ? `<p class="key-on bx">${advOn() ? `じぶんのAI（${esc(AISET.model)}）で文章を作るで` : "じぶんのGeminiで文章を作るで"}</p>` : ""}
       <section class="hero cloud" data-bump="46" data-seed="3">
         ${C.eventPage || !(C.eventSub || C.eventName) ? "" : `<p class="hero-eyebrow">${esc(C.eventSub || "")}${C.eventName ? `<br>「${esc(C.eventName)}」` : ""}</p>`}
         <h1 class="hero-title bx" tabindex="-1">${fmt(C.appName)}</h1>
@@ -958,6 +957,15 @@
     }
     return !(C.features && C.features[k] === false);
   }
+  // カレンダー・じぶんの書き方は投稿文のための機能。見出し・自己紹介を選んでいたら、投稿文に切りかえる
+  function toPostKind() {
+    if (!isProfile()) return;
+    S.kind = "post";
+    S.cursor = 0;
+    save();
+    if (S.step === "pick") keepScroll(render);
+    toast("「投稿文」の作り方に切りかえたで", 2000);
+  }
   // 最初の画面の「便利な機能」。何ができるかを1行ずつ書いて、いまの状態を右に出す（初めての人にも分かるように）
   function featuresHtml() {
     const rows = [];
@@ -968,8 +976,8 @@
       const n = notesGet().length;
       rows.push(row("notes", "ネタ帳", "思いついた投稿のネタを、<wbr>日付つきでメモしておける。<wbr>メモから投稿も作れる", n ? `${n}件` : "", n > 0));
     }
-    if (!isProfile() && featureOn("calendar")) rows.push(row("cal", "カレンダーから作る", "Googleカレンダーの予定を読んで、<wbr>その日の出来事から投稿を作る", CALURL ? "つないでる" : "", !!CALURL));
-    if (!isProfile() && featureOn("voice")) rows.push(row("voice", "じぶんの書き方", "これまでの投稿を読ませると、<wbr>あなたの書きぐせに寄せて書く", VOICE.text ? (VOICE.on ? "使ってる" : "止めてる") : "", !!(VOICE.text && VOICE.on)));
+    if (featureOn("calendar")) rows.push(row("cal", "カレンダーから作る", "Googleカレンダーの予定を読んで、<wbr>その日の出来事から投稿文を作る", CALURL ? "つないでる" : "", !!CALURL));
+    if (featureOn("voice")) rows.push(row("voice", "じぶんの書き方", "これまでの投稿を読ませると、<wbr>投稿文をあなたの書きぐせに寄せて書く", VOICE.text ? (VOICE.on ? "使ってる" : "止めてる") : "", !!(VOICE.text && VOICE.on)));
     const hn = histGet().length;
     if (hn) rows.push(row("hist", "マイ投稿記録", "このスマホで作った投稿の一覧。<wbr>コピーして使い回せる", `${hn}件`, false));
     if (!rows.length) return "";
@@ -2994,6 +3002,7 @@
         toast("いくつでも選んでな（15まで）。押した分だけ質問になるで", 3000);
         break;
       case "voice":
+        toPostKind();
         openSheet(voiceSheetHtml(), "[data-act=closeSheet]");
         break;
       case "voiceLearn": {
@@ -3247,6 +3256,7 @@
         openSheet(keyHtml(), "#apiKeyInput");
         break;
       case "cal":
+        toPostKind();
         T.calEvents = [];
         T.calDone = false;
         T.calBusy = false;
@@ -3969,6 +3979,7 @@
       // 回答前なら、選んだ問数とセットだけ引き継いで最初の画面から
       if (!saved) S = freshState(S.clientId);
       S.step = "pick";
+      S.kind = "post"; // 開いたときは、いつも「投稿文」から（前に見出し・自己紹介を選んでいても）
       render();
     }
     shown = true;
