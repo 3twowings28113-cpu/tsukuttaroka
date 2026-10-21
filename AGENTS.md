@@ -37,6 +37,7 @@
 - 見出し・自己紹介の条件と質問 → `public/config.js` の `profile`（conds＝条件、cards＝質問、headline／about＝それぞれの質問の並び・入れ方・ちょい直し）
 - 画面の動き → `public/app.js`／見た目 → `public/app.css`／LSCW専用ページ → `public/lscw.html`（中身は app.js と同じ。window.APP_PAGE でプリセットとイベントを固定）
 - パネラー用ページ → `public/judge.html`／運営ページ → `public/admin.html`／会場スクリーン → `public/qr.html`
+- 終わったイベントの記録（10/6 の富士通の回など）→ 過去の記録ページ（/archive・`public/archive.html`）。運営ページは「いまの期間」だけを出す。区切りは運営ページの「データ・過去の記録」→「ここまでを過去のイベントにする」
 - 「投稿したで！」の報告 → 画面は `public/app.js`、サーバーは `src/worker.js` と `src/report.js`
 - サーバー → `src/worker.js`／Gemini の呼び出し → `src/gemini.js`
 - 使うAIモデル → `wrangler.jsonc` の `vars`（GEMINI_MODEL・GEMINI_FALLBACK_MODEL）

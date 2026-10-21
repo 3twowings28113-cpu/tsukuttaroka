@@ -765,6 +765,6 @@ window.APP_CONFIG = {
     if (!PAGE && q && PRESETS[q]) id = q;
   } catch {}
   if (!PRESETS[id]) id = "everyday";
-  window.APP_PRESETS = Object.keys(PRESETS).map((k) => ({ id: k, label: PRESETS[k].label || k, default: k === DEFAULT_PRESET, pagePath: PRESETS[k].pagePath || "" }));
+  window.APP_PRESETS = Object.keys(PRESETS).map((k) => ({ id: k, label: PRESETS[k].label || k, default: k === DEFAULT_PRESET, pagePath: PRESETS[k].pagePath || "", judges: PRESETS[k].judges || B.judges || [] }));
   Object.assign(B, PRESETS[id], { presetId: id });
 })();

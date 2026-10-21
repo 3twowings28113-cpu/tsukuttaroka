@@ -54,7 +54,7 @@ import {
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { extractLinkedInUrl, cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-20.lscw-3";
+const VERSION = "2026-10-22.lscw-4";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -96,17 +96,19 @@ async function route(request, env, ctx, url) {
   if (p.startsWith("/api/admin/")) {
     if (!String(env.ADMIN_PASSCODE || "")) return json({ ok: false, code: "no_passcode", message: "合言葉（ADMIN_PASSCODE）が未設定です" }, 403);
     if (!adminOk(request, env)) return json({ ok: false, code: "auth", message: "合言葉がちがいます" }, 401);
-    if (p === "/api/admin/summary" && m === "GET") return adminSummary(env);
+    if (p === "/api/admin/summary" && m === "GET") return adminSummary(env, url);
     if (p === "/api/admin/posts" && m === "GET") return adminPosts(env, url);
-    if (p === "/api/admin/export" && m === "GET") return adminExport(env);
+    if (p === "/api/admin/export" && m === "GET") return adminExport(env, url);
+    if (p === "/api/admin/archives" && m === "GET") return adminArchives(env);
+    if (p === "/api/admin/archive" && m === "POST") return adminArchiveCreate(request, env);
     if (p === "/api/admin/settings" && m === "POST") return adminSettings(request, env);
     if (p === "/api/admin/test" && m === "POST") return adminTest(env);
     if (p === "/api/admin/wipe" && m === "POST") return adminWipe(request, env);
-    if (p === "/api/admin/reports" && m === "GET") return adminReports(env);
+    if (p === "/api/admin/reports" && m === "GET") return adminReports(env, url);
     if (p === "/api/admin/report-hide" && m === "POST") return adminReportHide(request, env);
     if (p === "/api/admin/judge-link" && m === "GET") return adminJudgeLink(env);
     if (p === "/api/admin/roster" && m === "POST") return adminRoster(request, env);
-    if (p === "/api/admin/export-reports" && m === "GET") return adminExportReports(env);
+    if (p === "/api/admin/export-reports" && m === "GET") return adminExportReports(env, url);
     if (p === "/api/admin/events" && m === "GET") return adminEvents(env);
     if (p === "/api/admin/event" && m === "POST") return adminEventSave(request, env);
     if (p === "/api/admin/event-delete" && m === "POST") return adminEventDelete(request, env);
@@ -1092,13 +1094,16 @@ async function stats(env, url) {
   const db = await getDb(env);
   const data = { ok: true, generated: 0, copied: 0, later: 0, reported: 0, latest: [] };
   if (db) {
+    // 会場スクリーンの数は、いまの期間だけ（過去のイベントの分は数えない）
+    const rg = await rangeOf(env, null);
+    const F = isoOf(rg.from);
     const [ev, rc, latest] = await db.batch([
       e
-        ? db.prepare("SELECT type, COUNT(*) AS n FROM events WHERE json_extract(detail, '$.event') = ? GROUP BY type").bind(e)
-        : db.prepare("SELECT type, COUNT(*) AS n FROM events GROUP BY type"),
-      db.prepare("SELECT COUNT(*) AS n FROM reports WHERE hidden = 0"),
+        ? db.prepare("SELECT type, COUNT(*) AS n FROM events WHERE created_at >= ? AND json_extract(detail, '$.event') = ? GROUP BY type").bind(F, e)
+        : db.prepare("SELECT type, COUNT(*) AS n FROM events WHERE created_at >= ? GROUP BY type").bind(F),
+      db.prepare("SELECT COUNT(*) AS n FROM reports WHERE hidden = 0 AND created_at >= ?").bind(rg.from),
       // 会場スクリーンに出すのは「名前を出してOK」の人の名前だけ（本文は出さない）
-      db.prepare("SELECT name, created_at FROM reports WHERE hidden = 0 AND screen_ok = 1 ORDER BY created_at DESC LIMIT 8"),
+      db.prepare("SELECT name, created_at FROM reports WHERE hidden = 0 AND screen_ok = 1 AND created_at >= ? ORDER BY created_at DESC LIMIT 8").bind(rg.from),
     ]);
     for (const r of ev.results || []) {
       if (r.type === "generate") data.generated = r.n;
@@ -1174,8 +1179,9 @@ async function judgeFeed(env, url) {
   if (!db) return json({ ok: false, code: "no_db", message: "データベースが未設定です" }, 500);
   const j = cleanJudge(url.searchParams.get("j"));
   const since = Math.max(0, Number(url.searchParams.get("since")) || 0);
+  const rg = await rangeOf(env, null); // パネラーの画面も、いまの期間の投稿だけ
   const [rows, stars, picks] = await db.batch([
-    db.prepare("SELECT * FROM reports WHERE updated_at > ? ORDER BY created_at DESC LIMIT 500").bind(since),
+    db.prepare("SELECT * FROM reports WHERE updated_at > ? AND created_at >= ? ORDER BY created_at DESC LIMIT 500").bind(since, rg.from),
     db.prepare("SELECT report_id FROM stars WHERE judge = ?").bind(j),
     db.prepare("SELECT judge, report_id FROM stars"),
   ]);
@@ -1229,6 +1235,67 @@ async function health(env) {
   });
 }
 
+// ---------- 過去のイベント（期間で分ける） ----------
+// 運営ページは「いまの期間」（いちばん新しい区切りより後）のデータだけを出す。区切りより前は /archive（過去の記録）で見る
+// 区切りは settings の archives（[{id, name, preset, until(ミリ秒)}]）。まだ保存していなければ、10/6 のイベントを最初の区切りにする
+const ARCHIVE_DEFAULT = [{ id: "kansai-1006", name: "関西を、おもろくする夜。（2026/10/6 富士通ラーニングメディア主催）", preset: "fujitsu", until: Date.parse("2026-10-08T00:00:00+09:00") }];
+async function readArchives(env) {
+  const s = await readSettings(env);
+  const list = safeParse(s.archives, null);
+  const arr = Array.isArray(list) ? list : ARCHIVE_DEFAULT;
+  const sorted = arr.filter((a) => a && a.id && Number(a.until) > 0).sort((a, b) => a.until - b.until);
+  let from = 0;
+  return sorted.map((a) => {
+    const r = { id: String(a.id), name: String(a.name || a.id), preset: String(a.preset || ""), from, until: Number(a.until) };
+    from = r.until;
+    return r;
+  });
+}
+// ?a=過去のイベントのID でその期間、なければいまの期間 → {from, to(ミリ秒), archive}
+async function rangeOf(env, url) {
+  const list = await readArchives(env);
+  const id = String((url && url.searchParams.get("a")) || "");
+  const hit = id && list.find((a) => a.id === id);
+  if (hit) return { from: hit.from, to: hit.until, archive: hit };
+  return { from: list.length ? list[list.length - 1].until : 0, to: 8.64e15, archive: null };
+}
+// 日時の文字（events・posts の created_at と文字で比べる）。「いまの期間」の終わりは 9999年 にする（+275760年 のような形は文字で比べられない）
+const isoOf = (ms) => (ms >= 253402300799999 ? "9999-12-31T23:59:59.999Z" : new Date(ms).toISOString());
+async function adminArchives(env) {
+  const list = await readArchives(env);
+  const cur = list.length ? list[list.length - 1].until : 0;
+  const db = await getDb(env);
+  const out = [];
+  for (const a of list) {
+    let reports = 0;
+    let made = 0;
+    if (db) {
+      const [r1, r2] = await db.batch([
+        db.prepare("SELECT COUNT(*) AS n FROM reports WHERE created_at >= ? AND created_at < ?").bind(a.from, a.until),
+        db.prepare("SELECT COUNT(*) AS n FROM events WHERE type = 'generate' AND created_at >= ? AND created_at < ?").bind(isoOf(a.from), isoOf(a.until)),
+      ]);
+      reports = (r1.results && r1.results[0] && r1.results[0].n) || 0;
+      made = (r2.results && r2.results[0] && r2.results[0].n) || 0;
+    }
+    out.push({ ...a, fromJst: a.from ? jst(isoOf(a.from)) : "", untilJst: jst(isoOf(a.until)), reports, made });
+  }
+  return json({ ok: true, archives: out.reverse(), currentFrom: cur, currentFromJst: cur ? jst(isoOf(cur)) : "" });
+}
+// 「ここまでを過去のイベントにする」：いまの期間のデータを、名前をつけて過去の記録に移す（消さない）
+async function adminArchiveCreate(request, env) {
+  const body = await readJson(request, 4000);
+  const name = oneLine(body && body.name, 80);
+  if (!name) return json({ ok: false, code: "input", message: "イベントの名前を入れてください" }, 400);
+  const db = await getDb(env);
+  if (!db) return json({ ok: false, code: "no_db", message: "データベースがありません" }, 503);
+  const list = await readArchives(env);
+  const next = [...list.map(({ id, name: n, preset, until }) => ({ id, name: n, preset, until })), { id: `a${Date.now().toString(36)}`, name, preset: oneLine(body.preset, 20), until: Date.now() }];
+  await db.prepare("INSERT INTO settings (key, value) VALUES ('archives', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").bind(JSON.stringify(next)).run();
+  settingsCache.at = 0;
+  statsCache = { at: 0, data: null };
+  return adminArchives(env);
+}
+
 // ---------- 運営用 ----------
 function safeEqual(want, got) {
   if (!want || got.length !== want.length) return false;
@@ -1240,9 +1307,12 @@ function adminOk(request, env) {
   return safeEqual(String(env.ADMIN_PASSCODE || ""), String(request.headers.get("x-admin-passcode") || ""));
 }
 
-async function adminSummary(env) {
+async function adminSummary(env, url) {
   const db = await getDb(env);
   const s = await readSettings(env, true);
+  const rg = await rangeOf(env, url);
+  const F = isoOf(rg.from);
+  const T = isoOf(rg.to);
   const out = {
     ok: true,
     db: !!db,
@@ -1260,13 +1330,13 @@ async function adminSummary(env) {
   };
   if (!db) return json(out);
   const [cnt, posts, gens, picks, errs, reps, repNames] = await db.batch([
-    db.prepare("SELECT type, COUNT(*) AS n FROM events GROUP BY type"),
-    db.prepare("SELECT COUNT(*) AS n FROM posts"),
-    db.prepare("SELECT detail FROM events WHERE type = 'generate' ORDER BY id DESC LIMIT 3000"),
-    db.prepare("SELECT detail FROM events WHERE type IN ('copy', 'later') ORDER BY id DESC LIMIT 3000"),
-    db.prepare("SELECT created_at, detail FROM events WHERE type = 'error' ORDER BY id DESC LIMIT 20"),
-    db.prepare("SELECT COUNT(*) AS n FROM reports WHERE hidden = 0"),
-    db.prepare("SELECT name, created_at FROM reports WHERE hidden = 0"),
+    db.prepare("SELECT type, COUNT(*) AS n FROM events WHERE created_at >= ? AND created_at < ? GROUP BY type").bind(F, T),
+    db.prepare("SELECT COUNT(*) AS n FROM posts WHERE created_at >= ? AND created_at < ?").bind(F, T),
+    db.prepare("SELECT detail FROM events WHERE type = 'generate' AND created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT 3000").bind(F, T),
+    db.prepare("SELECT detail FROM events WHERE type IN ('copy', 'later') AND created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT 3000").bind(F, T),
+    db.prepare("SELECT created_at, detail FROM events WHERE type = 'error' AND created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT 20").bind(F, T),
+    db.prepare("SELECT COUNT(*) AS n FROM reports WHERE hidden = 0 AND created_at >= ? AND created_at < ?").bind(rg.from, rg.to),
+    db.prepare("SELECT name, created_at FROM reports WHERE hidden = 0 AND created_at >= ? AND created_at < ?").bind(rg.from, rg.to),
   ]);
   for (const r of cnt.results || []) if (r.type in out.counts && r.type !== "report") out.counts[r.type] = r.n;
   out.counts.report = (reps.results && reps.results[0] && reps.results[0].n) || 0;
@@ -1327,7 +1397,8 @@ async function adminPosts(env, url) {
   if (!db) return json({ ok: true, rows: [], total: 0 });
   const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit")) || 50));
   const offset = Math.max(0, Number(url.searchParams.get("offset")) || 0);
-  const { results } = await db.prepare("SELECT * FROM posts ORDER BY id DESC LIMIT ? OFFSET ?").bind(limit, offset).all();
+  const rg = await rangeOf(env, url);
+  const { results } = await db.prepare("SELECT * FROM posts WHERE created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT ? OFFSET ?").bind(isoOf(rg.from), isoOf(rg.to), limit, offset).all();
   const rows = (results || []).map((r) => ({
     id: r.id,
     at: jst(r.created_at),
@@ -1344,12 +1415,13 @@ async function adminPosts(env, url) {
   return json({ ok: true, rows });
 }
 
-async function adminExport(env) {
+async function adminExport(env, url) {
   const db = await getDb(env);
+  const rg = await rangeOf(env, url);
   const header = ["日時", "行動", "立場", "ネタ", "回答", "文体", "関西弁", "長さ", "絵文字", "入れたい一言", "選んだパターン", "自分で直した", "投稿文", "エモい案", "ユーモア案", "学び案"];
   const lines = [header];
   if (db) {
-    const { results } = await db.prepare("SELECT * FROM posts ORDER BY id ASC").all();
+    const { results } = await db.prepare("SELECT * FROM posts WHERE created_at >= ? AND created_at < ? ORDER BY id ASC").bind(isoOf(rg.from), isoOf(rg.to)).all();
     const toneName = { emo: "エモい", humor: "ユーモア", straight: "学び" };
     for (const r of results || []) {
       const st = safeParse(r.style, {});
@@ -1420,8 +1492,15 @@ async function adminWipe(request, env) {
   if (!body || body.confirm !== "DELETE") return json({ ok: false, code: "confirm" }, 400);
   const db = await getDb(env);
   if (!db) return json({ ok: false, code: "no_db" }, 500);
-  // 名簿（settings）は残す。消すのはリハーサルのデータだけ
-  await db.batch([db.prepare("DELETE FROM posts"), db.prepare("DELETE FROM events"), db.prepare("DELETE FROM reports"), db.prepare("DELETE FROM stars")]);
+  // 名簿（settings）と過去の記録は残す。消すのは、いまの期間のデータだけ
+  const rg = await rangeOf(env, null);
+  const F = isoOf(rg.from);
+  await db.batch([
+    db.prepare("DELETE FROM posts WHERE created_at >= ?").bind(F),
+    db.prepare("DELETE FROM events WHERE created_at >= ?").bind(F),
+    db.prepare("DELETE FROM stars WHERE report_id IN (SELECT id FROM reports WHERE created_at >= ?)").bind(rg.from),
+    db.prepare("DELETE FROM reports WHERE created_at >= ?").bind(rg.from),
+  ]);
   statsCache = { at: 0, data: null };
   return json({ ok: true });
 }
@@ -1614,11 +1693,12 @@ async function readRoster(env) {
   return Array.isArray(list) ? list.filter((x) => typeof x === "string" && x) : [];
 }
 
-async function adminReports(env) {
+async function adminReports(env, url) {
   const db = await getDb(env);
   if (!db) return json({ ok: true, rows: [], roster: null, rosterText: "" });
+  const rg = await rangeOf(env, url);
   const [rows, stars] = await db.batch([
-    db.prepare("SELECT * FROM reports ORDER BY created_at DESC LIMIT 1000"),
+    db.prepare("SELECT * FROM reports WHERE created_at >= ? AND created_at < ? ORDER BY created_at DESC LIMIT 1000").bind(rg.from, rg.to),
     db.prepare("SELECT judge, report_id FROM stars ORDER BY created_at ASC"),
   ]);
   const byReport = {};
@@ -1687,13 +1767,14 @@ async function adminRoster(request, env) {
   return json({ ok: true, count: names.length });
 }
 
-async function adminExportReports(env) {
+async function adminExportReports(env, url) {
   const db = await getDb(env);
+  const rg = await rangeOf(env, url);
   const header = ["報告日時", "名前", "作り方", "投稿のリンク", "本文", "スクリーンに名前", "非表示", "★を付けたパネラー"];
   const lines = [header];
   if (db) {
     const [rows, stars] = await db.batch([
-      db.prepare("SELECT * FROM reports ORDER BY created_at ASC"),
+      db.prepare("SELECT * FROM reports WHERE created_at >= ? AND created_at < ? ORDER BY created_at ASC").bind(rg.from, rg.to),
       db.prepare("SELECT judge, report_id FROM stars ORDER BY created_at ASC"),
     ]);
     const byReport = {};
