@@ -10,11 +10,15 @@
   const MODE = window.APP_MODE === "preview" ? "preview" : "live";
 
   // イベントごとの色（config.js の theme。運営ページのイベントの色でも上書きできる）。書いていない色は app.css の初期値のまま
-  const THEME_VARS = { ground: "--ground", onGround: "--on-ground", onGroundSoft: "--on-ground-soft", onInk: "--on-ink", sheet: "--sheet", focus: "--focus", note: "--note", ink: "--ink", groundText: "--ink-soft", subText: "--muted", accent: "--blue", accentPress: "--blue-press", accentTint: "--blue-tint", mark: "--coral", check: "--check" };
+  const THEME_VARS = { groundTop: "--ground-top", ground: "--ground", onGround: "--on-ground", onGroundSoft: "--on-ground-soft", onInk: "--on-ink", sheet: "--sheet", focus: "--focus", note: "--note", ink: "--ink", groundText: "--ink-soft", subText: "--muted", accent: "--blue", accentPress: "--blue-press", accentTint: "--blue-tint", mark: "--coral", check: "--check" };
   const HEX = /^#[0-9A-Fa-f]{6}$/;
   function applyTheme(theme) {
     if (!theme) return;
     for (const [k, v] of Object.entries(THEME_VARS)) if (theme[k] && HEX.test(theme[k])) document.documentElement.style.setProperty(v, theme[k]);
+    // 地のグラデーション（config.js の theme.groundImage だけ。運営ページで地の色を決めたイベントは、べた塗りにもどす）
+    if (typeof theme.groundImage === "string" && /^(linear-gradient|url)\(/.test(theme.groundImage)) document.documentElement.style.setProperty("--ground-image", theme.groundImage);
+    else if (theme.ground) document.documentElement.style.removeProperty("--ground-image");
+    document.documentElement.classList.toggle("has-ground-image", !!document.documentElement.style.getPropertyValue("--ground-image"));
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta && theme.ground && HEX.test(theme.ground)) meta.setAttribute("content", theme.ground);
   }
@@ -568,6 +572,10 @@
     dock.hidden = !dockHtml;
     document.body.classList.toggle("has-dock", !!dockHtml);
     renderStepper();
+    if (coList().length) {
+      setupMarquee();
+      if (MQ) MQ.hidden = S.step !== "pick"; // 参加企業のロゴは、最初の画面だけ
+    }
     paintClouds(document);
     if (S.step === "answer") autoGrow($("#answer"));
     if (S.step === "result") fitPreview();
@@ -629,6 +637,8 @@
             <span class="opt-who bx">聞きたいネタを、いくつでもえらぶ（15まで）</span>
           </span>
         </button>`;
+    // 「どんな投稿にする？」と「どれだけ書く？」は同じ枠で、右上のボタンでその場で切りかえる（スクロールしなくていいように）
+    const pane = T.pickPane === "size" ? "size" : "theme";
     // どんな投稿にする？（テーマ。size=3のセットを代表に出す。3問のセットがないテーマは最初のセット）
     const customOn = !!String(S.customTheme || "").trim();
     const themeReps = [];
@@ -719,27 +729,34 @@
         ${photoFieldHtml()}
       </section>
       <h2 class="pick-divider"><span>自分で選ぶ人は、こちら</span></h2>
-      <section class="block has-scribble">
-        <h2 class="sec-title" id="themeTitle">どんな投稿にする？</h2>
-        <span class="scribble sc-nanyate" aria-hidden="true">なんやて</span>
-        <div class="opts" role="radiogroup" aria-labelledby="themeTitle">${themeRows}</div>
-        <p class="sec-note">テーマを押すと、質問の並びが自動で切り替わるで。質問の中身は「ネタを自分で入れかえる」で変えられる。</p>
+      <section class="block pick-pane-block">
+        <div class="sec-head">
+          <h2 class="sec-title" id="pickTitle">${pane === "size" ? "どれだけ書く？" : "どんな投稿にする？"}</h2>
+          <div class="pane-switch" role="tablist" aria-label="テーマと問数の切りかえ">
+            <button type="button" role="tab" id="paneTheme" aria-controls="pickPane" aria-selected="${pane === "theme"}" data-act="pickPane" data-v="theme">テーマ</button>
+            <button type="button" role="tab" id="paneSize" aria-controls="pickPane" aria-selected="${pane === "size"}" data-act="pickPane" data-v="size">問数<b>${S.free ? "自由" : `${S.size}問`}</b></button>
+          </div>
+        </div>
+        <div id="pickPane" role="tabpanel" aria-labelledby="${pane === "size" ? "paneSize" : "paneTheme"}">
+        ${
+          pane === "size"
+            ? `<div class="opts" role="radiogroup" aria-labelledby="pickTitle">${sizeRows}</div>
+        <p class="sec-note">問数を変えても、選んだテーマのまま切り替わるで。<wbr>テーマは右上の「テーマ」で選びなおせる。</p>`
+            : `<div class="opts" role="radiogroup" aria-labelledby="pickTitle">${themeRows}</div>
+        <p class="sec-note">テーマを押すと、質問の並びが自動で切り替わるで。<wbr>何問にするかは、右上の「問数」でその場で変えられる。</p>
         <div class="field custom-theme">
           <label class="field-label" for="customTheme">じぶんで決める${customOn ? '<span class="req-inline">必須</span>' : "（任意）"}</label>
           <input id="customTheme" class="phrase" type="text" maxlength="60" autocomplete="off" placeholder="例：娘の運動会の話を書きたい" value="${esc(S.customTheme || "")}">
           <p class="field-note bx">ここに書いたテーマがAIにそのまま伝わるで。<wbr>${customOn ? "「じぶんで決める」のときは、<wbr>テーマを書くのが必須やで。" : "当てはまるテーマが無いときは、<wbr>ここに書いてな。"}</p>
+        </div>`
+        }
         </div>
-        ${companiesHtml()}
       </section>
       <section class="block">
         <h2 class="sec-title">いま選んでる質問（この順で聞くで）</h2>
         <p class="flow-now">${flowCards()
           .map((c) => `<span class="nw">${esc(plain(c.label))}</span>`)
           .join("／<wbr>")}</p>
-      </section>
-      <section class="block">
-        <h2 class="sec-title" id="sizeTitle">どれだけ書く？</h2>
-        <div class="opts" role="radiogroup" aria-labelledby="sizeTitle">${sizeRows}</div>
       </section>
       ${swap}`
       }
@@ -750,26 +767,86 @@
     return { html, dockHtml };
   }
 
-  // 参加企業のロゴ（イベントのプリセットに companies があるときだけ）。押すと採用ページ（無ければイベントの公式サイト）
-  function companiesHtml() {
-    const co = C.companies;
-    if (!co || !Array.isArray(co.list) || !co.list.length) return "";
+  // ---------- 参加企業のロゴ（イベントのプリセットに companies があるときだけ。LSCW） ----------
+  // ページのいちばん上で、右から左へゆっくり流れる。指でスワイプもできて、ロゴを押すと採用ページ（無ければイベントの公式サイト）
+  const coList = () => (C.companies && Array.isArray(C.companies.list) ? C.companies.list : []);
+  function coItemHtml(c, hidden) {
     const site = (C.eventPage && C.eventPage.siteUrl) || "";
-    const items = co.list
-      .map((c) => {
-        const url = c.url || site;
-        const img = `<img src="logos/${esc(c.logo)}.png" alt="" loading="lazy" decoding="async">`;
-        const label = `${c.name}${c.url ? "の採用ページ" : "（イベントの公式サイト）"}（新しいタブでひらく）`;
-        return url
-          ? `<li><a class="co" href="${esc(url)}" target="_blank" rel="noopener" aria-label="${esc(label)}">${img}</a></li>`
-          : `<li><span class="co" role="img" aria-label="${esc(c.name)}">${img}</span></li>`;
-      })
-      .join("");
-    return `<div class="companies">
-          <h3 class="co-title">${esc(co.title || "参加企業")}<span class="co-count">${co.list.length}社</span></h3>
-          <p class="sec-note bx">${fmt(co.note || "")}</p>
-          <ul class="co-grid">${items}</ul>
-        </div>`;
+    const url = c.url || site;
+    const img = `<img src="logos/${esc(c.logo)}.png" alt="" width="120" height="44" decoding="async">`;
+    const label = `${c.name}${c.url ? "の採用ページ" : "（イベントの公式サイト）"}（新しいタブでひらく）`;
+    const extra = hidden ? ' tabindex="-1"' : "";
+    return url
+      ? `<li><a class="co" href="${esc(url)}" target="_blank" rel="noopener" aria-label="${esc(label)}"${extra}>${img}</a></li>`
+      : `<li><span class="co" role="img" aria-label="${esc(c.name)}">${img}</span></li>`;
+  }
+  function companiesSheetHtml() {
+    const co = C.companies || {};
+    return `
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <h2 class="sheet-title" id="sheetTitle">${esc(co.title || "参加企業")}（${coList().length}社）</h2>
+      <p class="sheet-lead bx">${fmt(co.note || "")}</p>
+      <ul class="co-grid">${coList().map((c) => coItemHtml(c, false)).join("")}</ul>
+      <div class="stack"><button type="button" class="btn btn-secondary btn-block" data-act="closeSheet">とじる</button></div>`;
+  }
+  let MQ = null;
+  function setupMarquee() {
+    const list = coList();
+    if (!list.length || MQ) return;
+    const co = C.companies || {};
+    const box = document.createElement("section");
+    box.className = "co-marquee";
+    box.setAttribute("aria-label", `${co.title || "参加企業"}（ロゴを押すと採用ページ）`);
+    box.innerHTML = `
+      <div class="co-mq-head">
+        <span class="co-mq-title">${esc(co.title || "参加企業")}<b>${list.length}社</b><span class="co-mq-hint">押すと採用ページへ</span></span>
+        <button type="button" class="co-mq-all" data-act="coAll">一覧で見る</button>
+      </div>
+      <div class="co-track" id="coTrack">
+        <ul class="co-row">${list.map((c) => coItemHtml(c, false)).join("")}${list.map((c) => coItemHtml(c, true)).join("")}</ul>
+      </div>`;
+    const app = document.querySelector(".app");
+    if (!app) return;
+    app.insertBefore(box, app.firstChild);
+    MQ = box;
+    const track = $("#coTrack", box);
+    const still = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (still) return; // 動きを減らす設定の人は、流さない（指でスワイプはできる）
+    let pos = 0;
+    let hold = 0; // この時刻までは止める（指でさわったあと）
+    let held = false;
+    let last = 0;
+    const SPEED = 32; // 1秒に動くピクセル
+    const pause = () => { held = true; };
+    const resume = () => { held = false; hold = performance.now() + 2500; };
+    track.addEventListener("pointerdown", pause, { passive: true });
+    track.addEventListener("touchstart", pause, { passive: true });
+    track.addEventListener("mouseenter", pause);
+    track.addEventListener("focusin", pause);
+    for (const ev of ["pointerup", "pointercancel", "touchend", "touchcancel", "mouseleave", "focusout"]) track.addEventListener(ev, resume, { passive: true });
+    track.addEventListener("wheel", () => { hold = performance.now() + 2500; }, { passive: true });
+    const half = () => {
+      const items = track.querySelectorAll(".co-row > li");
+      const n = list.length;
+      return items.length > n ? items[n].offsetLeft - items[0].offsetLeft : 0;
+    };
+    const step = (t) => {
+      const dt = last ? Math.min(0.1, (t - last) / 1000) : 0;
+      last = t;
+      if (box.isConnected && !box.hidden && !document.hidden && !held && t > hold) {
+        if (Math.abs(track.scrollLeft - pos) > 2) pos = track.scrollLeft; // 指で動かしたら、そこから続ける
+        const w = half();
+        pos += SPEED * dt;
+        if (w > 0 && pos >= w) pos -= w;
+        track.scrollLeft = pos;
+      } else if (held || t <= hold) {
+        const w = half();
+        if (w > 0 && track.scrollLeft >= w) track.scrollLeft -= w; // 端までスワイプしても、つながって見える
+        pos = track.scrollLeft;
+      }
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   // 見出し・自己紹介の条件（最初の画面の下）。決めた条件で、質問の聞き方と候補が変わる
@@ -2893,6 +2970,14 @@
         keepScroll(render);
         break;
       }
+      case "coAll":
+        openSheet(companiesSheetHtml(), "[data-act=closeSheet]");
+        break;
+      case "pickPane":
+        T.pickPane = el.dataset.v === "size" ? "size" : "theme";
+        keepScroll(render);
+        { const b = $(`[data-act=pickPane][data-v="${T.pickPane}"]`); if (b) b.focus({ preventScroll: true }); }
+        break;
       case "theme": {
         const theme = el.dataset.v;
         S.customTheme = ""; // 「じぶんで決める」をやめて、テーマ一覧に切り替えたときは入力を空にする

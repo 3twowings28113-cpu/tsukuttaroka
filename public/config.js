@@ -422,6 +422,18 @@ window.APP_CONFIG = {
     lscw: {
       label: "LSCW 2026 Autumn（10/31 学生向けブース）",
       pagePath: "/lscw", // このプリセット専用のページ（運営ページのQRは、このページのURLになる）
+      // 地は LSCW の公式サイトに合わせた、ミント → 青のグラデーション（明るいので、地の上の文字は黒）。押せるものは LinkedIn の濃い青のまま
+      theme: {
+        ...B.theme,
+        ground: "#8EF0D6", // 上の帯・下のボタンの帯など、べた塗りのところ
+        groundTop: "#C2FBE6", // いちばん上の「困ったら」の帯（グラデーションの上のほうの色）
+        groundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 900' preserveAspectRatio='none'%3E%3Cpath d='M-40 330 C 60 170 170 150 230 300 S 360 470 440 250 L 440 330 C 360 560 250 420 200 370 S 40 260 -40 430 Z' fill='%23ffffff' fill-opacity='0.55'/%3E%3C/svg%3E") top / 100% 100% no-repeat, linear-gradient(150deg, #D4FDEC 0%, #A4F8DD 26%, #6DEFD0 50%, #55DDD6 70%, #4CB4EE 90%, #4A9BEF 100%)`,
+        onGround: "#121212",
+        onGroundSoft: "#1F3A44",
+        sheet: "#EAFBF5",
+        note: "#F0FCF8",
+        focus: "#004182",
+      },
       eventSub: "LinkedIn Student Career Week 2026 Autumn",
       eventName: "",
       // 運営ページのイベントで上書きできる（イベントのハッシュタグが空のときは、これが付く）
