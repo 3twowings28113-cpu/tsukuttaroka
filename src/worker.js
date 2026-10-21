@@ -51,7 +51,7 @@ import {
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-22.lscw-6";
+const VERSION = "2026-10-22.lscw-7";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -621,10 +621,21 @@ async function eventKeyOf(request, env) {
   if (!eventActive(ev)) return { ...NO_EVENT, id, bad: true };
   return { key: ev.key || env.GEMINI_API_KEY || null, id };
 }
-// イベントごとのAIへの追加の指示（自分のキーで作る人にも効く。本文の event で受け取る）
+// イベントごとのAIへの情報：概要（会場の様子を理解するための参考）＋追加の指示。自分のキーで作る人にも効く。本文の event で受け取る
 async function eventNoteOf(env, id) {
   const ev = await readEvent(env, cleanEventId(id)).catch(() => null);
-  return eventActive(ev) ? multiLine(ev.aiNote, 1500) : "";
+  if (!eventActive(ev)) return "";
+  const overview = multiLine(ev.overview, 3000);
+  const note = multiLine(ev.aiNote, 1500);
+  return [overview && `＜イベントの概要（参加者の回答を正しく理解するための参考）＞\n${overview}`, note && (overview ? `＜運営からの指示＞\n${note}` : note)].filter(Boolean).join("\n\n");
+}
+// 参加者の画面に出す機能（ネタ帳・カレンダー・じぶんの書き方）。決めていなければ null（質問セットの初期のまま）
+const FEATURE_KEYS = ["notes", "calendar", "voice"];
+function cleanFeatures(v) {
+  if (!v || typeof v !== "object") return null;
+  const out = {};
+  for (const k of FEATURE_KEYS) if (typeof v[k] === "boolean") out[k] = v[k];
+  return Object.keys(out).length ? out : null;
 }
 // 投稿文に入れてよいイベント名（イベントのページから作ったときだけ）
 async function eventNameOf(env, id) {
@@ -654,6 +665,7 @@ async function eventPublic(env, url) {
       info: ev.info || {},
       schedule: ev.schedule || [],
       theme: ev.theme || null,
+      features: ev.features || null,
     },
   });
 }
@@ -674,6 +686,8 @@ function eventForAdmin(id, d, updatedAt) {
     followName: d.followName || "",
     followRequired: d.followRequired === true,
     aiNote: d.aiNote || "",
+    overview: d.overview || "",
+    features: d.features || null,
     info: d.info || {},
     schedule: d.schedule || [],
     scheduleText: scheduleText(d.schedule || []),
@@ -713,6 +727,8 @@ async function adminEventSave(request, env) {
     followName: oneLine(body.followName, 40),
     followRequired: !!followUrl && body.followRequired === true,
     aiNote: multiLine(body.aiNote, 1500),
+    overview: multiLine(body.overview, 3000),
+    features: cleanFeatures(body.features),
     info: cleanInfo(body.info),
     schedule: parseSchedule(body.schedule),
     theme: ground || accent ? { ...(ground ? { ground, onGround: onColor(ground), onGroundSoft: onColor(ground) } : {}), ...(accent ? { accent, check: accent } : {}) } : null,

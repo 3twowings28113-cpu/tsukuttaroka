@@ -288,6 +288,7 @@
       answers: {},
       free: false, // ボリューム「じぶんで選ぶ」（ネタをいくつでも）
       customTheme: "", // 「じぶんで決める」のテーマ（AIにそのまま渡る）
+      note: null, // ネタ帳のメモから作るとき {id, date, text}（AIに渡す。サーバーには残さない）
       style: defaultStyle(),
       pcond: defaultCond(), // 見出し・自己紹介の条件
       presults: { headline: null, about: null }, // 見出し {list, edited}／自己紹介 {text, edited}
@@ -323,6 +324,38 @@
       localStorage.setItem(HIST_KEY, JSON.stringify(histGet().filter((h) => h.at !== at)));
     } catch {}
   }
+
+  // ネタ帳（投稿のネタのメモ）。この端末のブラウザにだけ保存する。サーバーには送らない（そのメモで投稿を作るときだけ、AIに渡す）
+  // ページ（/・/lscw）をまたいで同じものを使う
+  const NOTES_KEY = "tsukuttaroka.notes";
+  const NOTE_MAX = 400;
+  function notesGet() {
+    try {
+      const v = JSON.parse(localStorage.getItem(NOTES_KEY) || "[]");
+      return Array.isArray(v) ? v.filter((n) => n && n.id && typeof n.text === "string") : [];
+    } catch {
+      return [];
+    }
+  }
+  function notesSet(list) {
+    try {
+      localStorage.setItem(NOTES_KEY, JSON.stringify(list.slice(0, 100)));
+      return true;
+    } catch {
+      toast("メモを保存できへんかった（ブラウザの設定で保存が止まってるかも）", 3200);
+      return false;
+    }
+  }
+  const todayStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  };
+  const noteDay = (ymd) => {
+    const m = String(ymd || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return "";
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return `${Number(m[2])}/${Number(m[3])}（${"日月火水木金土"[d.getDay()]}）`;
+  };
 
   // じぶんの好みの履歴（「こうしてほしい」で頼んだ直し指示。この端末にだけ残る。次回の生成に自動で反映する）
   const PREF_KEY = "tsukuttaroka.prefs";
@@ -511,6 +544,10 @@
         };
       })
       .filter((a) => a.text || a.chips.length);
+    // ネタ帳のメモ（このメモから作るとき）。回答と同じようにAIに渡す
+    if (!isProfile() && S.note && String(S.note.text || "").trim()) {
+      answers = [{ id: "memo", label: "ネタ帳のメモ", question: S.note.date ? `${noteDay(S.note.date)}のメモ` : "メモ", chips: [], text: String(S.note.text).trim().slice(0, NOTE_MAX) }].concat(answers);
+    }
     // 写真のこと（えらんでたら、AIにも伝える）
     const pw = (T.photoWhat || "").trim();
     const pq = (T.photoWant || "").trim();
@@ -689,7 +726,7 @@
     const html = `
       <div class="big-row"><button type="button" class="big-toggle" data-act="bigText" aria-pressed="${isBig()}"><span class="big-a" aria-hidden="true">あ</span>${isBig() ? "文字を元にもどす" : "文字を大きくする"}</button></div>
       ${eventHeadHtml()}
-      ${aiReady() && (MYKEY || advOn()) ? `<p class="key-on bx">${advOn() ? `じぶんのAI（${esc(AISET.model)}）で文章を作るで` : "じぶんのGeminiで文章を作るで"}</p>` : ""}
+      ${!eventKeyReady() && aiReady() && (MYKEY || advOn()) ? `<p class="key-on bx">${advOn() ? `じぶんのAI（${esc(AISET.model)}）で文章を作るで` : "じぶんのGeminiで文章を作るで"}</p>` : ""}
       <section class="hero cloud" data-bump="46" data-seed="3">
         ${C.eventPage || !(C.eventSub || C.eventName) ? "" : `<p class="hero-eyebrow">${esc(C.eventSub || "")}${C.eventName ? `<br>「${esc(C.eventName)}」` : ""}</p>`}
         <h1 class="hero-title bx" tabindex="-1">${fmt(C.appName)}</h1>
@@ -711,24 +748,14 @@
         </div>
         ${followNeeded() ? followGateHtml() : ""}
         <p class="hero-note bx">${isProfile() ? "下で条件を決めると、<wbr>あなたに合わせた質問になるで。<wbr>書いたことだけ使うで" : "何も選ばんでOK。<wbr>質問に答えるだけで<wbr>投稿文ができるで"}</p>
-        ${
-          eventKeyReady() && !MYKEY
-            ? ""
-            : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block${aiReady() ? "" : " is-unset"}" data-act="openKey">${aiReady() ? "作るAIを見る・変える" : '<span class="badge-unset">未設定</span>文章を作るAIを紐づける（無料・約5分）'}</button></p>`
-        }
-        ${isProfile() ? "" : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block bx" data-act="cal">カレンダーから<wbr>投稿をつくる<wbr>${CALURL ? "（つないでる）" : "（まずつなぐ・1分）"}<span class="badge-opt">任意</span></button></p>`}
-        ${histGet().length ? `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block" data-act="hist">マイ投稿記録（${histGet().length}件）</button></p>` : ""}
-        ${isProfile() ? "" : `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block bx" data-act="voice">じぶんの書き方を<wbr>おぼえさせる<wbr>${VOICE.text ? (VOICE.on ? "（適用中）" : "（おぼえてる・止まってる）") : "（一度だけでOK）"}<span class="badge-opt">任意</span></button></p>`}
+        ${!eventKeyReady() && !aiReady() ? `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block is-unset" data-act="openKey"><span class="badge-unset">未設定</span>文章を作るAIを紐づける（無料・約5分）</button></p>` : ""}
+        ${noteBannerHtml()}
+        ${featuresHtml()}
       </section>
       ${
         isProfile()
           ? condFormHtml()
-          : `<section class="block photo-block">
-        <h2 class="sec-title">写真から作る<span class="badge-opt">任意</span></h2>
-        <p class="sec-note bx">写真を入れると、<wbr>AIが写真も見て書くで（${PHOTO_LIMIT}枚まで）。<wbr>入れんでもOK。</p>
-        ${photoFieldHtml()}
-      </section>
-      <h2 class="pick-divider"><span>自分で選ぶ人は、こちら</span></h2>
+          : `<h2 class="pick-divider"><span>自分で選ぶ人は、こちら</span></h2>
       <section class="block pick-pane-block">
         <div class="sec-head">
           <h2 class="sec-title" id="pickTitle">${pane === "size" ? "どれだけ書く？" : "どんな投稿にする？"}</h2>
@@ -911,6 +938,79 @@
   }
 
   // 写真の欄（最初の画面と、じぶん色の画面の両方で同じものを出す。写真は端末で小さくしてから持つ）
+  // 参加者の画面に出す機能（config.js の features。イベントは運営ページの「出す機能」で切りかえ）
+  // イベントのページで運営が決めていないときは、ネタ帳だけ出す（会場では予定が決まっているので、カレンダーと書き方のおぼえさせは出さない）
+  const EVENT_FEATURES = { notes: true, calendar: false, voice: false };
+  function featureOn(k) {
+    if (EVENT) {
+      const ev = EVENT.features || {};
+      return typeof ev[k] === "boolean" ? ev[k] : EVENT_FEATURES[k] !== false;
+    }
+    return !(C.features && C.features[k] === false);
+  }
+  // 最初の画面の「便利な機能」。何ができるかを1行ずつ書いて、いまの状態を右に出す（初めての人にも分かるように）
+  function featuresHtml() {
+    const rows = [];
+    const row = (act, title, sub, state, on) =>
+      `<li><button type="button" class="feat${on ? " is-on" : ""}" data-act="${act}"><span class="feat-main"><span class="feat-t">${title}</span><span class="feat-s bx">${sub}</span></span>${state ? `<span class="feat-state">${state}</span>` : ""}</button></li>`;
+    if (!eventKeyReady() && aiReady()) rows.push(row("openKey", "文章を作るAI", advOn() ? `Gemini以外のAI（${esc(AISET.model)}）で作ってる。<wbr>変えるときはここ` : "あなたのGeminiのキーで作ってる。<wbr>キーを変える・回数の上限を見るときはここ", "つないでる", true));
+    if (featureOn("notes")) {
+      const n = notesGet().length;
+      rows.push(row("notes", "ネタ帳", "思いついた投稿のネタを、<wbr>日付つきでメモしておける。<wbr>メモから投稿も作れる", n ? `${n}件` : "", n > 0));
+    }
+    if (!isProfile() && featureOn("calendar")) rows.push(row("cal", "カレンダーから作る", "Googleカレンダーの予定を読んで、<wbr>その日の出来事から投稿を作る", CALURL ? "つないでる" : "", !!CALURL));
+    if (!isProfile() && featureOn("voice")) rows.push(row("voice", "じぶんの書き方", "これまでの投稿を読ませると、<wbr>あなたの書きぐせに寄せて書く", VOICE.text ? (VOICE.on ? "使ってる" : "止めてる") : "", !!(VOICE.text && VOICE.on)));
+    const hn = histGet().length;
+    if (hn) rows.push(row("hist", "マイ投稿記録", "このスマホで作った投稿の一覧。<wbr>コピーして使い回せる", `${hn}件`, false));
+    if (!rows.length) return "";
+    return `<div class="feats"><p class="feats-title">便利な機能<span class="feats-sub">使わんでもOK</span></p><ul class="feat-list">${rows.join("")}</ul></div>`;
+  }
+  // ネタ帳のメモから作っているときの帯（最初の画面）
+  function noteBannerHtml() {
+    if (!S.note || isProfile()) return "";
+    const t = String(S.note.text || "").replace(/\s+/g, " ");
+    return `<div class="note-banner" role="status"><p class="note-banner-t bx"><b>ネタ帳のメモから作るで</b>${S.note.date ? `（${esc(noteDay(S.note.date))}）` : ""}</p><p class="note-banner-s bx">${esc(t.slice(0, 60))}${t.length > 60 ? "…" : ""}</p><p class="note-banner-s bx">質問は、メモに足りないところだけ答えたらOK（とばしてもええで）。</p><button type="button" class="btn-text" data-act="noteUnuse">メモを使うのをやめる</button></div>`;
+  }
+  // ネタ帳のシート
+  function notesHtml() {
+    const list = notesGet();
+    const ed = T.noteEdit ? list.find((n) => n.id === T.noteEdit) : null;
+    const rows = list.length
+      ? `<ol class="note-list">${list
+          .map((n, i) => {
+            const using = S.note && S.note.id === n.id;
+            return `<li class="note-item${using ? " is-using" : ""}">
+            <p class="note-head"><span class="note-no">${i + 1}</span><span class="note-day">${esc(noteDay(n.date) || "日付なし")}</span>${using ? '<span class="note-using">このメモで作る</span>' : ""}</p>
+            <p class="note-text bx">${esc(n.text).replace(/\n/g, "<br>")}</p>
+            <div class="note-acts">
+              <button type="button" class="btn btn-primary btn-sm" data-act="noteUse" data-id="${esc(n.id)}">このメモで投稿を作る</button>
+              <button type="button" class="btn-text" data-act="noteEdit" data-id="${esc(n.id)}">直す</button>
+              <button type="button" class="btn-text note-del" data-act="noteDel" data-id="${esc(n.id)}">消す</button>
+            </div>
+          </li>`;
+          })
+          .join("")}</ol>`
+      : '<p class="key-on bx">まだメモはあらへん。<wbr>上に書いて「メモを足す」を押してな。</p>';
+    return `
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <h2 class="sheet-title" id="sheetTitle">ネタ帳</h2>
+      <p class="sheet-lead bx">投稿のネタになりそうなことを、<wbr>日付つきでメモしておけるで。<wbr>「このメモで投稿を作る」を押すと、<wbr>メモの中身をAIに渡して投稿を作る。</p>
+      <p class="note-privacy bx">メモは<b>このスマホのブラウザの中だけ</b>に保存。<wbr>サーバーには残らへん（作るときだけAIに渡す）。<wbr>ブラウザの履歴やデータを消すと、メモも消えるで。</p>
+      <div class="note-form">
+        <label class="field-label" for="noteDate">いつのこと？</label>
+        <input id="noteDate" class="phrase" type="date" value="${esc((ed && ed.date) || todayStr())}">
+        <label class="field-label" for="noteText">どんなことがあった？<span class="field-hint">${NOTE_MAX}字まで</span></label>
+        <textarea id="noteText" class="answer" rows="4" maxlength="${NOTE_MAX}" placeholder="例：ゼミの発表で質問ぜめにあった。準備の大切さを思い知った">${esc((ed && ed.text) || "")}</textarea>
+        <div class="note-form-acts">
+          <button type="button" class="btn btn-primary btn-block" data-act="noteSave">${ed ? "直して保存" : "メモを足す"}</button>
+          ${ed ? '<button type="button" class="btn-text" data-act="noteCancel">直すのをやめる</button>' : ""}
+        </div>
+      </div>
+      ${list.length ? `<h3 class="note-list-title">メモ（${list.length}件・新しい順）</h3>` : ""}
+      ${rows}
+      <div class="stack"><button type="button" class="btn btn-secondary btn-block" data-act="closeSheet">とじる</button></div>`;
+  }
+
   function photoFieldHtml() {
     const n = T.photos.length;
     const grid = n
@@ -1028,11 +1128,12 @@
         <label class="answer-label" for="answer">文字で書いてもOK</label>
         <textarea id="answer" class="answer" rows="4" maxlength="400" placeholder="${esc(c.placeholder || "")}">${esc(a.text || "")}</textarea>
       </div>
-      ${chips ? `<div class="chips-wrap"><p class="chips-label">ことばを足す（タップで選ぶだけ）</p>${chips}</div>` : ""}`;
-    const canNext = !c.required || hasText(c.id);
+      ${chips ? `<div class="chips-wrap"><p class="chips-label">ことばを足す（タップで選ぶだけ）</p>${chips}</div>` : ""}
+      ${c.id === "feel" && !isProfile() ? `<section class="block photo-block"><h2 class="sec-title">写真もそえる？<span class="badge-opt">任意</span></h2><p class="sec-note bx">投稿にのせたい写真があれば、<wbr>ここで入れてな。<wbr>AIが写真も見て、文章に入れるで（${PHOTO_LIMIT}枚まで）。</p>${photoFieldHtml()}</section>` : ""}`;
+    const canNext = !c.required || hasText(c.id) || !!S.note;
     const dockHtml = `
       <button type="button" class="btn btn-secondary btn-icon" data-act="back" aria-label="もどる">${ICON.back}</button>
-      ${c.required ? "" : '<button type="button" class="btn btn-secondary btn-skip" data-act="skip">とばす</button>'}
+      ${c.required && !S.note ? "" : '<button type="button" class="btn btn-secondary btn-skip" data-act="skip">とばす</button>'}
       <button type="button" class="btn btn-primary" id="nextBtn" data-act="next" aria-disabled="${!canNext}">${isLast ? (S.kind === "headline" ? "見出しをつくる" : S.kind === "about" ? "自己紹介をつくる" : S.quick ? "書き方をえらぶ" : "じぶん色へ") : "つぎへ"}</button>`;
     return { html, dockHtml };
   }
@@ -1106,7 +1207,7 @@
           : `<div class="name-box${T.nameMissing ? " is-missing" : ""}">
         <label class="name-label" for="myName">まず、お名前<span class="req-inline">必須</span></label>
         <input id="myName" class="name-input" type="text" maxlength="40" autocomplete="name" enterkeyhint="done" placeholder="例：山下 翼" value="${esc(MYNAME)}">
-        <p class="name-note bx">LinkedInと同じ名前で。<wbr>投稿の報告にも使うで</p>
+        <p class="name-note bx">LinkedInと同じ名前で</p>
       </div>`
       }
       ${T.error ? `<div class="alert" role="alert">${esc(T.error)}</div>` : ""}
@@ -1534,7 +1635,7 @@
       <div class="help-staff cloud" data-bump="26" data-seed="21"><b class="bx">${fmt(H.staff || "")}</b><span>${esc(H.staffSub || "")}</span></div>
       ${tips.length ? `<ul class="help-tips">${tips.map((t) => `<li class="bx">${fmt(t)}</li>`).join("")}</ul>` : ""}
       ${C.eventPage && (C.eventPage.schedule || []).length ? '<button type="button" class="btn btn-secondary btn-block" data-act="schedule">タイムスケジュールを見る</button>' : ""}
-      ${eventKeyReady() && !MYKEY && !advOn() ? "" : `<button type="button" class="btn btn-secondary btn-block" data-act="openKey">文章を作るAIを紐づける${aiReady() ? "（紐づけずみ）" : ""}</button>`}
+      ${eventKeyReady() ? "" : `<button type="button" class="btn btn-secondary btn-block" data-act="openKey">文章を作るAIを紐づける${aiReady() ? "（紐づけずみ）" : ""}</button>`}
       <button type="button" class="btn btn-secondary btn-block" data-act="bigText"><span class="big-a" aria-hidden="true">あ</span>${isBig() ? "文字を元の大きさにもどす" : "文字を大きくする"}</button>
       <div class="stack">
         <button type="button" class="btn btn-primary btn-block" data-act="closeSheet">とじる</button>
@@ -1987,10 +2088,16 @@
       img.src = src;
     });
   }
+  // 写真の欄だけ書きかえる（質問の画面では、入力中の答えやカーソルをそのままにするため）
+  function refreshPhotos() {
+    const pf = $(".photo-field", screen);
+    if (S.step === "answer" && pf) pf.outerHTML = photoFieldHtml();
+    else if (S.step === "style" || S.step === "pick" || S.step === "answer") keepScroll(render);
+  }
   async function addPhotos(files) {
     if (T.photoBusy) return;
     T.photoBusy = true;
-    if (S.step === "style" || S.step === "pick") keepScroll(render);
+    refreshPhotos();
     let failed = 0;
     let over = false;
     for (const f of files) {
@@ -2006,7 +2113,7 @@
       }
     }
     T.photoBusy = false;
-    if (S.step === "style" || S.step === "pick") keepScroll(render);
+    refreshPhotos();
     if (failed) toast(`写真${failed}枚が読みこめへんかった。別の写真にするか、写真なしで進めてな`, 3600);
     else if (over) toast(`写真は${PHOTO_LIMIT}枚までやで`, 2400);
   }
@@ -2057,10 +2164,12 @@
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
     const headers = { "content-type": "application/json" };
     if (/api\/(generate|refine|style)/.test(url)) {
-      if (MYKEY) headers["x-user-key"] = MYKEY;
-      if (advOn()) headers["x-ai-config"] = b64utf8(JSON.stringify(AISET));
-      // イベントのページから作るときは、イベントIDを送る（サーバーがイベントのキーで作る）
-      if (!MYKEY && !advOn() && eventKeyReady()) headers["x-event"] = EVENT.id;
+      // イベントのページ（主催がキーを用意している）では、いつもイベントのキーで作る。じぶんのキーは使わない
+      if (eventKeyReady()) headers["x-event"] = EVENT.id;
+      else {
+        if (MYKEY) headers["x-user-key"] = MYKEY;
+        if (advOn()) headers["x-ai-config"] = b64utf8(JSON.stringify(AISET));
+      }
     }
     try {
       const res = await fetch(url, {
@@ -2569,8 +2678,10 @@
     const key = `${action}|${t}|${count(text)}|${text.slice(0, 24)}`;
     if (S.sent.includes(key)) return;
     S.sent.push(key);
+    const pl = payload();
     API.submit({
-      ...payload(),
+      ...pl,
+      answers: pl.answers.filter((a) => a.id !== "memo"), // ネタ帳のメモは、サーバーに残さない
       action,
       tone: t,
       finalText: text,
@@ -2936,6 +3047,67 @@
       case "hist":
         openSheet(histHtml(), "[data-act=closeSheet]");
         break;
+      // ---------- ネタ帳 ----------
+      case "notes":
+        T.noteEdit = "";
+        openSheet(notesHtml(), "#noteText");
+        break;
+      case "noteSave": {
+        const text = String(($("#noteText", sheet) || {}).value || "").trim().slice(0, NOTE_MAX);
+        const date = String(($("#noteDate", sheet) || {}).value || "").slice(0, 10);
+        if (!text) {
+          toast("どんなことがあったか、ひとことでも書いてな", 2000);
+          $("#noteText", sheet) && $("#noteText", sheet).focus();
+          break;
+        }
+        const list = notesGet();
+        if (T.noteEdit && list.some((n) => n.id === T.noteEdit)) {
+          for (const n of list) if (n.id === T.noteEdit) Object.assign(n, { text, date, at: Date.now() });
+          if (S.note && S.note.id === T.noteEdit) S.note = { id: T.noteEdit, date, text };
+        } else list.unshift({ id: rid(), date, text, at: Date.now() });
+        if (!notesSet(list)) break;
+        toast(T.noteEdit ? "メモを直したで" : "メモを足したで", 1400);
+        T.noteEdit = "";
+        save();
+        openSheet(notesHtml(), "#noteText");
+        if (S.step === "pick") keepScroll(render);
+        break;
+      }
+      case "noteEdit":
+        T.noteEdit = el.dataset.id;
+        openSheet(notesHtml(), "#noteText");
+        break;
+      case "noteCancel":
+        T.noteEdit = "";
+        openSheet(notesHtml(), "#noteText");
+        break;
+      case "noteDel": {
+        if (!confirm("このメモを消す？（元にもどせへんで）")) break;
+        notesSet(notesGet().filter((n) => n.id !== el.dataset.id));
+        if (S.note && S.note.id === el.dataset.id) S.note = null;
+        if (T.noteEdit === el.dataset.id) T.noteEdit = "";
+        save();
+        openSheet(notesHtml(), "[data-act=closeSheet]");
+        if (S.step === "pick") keepScroll(render);
+        break;
+      }
+      case "noteUse": {
+        const n = notesGet().find((x) => x.id === el.dataset.id);
+        if (!n) break;
+        S.note = { id: n.id, date: n.date || "", text: n.text };
+        S.kind = "post";
+        closeSheet();
+        save();
+        go("pick");
+        toast("メモを入れたで。下の「このネタで始める」から作ってな", 2800);
+        break;
+      }
+      case "noteUnuse":
+        S.note = null;
+        save();
+        keepScroll(render);
+        toast("メモを使うのをやめたで", 1400);
+        break;
       case "histCopy": {
         const h = histGet().find((x) => x.at === Number(el.dataset.at));
         const b = h && (h.bodies || []).find((x) => x.id === el.dataset.id);
@@ -2967,7 +3139,7 @@
         const pi = Number(el.dataset && el.dataset.i);
         if (Number.isInteger(pi) && T.photos[pi]) T.photos.splice(pi, 1);
         else T.photos = [];
-        keepScroll(render);
+        refreshPhotos();
         break;
       }
       case "coAll":
@@ -3191,7 +3363,7 @@
         break;
       case "next": {
         const c = currentCard();
-        if (disabled || (c.required && !hasText(c.id))) {
+        if (disabled || (c.required && !hasText(c.id) && !S.note)) {
           toast("ひとことでOK。しゃべってもええで", 1800);
           $("#answer") && $("#answer").focus();
           break;

@@ -379,6 +379,10 @@ window.APP_CONFIG = {
     "文章とハッシュタグを確認した",
   ],
 
+  // 参加者の画面に出す「便利な機能」。false で出さない（イベントは運営ページの「出す機能」で切りかえられる）
+  // notes＝ネタ帳／calendar＝カレンダーから作る／voice＝じぶんの書き方をおぼえさせる
+  features: { notes: true, calendar: true, voice: true },
+
   // 過去の記録（/archive）の表彰リストで、★を付けた人を並べる順（10/6 の富士通の回だけ。報告・審査の機能は 2026-10-22 になくした）
   judges: [],
 
@@ -577,6 +581,8 @@ window.APP_CONFIG = {
           placeholder: "例：次は自分が話す側になってみたい",
         },
       ],
+      // イベントの会場では、カレンダー（予定はもう決まっている）と書き方のおぼえさせは出さない
+      features: { notes: true, calendar: false, voice: false },
       // どんな投稿にする？（会場で使いやすい順）。aiTheme はAIに渡すテーマ。質問はセットに書いた順で聞く（keepSetOrder）
       keepSetOrder: true,
       sets: [
@@ -826,6 +832,28 @@ window.APP_CONFIG = {
     if (!PAGE && q && PRESETS[q]) id = q;
   } catch {}
   if (!PRESETS[id]) id = "everyday";
-  window.APP_PRESETS = Object.keys(PRESETS).map((k) => ({ id: k, label: PRESETS[k].label || k, default: k === DEFAULT_PRESET, pagePath: PRESETS[k].pagePath || "", judges: PRESETS[k].judges || B.judges || [] }));
+  // 運営ページ用：イベントの概要の下書き（質問セットの案内・タイムスケジュール・参加企業から作る）
+  const overviewDraft = (P) => {
+    const ep = P.eventPage;
+    if (!ep) return "";
+    const lines = [];
+    if (ep.title) lines.push(`イベント名：${ep.title}`);
+    if (ep.when) lines.push(`日時：${ep.when}`);
+    if (ep.place) lines.push(`会場：${ep.place}`);
+    if (P.eventSub && P.eventSub !== ep.title) lines.push(`説明：${P.eventSub}`);
+    const sch = Array.isArray(ep.schedule) ? ep.schedule : [];
+    if (sch.length) {
+      lines.push("", "タイムスケジュール：");
+      let day = "";
+      for (const it of sch) {
+        if (it.day && it.day !== day) lines.push(`■ ${(day = it.day)}`);
+        lines.push(`・${[it.time, it.title, it.note].filter(Boolean).join("　")}`);
+      }
+    }
+    const co = P.companies && Array.isArray(P.companies.list) ? P.companies.list : [];
+    if (co.length) lines.push("", `参加企業：${co.map((c) => c.name).join("、")}`);
+    return lines.join("\n").slice(0, 3000);
+  };
+  window.APP_PRESETS = Object.keys(PRESETS).map((k) => ({ id: k, label: PRESETS[k].label || k, default: k === DEFAULT_PRESET, pagePath: PRESETS[k].pagePath || "", judges: PRESETS[k].judges || B.judges || [], features: { ...B.features, ...(PRESETS[k].features || {}) }, overviewDraft: overviewDraft(PRESETS[k]) }));
   Object.assign(B, PRESETS[id], { presetId: id });
 })();
