@@ -51,7 +51,7 @@ import {
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-22.lscw-9";
+const VERSION = "2026-10-22.lscw-10";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -1024,6 +1024,7 @@ async function submit(request, env) {
   const action = body.action === "later" ? "later" : "copy";
   const tone = TONE_IDS.includes(body.tone) ? body.tone : "";
   const p = sanitizePayload(body);
+  p.answers = p.answers.filter((a) => a.id !== "memo"); // ネタ帳のメモは、サーバーに残さない（端末でも外しているが念のため）
   const db = await getDb(env);
   if (!db) return json({ ok: true, stored: false });
   const now = new Date().toISOString();
@@ -1351,8 +1352,11 @@ async function adminStats(env, url) {
   const now = Date.now();
   const today = jstDay(now);
   const firstDay = jstDay(now - (days - 1) * 86400000);
-  const since = new Date(Date.parse(`${firstDay}T00:00:00+09:00`)).toISOString();
-  const todayStart = new Date(Date.parse(`${today}T00:00:00+09:00`)).toISOString();
+  // 「ここまでを過去のイベントにする」より前のデータは数えない（いまの期間だけ）
+  const curFrom = isoOf((await rangeOf(env, null)).from);
+  const maxIso = (a, b) => (a > b ? a : b);
+  const since = maxIso(new Date(Date.parse(`${firstDay}T00:00:00+09:00`)).toISOString(), curFrom);
+  const todayStart = maxIso(new Date(Date.parse(`${today}T00:00:00+09:00`)).toISOString(), curFrom);
   const EV = "COALESCE(json_extract(detail, '$.event'), '')";
   const U = "json_extract(detail, '$.u')";
   const cond = e === "-" ? ` AND ${EV} = ''` : e ? ` AND ${EV} = ?` : "";

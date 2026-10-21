@@ -423,10 +423,17 @@
     st.selected = (st.selected || []).filter((id, i, a) => CARD[id] && a.indexOf(id) === i);
     if (!st.selected.includes(C.requiredCardId) && CARD[C.requiredCardId]) st.selected.unshift(C.requiredCardId);
     // 問数（前の版で保存された状態にも対応）。選んでいる数が問数を超えないようにする
-    st.size = SIZES.includes(saved.size) ? saved.size : fitSize(st.selected.length);
-    if (st.selected.length > st.size) st.selected = st.selected.slice(0, st.size);
+    if (st.free) {
+      // 「じぶんで選ぶ」は、選んだ数がそのまま問数（15まで）
+      st.selected = st.selected.slice(0, 15);
+      st.size = st.selected.length;
+      st.setId = null;
+    } else {
+      st.size = SIZES.includes(saved.size) ? saved.size : fitSize(st.selected.length);
+      if (st.selected.length > st.size) st.selected = st.selected.slice(0, st.size);
+    }
     const s = setById(st.setId);
-    if (!s || s.size !== st.size || s.cards.length !== st.selected.length || !s.cards.every((id) => st.selected.includes(id))) st.setId = null;
+    if (st.free || !s || s.size !== st.size || s.cards.length !== st.selected.length || !s.cards.every((id) => st.selected.includes(id))) st.setId = null;
     st.style = { ...defaultStyle(), ...(st.style || {}) };
     if (!MODES.some((m) => m.id === st.mode)) st.mode = "";
     st.intro = String(st.intro || "").slice(0, 60);
@@ -609,6 +616,7 @@
     dock.hidden = !dockHtml;
     document.body.classList.toggle("has-dock", !!dockHtml);
     renderStepper();
+    renderNotesTop();
     if (coList().length) {
       setupMarquee();
       if (MQ) MQ.hidden = S.step !== "pick"; // 参加企業のロゴは、最初の画面だけ
@@ -616,6 +624,41 @@
     paintClouds(document);
     if (S.step === "answer") autoGrow($("#answer"));
     if (S.step === "result") fitPreview();
+  }
+
+  // いちばん上の帯の「ネタ帳」（どの画面からでも、すぐメモを書ける・見られる）
+  function renderNotesTop() {
+    const bar = document.querySelector(".topbar");
+    if (!bar) return;
+    let b = $("#notesTop", bar);
+    if (!featureOn("notes")) {
+      if (b) b.remove();
+      return;
+    }
+    if (!b) {
+      b = document.createElement("button");
+      b.type = "button";
+      b.id = "notesTop";
+      b.className = "notes-top";
+      b.dataset.act = "notes";
+      const help = $(".help-btn", bar);
+      if (help) help.after(b);
+      else bar.prepend(b);
+    }
+    const n = notesGet().length;
+    b.innerHTML = `ネタ帳${n ? `<b>${n}</b>` : ""}`;
+    b.setAttribute("aria-label", `ネタ帳をひらく${n ? `（メモ${n}件）` : ""}`);
+  }
+
+  // 最初からつくり直すとき、保存していない一時的なもの（写真・直しの入力など）も消す
+  function resetTransient() {
+    T.photos = [];
+    T.photoWhat = "";
+    T.photoWant = "";
+    T.ask = "";
+    T.editing = false;
+    T.error = "";
+    T.pickPane = "theme";
   }
 
   function keepScroll(fn) {
@@ -653,7 +696,7 @@
   // ① ネタをえらぶ
   function viewPick() {
     const n = S.selected.length;
-    const full = n >= S.size;
+    const full = !S.free && n >= S.size;
     const badge = '<span class="badge">おすすめ</span>';
     const sizeRows =
       C.sizes
@@ -812,9 +855,10 @@
     const img = `<img src="logos/${esc(c.logo)}.png" alt="" width="120" height="44" decoding="async">`;
     const label = `${c.name}${c.url ? "の採用ページ" : "（イベントの公式サイト）"}（新しいタブでひらく）`;
     const extra = hidden ? ' tabindex="-1"' : "";
+    const li = hidden ? '<li aria-hidden="true">' : "<li>"; // くり返しの2周目は、読み上げでは飛ばす
     return url
-      ? `<li><a class="co" href="${esc(url)}" target="_blank" rel="noopener" aria-label="${esc(label)}"${extra}>${img}</a></li>`
-      : `<li><span class="co" role="img" aria-label="${esc(c.name)}">${img}</span></li>`;
+      ? `${li}<a class="co" href="${esc(url)}" target="_blank" rel="noopener" aria-label="${esc(label)}"${extra}>${img}</a></li>`
+      : `${li}<span class="co" role="img" aria-label="${esc(c.name)}">${img}</span></li>`;
   }
   function companiesSheetHtml() {
     const co = C.companies || {};
@@ -970,12 +1014,12 @@
   function featuresHtml() {
     const rows = [];
     const row = (act, title, sub, state, on) =>
-      `<li><button type="button" class="feat${on ? " is-on" : ""}" data-act="${act}"><span class="feat-main"><span class="feat-t">${title}</span><span class="feat-s bx">${sub}</span></span>${state ? `<span class="feat-state">${state}</span>` : ""}</button></li>`;
-    if (!eventKeyReady() && aiReady()) rows.push(row("openKey", "文章を作るAI", advOn() ? `Gemini以外のAI（${esc(AISET.model)}）で作ってる。<wbr>変えるときはここ` : "あなたのGeminiのキーで作ってる。<wbr>キーを変える・回数の上限を見るときはここ", "つないでる", true));
+      `<li><button type="button" class="feat${on ? " is-on" : ""}${act === "notes" ? " feat-notes" : ""}" data-act="${act}"><span class="feat-main"><span class="feat-t">${title}</span><span class="feat-s bx">${sub}</span></span>${state ? `<span class="feat-state">${state}</span>` : ""}</button></li>`;
     if (featureOn("notes")) {
       const n = notesGet().length;
-      rows.push(row("notes", "ネタ帳", "思いついた投稿のネタを、<wbr>日付つきでメモしておける。<wbr>メモから投稿も作れる", n ? `${n}件` : "", n > 0));
+      rows.push(row("notes", "ネタ帳", n ? "ためたメモから、<wbr>そのまま投稿を作れる。<wbr>直す・消すもここ" : "思いついた投稿のネタを、<wbr>日付つきでメモしておける。<wbr>メモから投稿も作れる", n ? `メモ ${n}件` : "ひらく", n > 0));
     }
+    if (!eventKeyReady() && aiReady()) rows.push(row("openKey", "文章を作るAI", advOn() ? `Gemini以外のAI（${esc(AISET.model)}）で作ってる。<wbr>変えるときはここ` : "あなたのGeminiのキーで作ってる。<wbr>キーを変える・回数の上限を見るときはここ", "つないでる", true));
     if (featureOn("calendar")) rows.push(row("cal", "カレンダーから作る", "Googleカレンダーの予定を読んで、<wbr>その日の出来事から投稿文を作る", CALURL ? "つないでる" : "", !!CALURL));
     if (featureOn("voice")) rows.push(row("voice", "じぶんの書き方", "これまでの投稿を読ませると、<wbr>投稿文をあなたの書きぐせに寄せて書く", VOICE.text ? (VOICE.on ? "使ってる" : "止めてる") : "", !!(VOICE.text && VOICE.on)));
     const hn = histGet().length;
@@ -989,43 +1033,55 @@
     const t = String(S.note.text || "").replace(/\s+/g, " ");
     return `<div class="note-banner" role="status"><p class="note-banner-t bx"><b>ネタ帳のメモから作るで</b>${S.note.date ? `（${esc(noteDay(S.note.date))}）` : ""}</p><p class="note-banner-s bx">${esc(t.slice(0, 60))}${t.length > 60 ? "…" : ""}</p><p class="note-banner-s bx">質問は、メモに足りないところだけ答えたらOK（とばしてもええで）。</p><button type="button" class="btn-text" data-act="noteUnuse">メモを使うのをやめる</button></div>`;
   }
-  // ネタ帳のシート
+  // ネタ帳のシート：ためたメモの一覧（このメモで投稿を作る／直す／消す）が先、新しいメモを書く欄はその下（メモが無いときは書く欄から）
   function notesHtml() {
     const list = notesGet();
     const ed = T.noteEdit ? list.find((n) => n.id === T.noteEdit) : null;
-    const rows = list.length
-      ? `<ol class="note-list">${list
-          .map((n, i) => {
-            const using = S.note && S.note.id === n.id;
-            return `<li class="note-item${using ? " is-using" : ""}">
-            <p class="note-head"><span class="note-no">${i + 1}</span><span class="note-day">${esc(noteDay(n.date) || "日付なし")}</span>${using ? '<span class="note-using">このメモで作る</span>' : ""}</p>
-            <p class="note-text bx">${esc(n.text).replace(/\n/g, "<br>")}</p>
-            <div class="note-acts">
-              <button type="button" class="btn btn-primary btn-sm" data-act="noteUse" data-id="${esc(n.id)}">このメモで投稿を作る</button>
-              <button type="button" class="btn-text" data-act="noteEdit" data-id="${esc(n.id)}">直す</button>
-              <button type="button" class="btn-text note-del" data-act="noteDel" data-id="${esc(n.id)}">消す</button>
-            </div>
-          </li>`;
-          })
-          .join("")}</ol>`
-      : '<p class="key-on bx">まだメモはあらへん。<wbr>上に書いて「メモを足す」を押してな。</p>';
-    return `
-      <div class="sheet-grip" aria-hidden="true"></div>
-      <h2 class="sheet-title" id="sheetTitle">ネタ帳</h2>
-      <p class="sheet-lead bx">投稿のネタになりそうなことを、<wbr>日付つきでメモしておけるで。<wbr>「このメモで投稿を作る」を押すと、<wbr>メモの中身をAIに渡して投稿を作る。</p>
-      <p class="note-privacy bx">メモは<b>このスマホのブラウザの中だけ</b>に保存。<wbr>サーバーには残らへん（作るときだけAIに渡す）。<wbr>ブラウザの履歴やデータを消すと、メモも消えるで。</p>
-      <div class="note-form">
+    const edNo = ed ? list.indexOf(ed) + 1 : 0;
+    const formOpen = !list.length || !!ed || T.noteForm;
+    const form = `<div class="note-form${ed ? " is-edit" : ""}" id="noteForm">
+        <h3 class="note-form-title">${ed ? `メモ ${edNo} を直す` : "新しいメモを書く"}</h3>
         <label class="field-label" for="noteDate">いつのこと？</label>
         <input id="noteDate" class="phrase" type="date" value="${esc((ed && ed.date) || todayStr())}">
         <label class="field-label" for="noteText">どんなことがあった？<span class="field-hint">${NOTE_MAX}字まで</span></label>
         <textarea id="noteText" class="answer" rows="4" maxlength="${NOTE_MAX}" placeholder="例：ゼミの発表で質問ぜめにあった。準備の大切さを思い知った">${esc((ed && ed.text) || "")}</textarea>
         <div class="note-form-acts">
           <button type="button" class="btn btn-primary btn-block" data-act="noteSave">${ed ? "直して保存" : "メモを足す"}</button>
-          ${ed ? '<button type="button" class="btn-text" data-act="noteCancel">直すのをやめる</button>' : ""}
+          ${ed ? '<button type="button" class="btn btn-secondary btn-block" data-act="noteCancel">直すのをやめる</button>' : list.length ? '<button type="button" class="btn-text" data-act="noteFormClose">書くのをやめる</button>' : ""}
         </div>
-      </div>
-      ${list.length ? `<h3 class="note-list-title">メモ（${list.length}件・新しい順）</h3>` : ""}
-      ${rows}
+      </div>`;
+    const cards = list
+      .map((n, i) => {
+        const using = S.note && S.note.id === n.id;
+        return `<li class="note-item${using ? " is-using" : ""}${ed && ed.id === n.id ? " is-editing" : ""}">
+            <p class="note-head"><span class="note-no">${i + 1}</span><span class="note-day">${esc(noteDay(n.date) || "日付なし")}</span>${using ? '<span class="note-using">いま使ってる</span>' : ""}</p>
+            <p class="note-text bx">${esc(n.text).replace(/\n/g, "<br>")}</p>
+            <button type="button" class="btn btn-primary btn-block note-use" data-act="noteUse" data-id="${esc(n.id)}">このメモで投稿を作る</button>
+            <div class="note-acts">
+              <button type="button" class="btn btn-secondary" data-act="noteEdit" data-id="${esc(n.id)}">直す</button>
+              <button type="button" class="btn btn-secondary note-del" data-act="noteDel" data-id="${esc(n.id)}">消す</button>
+            </div>
+          </li>`;
+      })
+      .join("");
+    const how = `<ol class="note-how">
+        <li><b>書く</b><span>思いついたことを、日付つきでメモ</span></li>
+        <li><b>ためる</b><span>あとから読み返して、直す・消すもできる</span></li>
+        <li><b>投稿にする</b><span>「このメモで投稿を作る」で、メモをもとにAIが書く</span></li>
+      </ol>`;
+    return `
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <h2 class="sheet-title" id="sheetTitle">ネタ帳<span class="note-count">${list.length ? `メモ ${list.length}件` : ""}</span></h2>
+      ${how}
+      ${
+        list.length
+          ? `${ed ? form : ""}
+      <div class="note-list-head"><h3 class="note-list-title">ためたメモ（新しい順）</h3>${ed || formOpen ? "" : '<button type="button" class="btn btn-secondary btn-sm" data-act="noteFormOpen">＋ 新しいメモ</button>'}</div>
+      ${!ed && formOpen ? form : ""}
+      <ol class="note-list">${cards}</ol>`
+          : form
+      }
+      <p class="note-privacy bx">メモは<b>このスマホのブラウザの中だけ</b>に保存。<wbr>サーバーには残らへん（投稿を作るときだけAIに渡す）。<wbr>ブラウザのデータを消すと、メモも消えるで。</p>
       <div class="stack"><button type="button" class="btn btn-secondary btn-block" data-act="closeSheet">とじる</button></div>`;
   }
 
@@ -1243,7 +1299,7 @@
         <div class="field">
           <label class="field-label" for="phrase">入れたい一言（任意）</label>
           <input id="phrase" class="phrase" type="text" maxlength="40" autocomplete="off" placeholder="例：今日もええ日やった！" value="${esc(S.style.phrase)}">
-          <p class="field-note">口ぐせや決め台詞。作ったパターン全部に、そのまま入るで。</p>
+          <p class="field-note">口ぐせや決め台詞。作る投稿文に、そのまま入るで。</p>
         </div>
       </div>`;
     const dockHtml = `
@@ -1516,7 +1572,9 @@
   }
 
   // ---------- シート（投稿前チェック・確認） ----------
+  let sheetOpener = null; // シートを開いたボタン（とじたら、そこにフォーカスをもどす）
   function openSheet(html, focusSel) {
+    if (sheet.hidden && document.activeElement && document.activeElement !== document.body) sheetOpener = document.activeElement;
     sheet.innerHTML = `<div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">${html}</div>`;
     sheet.hidden = false;
     document.body.classList.add("no-scroll");
@@ -1534,6 +1592,8 @@
     sheet.hidden = true;
     sheet.innerHTML = "";
     document.body.classList.remove("no-scroll");
+    if (sheetOpener && sheetOpener.isConnected) sheetOpener.focus({ preventScroll: true });
+    sheetOpener = null;
   }
 
   function checkSheetHtml() {
@@ -2139,7 +2199,7 @@
   // 写真が多いほど、AIの返事を長く待つ（サーバーは、写真で失敗したら写真なしで作り直すので、その分も見込む）
   const photoTimeout = (base) => (T.photos.length ? Math.min(150000, base + 30000 + T.photos.length * 6000) : base);
   // 生成と書き直しのときだけ、写真を付けて送る（記録用の送信には付けない）
-  const withPhotos = (p) => (T.photos.length && p.kind !== "profile" ? { ...p, images: T.photos.map((x) => ({ mime: x.mime, data: x.data })) } : p);
+  const withPhotos = (p) => (T.photos.length && !PARTS.includes(p.kind) && p.kind !== "profile" ? { ...p, images: T.photos.map((x) => ({ mime: x.mime, data: x.data })) } : p);
 
   // ---------- 失敗の記録（運営ページの「最近のエラー」に出る） ----------
   function clientLog(where, e, extra) {
@@ -2428,7 +2488,7 @@
       C.hashtags = ev.hashtags;
       C.feedTag = ev.hashtags.find((h) => h.toLowerCase() !== "#linkedin") || ev.hashtags[0];
     }
-    if (ev.cheerAlways) C.cheerAlways = true;
+    C.cheerAlways = !!ev.cheerAlways; // 運営ページの「すべての投稿にLinkedInの一文」に合わせる（オフにもできる）
     if (Array.isArray(ev.mentions) && ev.mentions.length) {
       C.mentions = ev.mentions;
       C.mentionInText = ev.mentionInText !== false;
@@ -2543,6 +2603,7 @@
         return;
       }
       S.results = r;
+      S.done = null; // 新しく作ったら、前にコピーした「いってらっしゃい」の画面は使わない
       S.resultMode = S.mode || "";
       S.tab = TONES.some((x) => x.id === S.startTone) ? S.startTone : TONES[0].id;
       S.checks = C.checklist.map(() => false);
@@ -2570,6 +2631,12 @@
         S.step = "result";
         render();
         toast(T.error, 3000);
+        T.error = "";
+      } else if (payloadOverride && !isProfile()) {
+        // カレンダーから作ったときは、最初の画面にもどす（じぶん色の画面の「もう一回」では、カレンダーの予定が使われないため）
+        S.step = "pick";
+        render();
+        toast(`${T.error}（カレンダーから、もう一回作ってな）`, 4500);
         T.error = "";
       } else if (isProfile()) {
         // 見出し・自己紹介は、じぶん色の画面がないので、最後の質問にもどしてエラーを出す
@@ -2864,7 +2931,7 @@
     const a = answerOf(c.id);
     S.answers[c.id] = { chips: a.chips || [], text: value };
     const btn = $("#nextBtn");
-    if (btn) btn.setAttribute("aria-disabled", String(c.required && !hasText(c.id)));
+    if (btn) btn.setAttribute("aria-disabled", String(c.required && !hasText(c.id) && !S.note));
     saveSoon();
   }
   let saveTimer = null;
@@ -3069,7 +3136,8 @@
       // ---------- ネタ帳 ----------
       case "notes":
         T.noteEdit = "";
-        openSheet(notesHtml(), "#noteText");
+        T.noteForm = false;
+        openSheet(notesHtml(), notesGet().length ? "[data-act=noteUse]" : "#noteText");
         break;
       case "noteSave": {
         const text = String(($("#noteText", sheet) || {}).value || "").trim().slice(0, NOTE_MAX);
@@ -3085,20 +3153,31 @@
           if (S.note && S.note.id === T.noteEdit) S.note = { id: T.noteEdit, date, text };
         } else list.unshift({ id: rid(), date, text, at: Date.now() });
         if (!notesSet(list)) break;
-        toast(T.noteEdit ? "メモを直したで" : "メモを足したで", 1400);
+        toast(T.noteEdit ? "メモを直したで" : "メモを足したで。下の一覧から、いつでも投稿にできるで", 2200);
         T.noteEdit = "";
+        T.noteForm = false;
         save();
-        openSheet(notesHtml(), "#noteText");
+        openSheet(notesHtml(), "[data-act=noteUse]");
+        renderNotesTop();
         if (S.step === "pick") keepScroll(render);
         break;
       }
       case "noteEdit":
         T.noteEdit = el.dataset.id;
         openSheet(notesHtml(), "#noteText");
+        { const sc = $(".sheet", sheet); if (sc) sc.scrollTop = 0; }
         break;
       case "noteCancel":
         T.noteEdit = "";
+        openSheet(notesHtml(), "[data-act=closeSheet]");
+        break;
+      case "noteFormOpen":
+        T.noteForm = true;
         openSheet(notesHtml(), "#noteText");
+        break;
+      case "noteFormClose":
+        T.noteForm = false;
+        openSheet(notesHtml(), "[data-act=closeSheet]");
         break;
       case "noteDel": {
         if (!confirm("このメモを消す？（元にもどせへんで）")) break;
@@ -3107,6 +3186,7 @@
         if (T.noteEdit === el.dataset.id) T.noteEdit = "";
         save();
         openSheet(notesHtml(), "[data-act=closeSheet]");
+        renderNotesTop();
         if (S.step === "pick") keepScroll(render);
         break;
       }
@@ -3158,6 +3238,10 @@
         const pi = Number(el.dataset && el.dataset.i);
         if (Number.isInteger(pi) && T.photos[pi]) T.photos.splice(pi, 1);
         else T.photos = [];
+        if (!T.photos.length) {
+          T.photoWhat = "";
+          T.photoWant = "";
+        }
         refreshPhotos();
         break;
       }
@@ -3171,8 +3255,16 @@
         break;
       case "theme": {
         const theme = el.dataset.v;
+        const hadCustom = !!String(S.customTheme || "").trim();
         S.customTheme = ""; // 「じぶんで決める」をやめて、テーマ一覧に切り替えたときは入力を空にする
-        if ((setById(S.setId) || {}).theme === theme) break;
+        if (!S.free && (setById(S.setId) || {}).theme === theme) {
+          if (hadCustom) {
+            save();
+            keepScroll(render);
+          }
+          break;
+        }
+        S.free = false;
         const same = setsOf(S.size).find((s) => s.theme === theme);
         const all = C.sets.find((s) => s.theme === theme);
         const next = same || all; // そのボリュームに無いテーマは、用意してある問数に切り替える
@@ -3787,7 +3879,7 @@
       case "restartYes": {
         const id = S.clientId;
         S = freshState(id);
-        T.editing = false;
+        resetTransient();
         closeSheet();
         go("pick");
         break;
@@ -3799,6 +3891,7 @@
       case "resumeNo": {
         const id = S.clientId;
         S = freshState(id);
+        resetTransient();
         save();
         closeSheet();
         render();
@@ -3846,7 +3939,8 @@
       S.customTheme = e.target.value.slice(0, 60);
       // チェックの付け替え（再描画せずに、その場で見た目だけ更新）
       const on = !!S.customTheme.trim();
-      $$('[role=radio][data-act=theme]').forEach((b) => b.setAttribute("aria-checked", "false"));
+      const cur = (setById(S.setId) || {}).theme || "";
+      $$('[role=radio][data-act=theme]').forEach((b) => b.setAttribute("aria-checked", String(!on && !S.free && b.dataset.v === cur)));
       const row = $('[data-act=themeCustom]');
       if (row) row.setAttribute("aria-checked", String(on));
       saveSoon();
@@ -3919,13 +4013,17 @@
       e.target.blur();
       return;
     }
-    const tab = e.target.closest && e.target.closest('[role="tab"]');
-    if (!tab || (e.key !== "ArrowRight" && e.key !== "ArrowLeft")) return;
-    const i = TONES.findIndex((t) => t.id === S.tab);
-    const n = (i + (e.key === "ArrowRight" ? 1 : -1) + TONES.length) % TONES.length;
-    S.tab = TONES[n].id;
+    // できあがりの画面のトーンのタブだけ（最初の画面の「テーマ・質問数」のタブは別）
+    const tab = e.target.closest && e.target.closest('[role="tab"][data-act="tab"]');
+    if (!tab || (e.key !== "ArrowRight" && e.key !== "ArrowLeft") || S.step !== "result" || !S.results) return;
+    const have = TONES.filter((t) => S.results[t.id]);
+    if (have.length < 2) return;
+    const i = have.findIndex((t) => t.id === S.tab);
+    const n = (i + (e.key === "ArrowRight" ? 1 : -1) + have.length) % have.length;
+    S.tab = have[n].id;
     render();
-    $(`#tab-${S.tab}`).focus();
+    const f = $(`#tab-${S.tab}`);
+    if (f) f.focus();
   });
 
   sheet.addEventListener("click", (e) => {

@@ -167,6 +167,30 @@
   .archive-list { display: grid; gap: 8px; }
   .archive-item { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 10px; background: #FBFAF7; font-size: 14px; }
   .archive-item b { font-size: 15px; }
+  /* 当日までのチェック */
+  .ck { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+  .ck li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: 10px; background: #FBFAF7; }
+  .ck-st { min-width: 56px; padding: 2px 8px; border-radius: 999px; text-align: center; font-size: 12px; font-weight: 800; border: 1.5px solid currentColor; }
+  .ck-st.ok { color: #1E7A3C; background: #E9F7EE; }
+  .ck-st.ng { color: #B42318; background: #FDECEA; }
+  .ck-st.todo { color: #8A5A00; background: #FFF4D6; }
+  .ck-t { display: grid; gap: 2px; font-size: 14px; }
+  .ck-t b { font-size: 15px; }
+  .ck-t small { color: var(--sub); }
+  .ck-act { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .ck-act a.btn { display: inline-flex; align-items: center; text-decoration: none; color: inherit; }
+  .ck-act label { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; font-weight: 700; }
+  .quick { display: flex; flex-wrap: wrap; gap: 8px; }
+  .quick .btn { display: inline-flex; align-items: center; text-decoration: none; color: inherit; }
+  @media (max-width: 560px) { .ck li { grid-template-columns: auto minmax(0, 1fr); } .ck-act { grid-column: 1 / -1; justify-content: flex-start; } }
+  /* イベントの入力：あまり使わない項目はたたむ。保存ボタンは下に貼りつける */
+  .ev-form details.fs-more { border: 1px solid var(--rule); border-radius: 10px; background: #fff; }
+  .ev-form details.fs-more > summary { cursor: pointer; padding: 12px; font-weight: 700; font-size: 14px; }
+  .ev-form details.fs-more[open] > summary { border-bottom: 1px solid var(--rule); }
+  .ev-form details.fs-more > fieldset { border: 0; border-radius: 0; }
+  .ev-form .form-bar { position: sticky; bottom: 0; z-index: 3; margin: 0 -12px -12px; padding: 10px 12px; background: #fff; border-top: 2px solid var(--blue); border-radius: 0 0 10px 10px; align-items: center; }
+  .ev-item.is-flash { box-shadow: 0 0 0 4px #FFE98A; transition: box-shadow .3s; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
   .ev-form .key-field { padding: 8px; border-radius: 8px; transition: background-color .3s; }
   .ev-form .key-field.is-flash { background: #FFF1BF; }
   @media (max-width: 720px) {
@@ -224,6 +248,17 @@
       <button type="button" role="tab" data-tab="data" aria-selected="false">データ・過去の記録</button>
     </nav>
 
+    <section class="panel" id="ckPanel" aria-labelledby="ckTitle" data-pane="home">
+      <div class="rep-head"><h2 id="ckTitle">当日までのチェック</h2><span class="empty" id="ckCount"></span></div>
+      <ul class="ck" id="ckList"></ul>
+      <div class="quick" aria-label="よく開くページ">
+        <a class="btn" id="qLscw" href="lscw" target="_blank" rel="noopener">参加者のページ（LSCW）</a>
+        <a class="btn" href="./" target="_blank" rel="noopener">普段使いのページ</a>
+        <a class="btn" id="qScreen" href="#" target="_blank" rel="noopener">会場スクリーンのQR</a>
+        <a class="btn" href="archive">過去の記録</a>
+      </div>
+    </section>
+
     <section class="nums" id="nums" aria-label="件数" data-pane="home"></section>
 
     <section class="panel" id="stPanel" aria-labelledby="stTitle" data-pane="home">
@@ -277,14 +312,16 @@
           <label class="chk"><input type="checkbox" id="aevMentionInText" checked> メンションを、本文の最後（ハッシュタグの上）に「@名前」の文字で入れる</label>
           <label class="chk"><input type="checkbox" id="aevCheer"> すべての投稿に「LinkedInの前向きな一文」を入れる</label>
         </fieldset>
-        <fieldset>
-          <legend>フォロー（任意）</legend>
+        <details class="fs-more"><summary>フォローしてほしいページ（任意）</summary>
+          <fieldset>
+          <legend class="sr-only">フォロー（任意）</legend>
           <div class="two">
             <label>フォローしてほしいLinkedInページのURL<input type="text" id="aevFollowUrl" maxlength="500" autocomplete="off" placeholder="https://www.linkedin.com/company/…"></label>
             <label>ページの名前<input type="text" id="aevFollowName" maxlength="40" autocomplete="off" placeholder="例：株式会社〇〇"></label>
           </div>
           <label class="chk"><input type="checkbox" id="aevFollowRequired"> フォローを必須にする（オフなら「よかったらフォロー」の案内だけ）</label>
         </fieldset>
+        </details>
         <fieldset>
           <legend>イベントの概要（AIに最初から渡す情報）</legend>
           <label>概要<small>どんなイベントか・日時・会場・セッション・登壇者・参加企業など。AIが参加者の回答を正しく読むための参考にします（3000字まで）。回答に書かれていないことは、投稿には足しません</small><textarea id="aevOverview" rows="8" placeholder="例：イベント名：〇〇&#10;日時：10/31(土) 9:30〜18:00&#10;会場：〇〇&#10;セッション：〇〇さんのパネルトーク（13:00〜）&#10;参加企業：〇〇、〇〇"></textarea></label>
@@ -297,12 +334,15 @@
           <label class="chk"><input type="checkbox" id="aevFeatCal"> カレンダーから作る（Googleカレンダーの予定から投稿を作る）</label>
           <label class="chk"><input type="checkbox" id="aevFeatVoice"> じぶんの書き方をおぼえさせる（これまでの投稿から書きぐせをまねる）</label>
         </fieldset>
-        <fieldset>
-          <legend>AIへの追加の指示（このイベントだけ）</legend>
+        <details class="fs-more"><summary>AIへの追加の指示（任意・このイベントだけ）</summary>
+          <fieldset>
+          <legend class="sr-only">AIへの追加の指示（このイベントだけ）</legend>
           <label>指示<small>イベントの説明や、書いてほしくないこと。参加者の回答にない事実は、ここに書いても本文には足されません（1500字まで）</small><textarea id="aevAiNote" rows="6"></textarea></label>
         </fieldset>
-        <fieldset>
-          <legend>イベントページの案内とタイムスケジュール</legend>
+        </details>
+        <details class="fs-more"><summary>イベントページの案内とタイムスケジュール（任意）</summary>
+          <fieldset>
+          <legend class="sr-only">イベントページの案内とタイムスケジュール</legend>
           <p class="empty" style="margin:0">空の項目は、質問セット（config.js）の初期の内容のままです。</p>
           <div class="two">
             <label>見出し<input type="text" id="aevInfoTitle" maxlength="120" autocomplete="off"></label>
@@ -315,14 +355,17 @@
           <label>スケジュールの下の注意書き<input type="text" id="aevInfoNote" maxlength="200" autocomplete="off"></label>
           <label>タイムスケジュール<small>「## 日の見出し」の行のあとに、1行に1つ「時間 | タイトル | 補足」。40行まで。空なら質問セットの初期のスケジュール</small><textarea id="aevSchedule" rows="8" placeholder="## 10/31(土) 会場&#10;9:30 | 開場 | 18:00まで入退室自由&#10;13:00〜14:00 | パネルトーク | 〇〇さん登壇"></textarea></label>
         </fieldset>
-        <fieldset>
-          <legend>色（任意）</legend>
+        </details>
+        <details class="fs-more"><summary>色（任意）</summary>
+          <fieldset>
+          <legend class="sr-only">色（任意）</legend>
           <div class="two">
             <label>地の色<small>例：#0A66C2（LinkedInの青）。空なら質問セットの色</small><input type="text" id="aevGround" maxlength="7" autocomplete="off" placeholder="#0A66C2"></label>
             <label>ボタンの色<small>例：#004182</small><input type="text" id="aevAccent" maxlength="7" autocomplete="off" placeholder="#004182"></label>
           </div>
         </fieldset>
-        <div class="row"><button class="btn btn-primary" type="submit">保存</button><button class="btn" type="button" id="evCancel">やめる</button></div>
+        </details>
+        <div class="row form-bar"><button class="btn btn-primary" type="submit">保存</button><button class="btn" type="button" id="evCancel">やめる</button><span class="msg" id="evDirty" hidden>まだ保存していません</span></div>
         <p class="msg" id="evMsg" role="status"></p>
       </form>
     </section>
@@ -443,6 +486,7 @@
       $("#keyHelp").hidden = false;
       $("#keyHelpBtn").setAttribute("aria-expanded", "true");
     }
+    try { renderChecklist(); } catch {}
     const c = s.counts;
     const cell = (label, n, warn, hot) => `<div class="num${warn && n ? " warn" : ""}${hot ? " hot" : ""}"><b>${n}</b><span>${label}</span></div>`;
     $("#nums").innerHTML = cell("生成", c.generate) + cell("書き直し", c.refine) + cell("コピー", c.copy) + cell("あとで投稿", c.later) + cell("エラー", c.error, true);
@@ -524,10 +568,16 @@
       const d = await (await api("api/admin/test", { method: "POST", body: "{}" })).json();
       $("#opMsg").className = "msg " + (d.ok ? "good" : "bad");
       $("#opMsg").textContent = d.ok ? `OK：${d.model}（${d.ms}ミリ秒）「${d.text}」` : `NG：${d.model || ""} ${d.status || ""} ${d.reason || ""}　${d.hint || ""}`;
+      ck.test = { ok: !!d.ok, text: d.ok ? `${d.model}・${d.ms}ミリ秒` : d.hint || d.reason || "", at: new Date().toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) };
     } catch (e) {
       $("#opMsg").className = "msg bad";
       $("#opMsg").textContent = "テストできませんでした。";
-    } finally { b.disabled = false; }
+      ck.test = { ok: false, text: "つながりませんでした", at: new Date().toLocaleString("ja-JP") };
+    } finally {
+      b.disabled = false;
+      ckSave();
+      renderChecklist();
+    }
   }
 
   function csv() {
@@ -564,10 +614,60 @@
       return "";
     }
   }
+  // ---------- 当日までのチェック ----------
+  const CK_KEY = "tsukuttaroka.admin.ck";
+  let ck = {};
+  try { ck = JSON.parse(localStorage.getItem(CK_KEY) || "{}") || {}; } catch {}
+  const ckSave = () => { try { localStorage.setItem(CK_KEY, JSON.stringify(ck)); } catch {} };
+  function renderChecklist() {
+    const s = summary || {};
+    const lscw = events.find((e) => e.id === "lscw");
+    const items = [];
+    const item = (st, title, note, act) => items.push({ st, title, note, act });
+    item(s.hasKey ? "ok" : "ng", "サーバーのAIキー", s.hasKey ? `登録ずみ（${esc(s.model || "")}）` : "まだありません。参加者が文章を作れません", s.hasKey ? "" : '<button class="btn btn-sm" type="button" data-ck="key">入れ方を見る</button>');
+    const t = ck.test;
+    item(t ? (t.ok ? "ok" : "ng") : "todo", "AIの接続テスト", t ? `${t.ok ? "OK" : "NG"}：${esc(t.text || "")}（${esc(t.at || "")}）` : "まだ。ボタンで1回ためしてください", '<button class="btn btn-sm" type="button" data-ck="test">テストする</button>');
+    item(ck.billing ? "ok" : "todo", "AIキーの課金の設定（会場で大勢が使うなら必須）", "無料のままだと、1日20回ほどで止まることがあります。AI Studio で「課金を設定」→ 前払い5ドルから", `<a class="btn btn-sm" href="https://aistudio.google.com/rate-limit" target="_blank" rel="noopener">AI Studioで確かめる</a><label><input type="checkbox" data-ck="billing"${ck.billing ? " checked" : ""}> 設定した</label>`);
+    if (lscw) {
+      item(lscw.active ? "ok" : "ng", "LSCWのイベント", lscw.active ? "参加者が使える状態です" : "止めています（参加者は使えません）", '<button class="btn btn-sm" type="button" data-ck="edit">直す</button>');
+      item(lscw.overview ? "ok" : "todo", "イベントの概要（AIに渡す情報）", lscw.overview ? `入っています（${lscw.overview.length}字）` : "まだ。入れると、AIが会場のことを分かって書けます", '<button class="btn btn-sm" type="button" data-ck="overview">概要を入れる</button>');
+    } else item("ng", "LSCWのイベント", "見つかりません。「イベント」タブで、ID「lscw」のイベントを作ってください", '<button class="btn btn-sm" type="button" data-goto="event">イベントへ</button>');
+    item(ck.smoke ? "ok" : "todo", "本番で通しテスト", "GitHub の Actions で、本物のAIで最後まで作れるか確かめます（作った文章はログに出ます）", `<a class="btn btn-sm" href="https://github.com/3twowings28113-cpu/tsukuttaroka/actions/workflows/smoke.yml" target="_blank" rel="noopener">ひらく</a><label><input type="checkbox" data-ck="smoke"${ck.smoke ? " checked" : ""}> 通った</label>`);
+    const label = { ok: "OK", ng: "要対応", todo: "まだ" };
+    $("#ckList").innerHTML = items.map((x) => `<li><span class="ck-st ${x.st}">${label[x.st]}</span><span class="ck-t"><b>${x.title}</b><small>${x.note}</small></span><span class="ck-act">${x.act}</span></li>`).join("");
+    const done = items.filter((x) => x.st === "ok").length;
+    $("#ckCount").textContent = `${done} / ${items.length} OK`;
+    const scr = new URL(location.origin + "/qr");
+    scr.searchParams.set("preset", "lscw");
+    scr.searchParams.set("url", location.origin + "/lscw");
+    $("#qScreen").href = scr.pathname.slice(1) + scr.search;
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-ck]");
+    if (!b) return;
+    const k = b.dataset.ck;
+    if (k === "key") { $("#keyHelp").hidden = false; $("#keyHelpBtn").setAttribute("aria-expanded", "true"); $("#keyHelp").scrollIntoView({ block: "start", behavior: "smooth" }); }
+    if (k === "test") test();
+    if (k === "edit" || k === "overview") {
+      const ev = events.find((x) => x.id === "lscw");
+      if (!ev) return;
+      openEventForm(ev);
+      if (k === "overview") setTimeout(() => $("#aevOverview").focus(), 400);
+    }
+  });
+  document.addEventListener("change", (e) => {
+    const c = e.target.closest("input[data-ck]");
+    if (!c) return;
+    ck[c.dataset.ck] = c.checked;
+    ckSave();
+    renderChecklist();
+  });
+
   async function loadEvents() {
     const res = await api("api/admin/events");
     const d = await res.json();
     events = d.events || [];
+    try { renderChecklist(); } catch {}
     const noKey = !d.serverKey && events.some((e) => e.active && !e.keySet);
     $("#evKeyNote").hidden = !noKey;
     $("#evKeyNote").textContent = "AIキーが登録されていないイベントがあります。イベントの「Gemini APIキー」に入れるか、サーバーのキー（GEMINI_API_KEY）を登録してください。このままだと、参加者は文章を作れません。";
@@ -640,6 +740,8 @@
     $("#aevCheer").checked = !!f.cheerAlways;
     $("#aevActive").checked = f.active !== false;
     $("#evMsg").textContent = "";
+    evDirty = false;
+    $("#evDirty").hidden = true;
     $("#evForm").hidden = false;
     $("#evForm").scrollIntoView({ block: "start", behavior: "smooth" });
     (ev ? $("#aevName") : $("#aevId")).focus({ preventScroll: true });
@@ -688,14 +790,32 @@
       const d = await res.json().catch(() => ({}));
       if (!res.ok || !d.ok) throw new Error(d.message || "保存できませんでした");
       $("#evForm").hidden = true;
+      evDirty = false;
       await loadEvents();
+      // 保存したイベントのカードを見せて、少し光らせる
+      const card = document.getElementById("evu-" + body.id);
+      const item = card && card.closest(".ev-item");
+      if (item) {
+        item.scrollIntoView({ block: "center", behavior: "smooth" });
+        item.classList.add("is-flash");
+        setTimeout(() => item.classList.remove("is-flash"), 1800);
+      }
+      $("#opMsg").className = "msg good";
+      $("#opMsg").textContent = `「${body.name || body.id}」を保存しました。参加者の画面には10秒ほどで反映されます。`;
     } catch (err) {
       $("#evMsg").className = "msg bad";
       $("#evMsg").textContent = err.message || "保存できませんでした";
     }
   }
   $("#evNewBtn").addEventListener("click", () => openEventForm(null));
-  $("#evCancel").addEventListener("click", () => { $("#evForm").hidden = true; });
+  let evDirty = false;
+  $("#evForm").addEventListener("input", () => { evDirty = true; $("#evDirty").hidden = false; });
+  $("#evForm").addEventListener("change", () => { evDirty = true; $("#evDirty").hidden = false; });
+  $("#evCancel").addEventListener("click", () => {
+    if (evDirty && !confirm("保存していない変更があります。やめると消えますが、いいですか？")) return;
+    evDirty = false;
+    $("#evForm").hidden = true;
+  });
   $("#evForm").addEventListener("submit", saveEventForm);
   $("#evList").addEventListener("click", async (e) => {
     const c = e.target.closest("[data-evcopy]");
@@ -713,6 +833,7 @@
     }
     const st = e.target.closest("[data-evstats]");
     if (st) {
+      setTab("home"); // 利用状況は「ようす」のタブにある
       $("#stEvent").value = st.dataset.evstats;
       loadStats().catch(() => {});
       $("#stPanel").scrollIntoView({ block: "start", behavior: "smooth" });
@@ -737,7 +858,7 @@
     }
     const del = e.target.closest("[data-evdel]");
     if (del) {
-      if (!confirm(`イベント「${del.dataset.evdel}」を消しますか？（このURLとあいことばは使えなくなります）`)) return;
+      if (!confirm(`イベント「${del.dataset.evdel}」を消しますか？（このURL（QR）は使えなくなります）`)) return;
       await api("api/admin/event-delete", { method: "POST", body: JSON.stringify({ id: del.dataset.evdel }) }).catch(() => {});
       loadEvents().catch(() => {});
     }
