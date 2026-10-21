@@ -37,7 +37,7 @@
 - 見出し・自己紹介の条件と質問 → `public/config.js` の `profile`（conds＝条件、cards＝質問、headline／about＝それぞれの質問の並び・入れ方・ちょい直し）
 - 画面の動き → `public/app.js`／見た目 → `public/app.css`／LSCW専用ページ → `public/lscw.html`（中身は app.js と同じ。window.APP_PAGE でプリセットとイベントを固定）
 - 運営ページ → `public/admin.html`（合言葉なし。URLを知っている人はだれでも開ける）／会場スクリーン → `public/qr.html`
-- LSCWのテーマ（どんな投稿にする？）→ `public/config.js` の lscw の `sets`／参加企業のロゴと採用ページ → lscw の `companies`（ロゴの画像は `public/logos/`）
+- LSCWのテーマ（どんな投稿にする？）→ `public/config.js` の lscw の `sets`／参加企業のロゴと採用ページ → lscw の `companies`（ロゴの画像は `public/logos/`。/lscw のいちばん上で右から左へ流れる）
 - 終わったイベントの記録（10/6 の富士通の回など）→ 過去の記録ページ（/archive・`public/archive.html`）。運営ページは「いまの期間」だけを出す。区切りは運営ページの「データ・過去の記録」→「ここまでを過去のイベントにする」
 - 「投稿したで！」の報告・パネラーの★・受付の停止は 2026-10-22 になくした（10/6 の記録は /archive で見るだけ）
 - サーバー → `src/worker.js`／Gemini の呼び出し → `src/gemini.js`
@@ -50,7 +50,7 @@
 
 ## やってはいけないこと
 - APIキーを public/ の中や画面のコードに書かない（ブラウザから見えてしまう）
-- デザインのルールを崩さない：地の色は config.js の theme（LSCW・普段使いは LinkedIn の青 #0A66C2 で、地の上の文字は白。富士通は黄色 #FFDE59 で文字は黒）、押せるものは LinkedIn の濃い青 #004182（富士通は #0A66C2）、カード・雲は白で文字と線は #121212、黒い太線の雲フキダシが見せ場。LinkedInのロゴは使わない。紫〜青のグラデーション、ガラス風、キラキラのAIアイコン、絵文字のアイコン、Inter フォントは使わない
+- デザインのルールを崩さない：地の色は config.js の theme（普段使いは LinkedIn の青 #0A66C2 で、地の上の文字は白。LSCW は公式サイトに合わせたミント→青のグラデーション（theme.groundImage）で、文字は黒。富士通は黄色 #FFDE59 で文字は黒）、押せるものは LinkedIn の濃い青 #004182（富士通は #0A66C2）、カード・雲は白で文字と線は #121212、黒い太線の雲フキダシが見せ場。LinkedInのロゴは使わない。紫〜青のグラデーション、ガラス風、キラキラのAIアイコン、絵文字のアイコン、Inter フォントは使わない
 
 ## よく使うコマンド（Windows。`&&` でつながず、1つずつ実行）
 - 公開まで全部：`npm run setup`

@@ -881,10 +881,7 @@ main > .key-on { color: var(--on-ground-soft); }
 .next-part-title { margin: 0; font-family: var(--f-display); font-weight: 900; font-size: 17px; }
 .next-part-note { margin: 0 0 4px; font-size: 14px; color: var(--ink-soft); }
 
-/* 参加企業のロゴ（LSCW）。押すと採用ページ。白いタイルに黒い線（カードと同じ） */
-.companies { margin-top: 18px; padding-top: 14px; border-top: 2px dashed var(--on-ground-soft); }
-.co-title { display: flex; align-items: baseline; gap: 8px; margin: 0 0 4px; font-size: 17px; font-weight: 800; color: var(--on-ground); }
-.co-count { font-size: 13px; font-weight: 700; color: var(--on-ground-soft); }
+/* 参加企業のロゴ（LSCW）。押すと採用ページ。白いタイルに黒い線（カードと同じ）。一覧はシートに出す */
 .co-grid { list-style: none; margin: 10px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .co { display: flex; align-items: center; justify-content: center; height: 64px; padding: 6px 8px; background: var(--paper); border: var(--line) solid var(--ink); border-radius: 10px; box-shadow: 2px 2px 0 var(--ink); transition: transform 0.08s, box-shadow 0.08s; }
 .co img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
@@ -892,3 +889,30 @@ a.co:active { transform: translate(2px, 2px); box-shadow: 0 0 0 var(--ink); }
 a.co:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 @media (min-width: 560px) { .co-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (prefers-reduced-motion: reduce) { .co { transition: none; } }
+
+/* 「どんな投稿にする？」⇄「どれだけ書く？」を、右上のボタンでその場で切りかえる */
+.sec-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; }
+.pane-switch { display: inline-flex; flex: none; margin-left: auto; padding: 3px; gap: 3px; background: var(--paper); border: var(--line) solid var(--ink); border-radius: 999px; box-shadow: 2px 2px 0 var(--ink); }
+.pane-switch button { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--ink); font-weight: 800; font-size: 15px; cursor: pointer; white-space: nowrap; }
+.pane-switch button b { font-weight: 900; }
+.pane-switch button[aria-selected="true"] { background: var(--blue); color: #fff; }
+.pane-switch button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+#pickPane { display: grid; gap: 12px; }
+
+/* 参加企業のロゴが右から左へ流れる帯（LSCW）。いちばん上。指でスワイプもできる */
+.co-marquee { margin: 0 -16px 4px; padding: 10px 0 12px; background: var(--paper); border-bottom: var(--line) solid var(--ink); }
+.co-mq-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 16px 8px; }
+.co-mq-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; font-size: 14px; font-weight: 800; color: var(--ink); }
+.co-mq-title b { font-size: 13px; color: var(--ink-soft); }
+.co-mq-hint { font-size: 12px; font-weight: 700; color: var(--muted); }
+.co-mq-all { flex: none; min-height: 36px; padding: 0 12px; border: var(--line) solid var(--ink); border-radius: 999px; background: var(--paper); color: var(--ink); font-size: 13px; font-weight: 800; cursor: pointer; box-shadow: 2px 2px 0 var(--ink); }
+.co-mq-all:active { transform: translate(2px, 2px); box-shadow: none; }
+.co-track { overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; scroll-behavior: auto; }
+.co-track::-webkit-scrollbar { display: none; }
+.co-row { display: flex; gap: 10px; width: max-content; margin: 0; padding: 2px 16px 4px; list-style: none; }
+.co-row .co { width: 128px; height: 58px; flex: none; }
+.co-marquee[hidden] { display: none; }
+
+/* 地のグラデーション（LSCW）。画面に固定して、スクロールしても地が切れないように */
+html.has-ground-image body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none; background: var(--ground-image); }
+html.has-ground-image .topbar { margin-inline: -16px; padding-inline: 16px; background: var(--ground-top, var(--ground)); border-bottom: 1px solid rgba(18, 18, 18, 0.12); }
