@@ -1,0 +1,31 @@
+# 本番の Gemini のキー（GEMINI_API_KEY）を Cloudflare に登録する。Actions →「Geminiのキーを登録」→ Run workflow で、キーを貼って実行
+name: Geminiのキーを登録
+on:
+  workflow_dispatch:
+    inputs:
+      gemini_key:
+        description: "Gemini APIキー（AIza… か AQ.…）"
+        required: true
+jobs:
+  set:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: キーを隠す
+        run: |
+          KEY=$(jq -r '.inputs.gemini_key' "$GITHUB_EVENT_PATH")
+          echo "::add-mask::$KEY"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Cloudflare に登録
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: jq -r '.inputs.gemini_key' "$GITHUB_EVENT_PATH" | tr -d '\r\n ' | npx wrangler secret put GEMINI_API_KEY
+      - name: 動作確認
+        run: |
+          sleep 5
+          curl -fsS https://tsukuttaroka.3twowings28113.workers.dev/api/health
