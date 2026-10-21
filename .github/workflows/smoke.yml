@@ -1,0 +1,35 @@
+# 本番で通しテスト：実際のブラウザで /lscw を開き、本物のAIで 投稿文 → 見出し → 自己紹介 を最後まで作る。
+# できた文章は、この実行のログ（「本番で通しテスト」のステップ）に出る。AI を3回ほど使う。
+# GitHub の Actions →「本番で通しテスト」→「Run workflow」で動かす。
+name: 本番で通しテスト
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "確かめるURL（ふつうはそのまま）"
+        required: false
+        default: "https://tsukuttaroka.3twowings28113.workers.dev"
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: ブラウザの準備
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1.49.1
+          npx playwright install --with-deps chromium
+      - name: 本番で通しテスト
+        env:
+          BASE_URL: ${{ inputs.base_url }}
+        run: node scripts/smoke-prod.mjs
+      - name: 失敗したときの画面
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-fail
+          path: smoke-fail.png
+          if-no-files-found: ignore

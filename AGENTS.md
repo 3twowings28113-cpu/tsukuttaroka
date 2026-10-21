@@ -58,5 +58,6 @@
 - 公開まで全部：`npm run setup`
 - 反映だけ：`npm run deploy`（GitHub の main に入れたら自動で公開する仕組みもある：`.github/workflows/deploy.yml`。リポジトリの secret に CLOUDFLARE_API_TOKEN が必要）
 - AIの確認：`npm run check`
+- 本番で最後まで作れるかの確認：GitHub の Actions →「本番で通しテスト」→ Run workflow（できた文章はログに出る）
 - 手元で動かす：`npm run local`（http://localhost:8787）
 - 本番のログを見る：`npm run logs`
