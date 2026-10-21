@@ -454,7 +454,7 @@ const clean = (v, max) =>
 export function sanitizePayload(raw) {
   const src = raw && typeof raw === "object" ? raw : {};
   const answers = (Array.isArray(src.answers) ? src.answers : [])
-    .slice(0, 15)
+    .slice(0, 40)
     .map((a) => ({
       id: clean(a && a.id, 40),
       label: clean(a && a.label, 40),
@@ -462,7 +462,8 @@ export function sanitizePayload(raw) {
       chips: (Array.isArray(a && a.chips) ? a.chips : []).slice(0, 10).map((c) => fixLinkedIn(clean(c, 40))).filter(Boolean),
       text: fixLinkedIn(clean(a && a.text, 400)),
     }))
-    .filter((a) => a.label && (a.text || a.chips.length));
+    .filter((a) => a.label && (a.text || a.chips.length))
+    .slice(0, 18); // じぶんで選ぶ（15まで）＋気持ち＋ネタ帳のメモ＋写真のこと
   const st = src.style && typeof src.style === "object" ? src.style : {};
   const pickAllowed = (key, v, fallback) => (ALLOWED[key].includes(v) ? v : fallback);
   const style = {

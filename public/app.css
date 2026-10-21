@@ -964,3 +964,38 @@ html.has-ground-image .topbar { margin-inline: -16px; padding-inline: 16px; back
 .note-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
 .note-del { color: var(--muted); }
 .btn-sm { min-height: 40px; padding: 0 14px; font-size: 14px; }
+
+/* ネタ帳：いちばん上の帯のボタンと、「便利な機能」の行は黄色（メモ帳の色）で目立たせる */
+.topbar .stepper { margin-left: auto; }
+.notes-top { display: inline-flex; align-items: center; gap: 4px; flex: none; min-height: 40px; padding: 0 12px; border: var(--line) solid var(--ink); border-radius: 999px; background: #FFE98A; color: var(--ink); font-weight: 900; font-size: 14px; box-shadow: 2px 2px 0 var(--ink); cursor: pointer; white-space: nowrap; }
+.notes-top b { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 11px; }
+.notes-top:active { transform: translate(2px, 2px); box-shadow: none; }
+.notes-top:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.feat.feat-notes { background: #FFF4BF; }
+.feat.feat-notes .feat-state { background: #FFE98A; color: var(--ink); border-color: var(--ink); }
+.feat.feat-notes.is-on .feat-state { background: var(--ink); color: #fff; }
+
+/* ネタ帳のシート（使い方3つ → ためたメモ → 書く欄） */
+.note-count { margin-left: 8px; font-size: 14px; font-weight: 800; color: var(--ink-soft); vertical-align: middle; }
+.note-how { list-style: none; counter-reset: nh; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0 0 12px; padding: 0; }
+.note-how li { counter-increment: nh; display: grid; gap: 2px; padding: 8px; background: #FFF4BF; border: 1.5px solid var(--ink); border-radius: 10px; font-size: 12px; line-height: 1.45; }
+.note-how li b { font-size: 14px; }
+.note-how li b::before { content: counter(nh) " "; color: var(--ink-soft); }
+.note-list-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0 8px; }
+.note-list-head .note-list-title { margin: 0; }
+.note-form-title { margin: 0 0 4px; font-size: 16px; font-weight: 900; }
+.note-form.is-edit { box-shadow: 0 0 0 3px #FFE98A; margin-bottom: 12px; }
+.note-form + .note-list { margin-top: 12px; }
+.note-item .note-use { min-height: 48px; }
+.note-acts .btn { min-height: 40px; padding: 0 16px; font-size: 14px; }
+.note-item.is-editing { opacity: 0.55; }
+.note-privacy { margin-top: 14px; }
+@media (max-width: 360px) { .note-how { grid-template-columns: 1fr; } }
+/* せまいスマホ（〜400px）：「困ったら」「ネタ帳」「1〜4」が1行に収まるように詰める */
+@media (max-width: 400px) {
+  .topbar { gap: 6px; }
+  .help-btn { padding: 0 10px 0 5px; gap: 4px; font-size: 14px; }
+  .notes-top { padding: 0 10px; font-size: 13px; }
+  .stepper { gap: 4px; }
+}
+@media (max-width: 340px) { .topbar { flex-wrap: wrap; row-gap: 6px; } }
