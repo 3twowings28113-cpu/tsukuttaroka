@@ -30,18 +30,19 @@
 
 ## どこに何があるか
 - 文言・ネタカード・ハッシュタグ・メンション先・フォローURL・色・イベントページの案内とタイムスケジュールの初期値 → `public/config.js`（いちばん下の PRESETS がイベントごとのまとまり。DEFAULT_PRESET で切り替え、URLの ?preset= でも切り替わる。LSCWは eventPage）
-- イベント名・ハッシュタグ・メンション・フォロー・あいことば・イベント用のAIキー・AIへの追加の指示・タイムスケジュール・色 → 運営ページ（/admin）の「イベント」。参加者は専用ページ（/lscw）か ?e=イベントID のURL（QR）で開く。あいことばが空のイベントは、URLを開いた人だれでもイベントのキー（なければサーバーのキー）で作れる
+- イベント名・ハッシュタグ・メンション・フォロー・イベント用のAIキー・AIへの追加の指示・タイムスケジュール・色 → 運営ページ（/admin）の「イベント」。参加者は専用ページ（/lscw）か ?e=イベントID のURL（QR）で開く。URLを開いた人はだれでも、イベントのキー（なければサーバーのキー）で作れる（あいことばは無い）
 - AIへの指示文の書きかえ（投稿文・プロフィール文・石坂さん風）→ 運営ページの「AIへの指示文」（D1 の settings に保存。初期の文は `src/ai.js`）
 - 利用状況（使った人・作った回数・日ごと・イベントごと）→ 運営ページの「利用状況」
 - AIへの指示文（文章の書き方） → `src/ai.js` の `SYSTEM_PROMPT`（投稿文）・`HEADLINE_PROMPT`（見出し）・`ABOUT_PROMPT`（自己紹介）・`ISHIZAKA_STYLE`（石坂さん風）
 - 見出し・自己紹介の条件と質問 → `public/config.js` の `profile`（conds＝条件、cards＝質問、headline／about＝それぞれの質問の並び・入れ方・ちょい直し）
 - 画面の動き → `public/app.js`／見た目 → `public/app.css`／LSCW専用ページ → `public/lscw.html`（中身は app.js と同じ。window.APP_PAGE でプリセットとイベントを固定）
-- パネラー用ページ → `public/judge.html`／運営ページ → `public/admin.html`／会場スクリーン → `public/qr.html`
+- 運営ページ → `public/admin.html`（合言葉なし。URLを知っている人はだれでも開ける）／会場スクリーン → `public/qr.html`
+- LSCWのテーマ（どんな投稿にする？）→ `public/config.js` の lscw の `sets`／参加企業のロゴと採用ページ → lscw の `companies`（ロゴの画像は `public/logos/`）
 - 終わったイベントの記録（10/6 の富士通の回など）→ 過去の記録ページ（/archive・`public/archive.html`）。運営ページは「いまの期間」だけを出す。区切りは運営ページの「データ・過去の記録」→「ここまでを過去のイベントにする」
-- 「投稿したで！」の報告 → 画面は `public/app.js`、サーバーは `src/worker.js` と `src/report.js`
+- 「投稿したで！」の報告・パネラーの★・受付の停止は 2026-10-22 になくした（10/6 の記録は /archive で見るだけ）
 - サーバー → `src/worker.js`／Gemini の呼び出し → `src/gemini.js`
 - 使うAIモデル → `wrangler.jsonc` の `vars`（GEMINI_MODEL・GEMINI_FALLBACK_MODEL）
-- APIキーと運営ページの合言葉 → `.dev.vars`（公開時に Cloudflare の secret として登録される）
+- APIキー → `.dev.vars`（公開時に Cloudflare の secret として登録される）。無料のキーは1日の回数に上限があるので、会場で使うキーは AI Studio で「課金を設定」しておく
 
 ## 変えたら
 - public/ か src/ を変えたら `npm run deploy` で反映し、`curl.exe <公開URL>/api/health` で `"ok":true` を確認

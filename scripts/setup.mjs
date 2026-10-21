@@ -3,7 +3,7 @@
  * 公開まで全自動でやるスクリプト：npm run setup
  *  1. Node.js の確認        2. 部品のインストール    3. Cloudflare ログイン
  *  4. Gemini の動作確認      5. データベース作成      6. 公開
- *  7. キーと合言葉の登録     8. 公開したものの動作確認
+ *  7. キーの登録           8. 公開したものの動作確認
  * 何度実行しても大丈夫（作成済みのものはそのまま使う）。
  */
 import { spawnSync } from "node:child_process";
@@ -61,7 +61,6 @@ async function main() {
   step(4, "Gemini（AI）の動作確認");
   const vars = readDevVars();
   if (!vars.GEMINI_API_KEY) stop(".dev.vars に GEMINI_API_KEY がありません。");
-  if (!vars.ADMIN_PASSCODE) stop(".dev.vars に ADMIN_PASSCODE がありません。");
   const found = await findWorking(vars.GEMINI_API_KEY);
   let aiOk = !!found.primary;
   if (aiOk) {
@@ -99,9 +98,9 @@ async function main() {
   if (!url) stop(`公開URLが見つかりませんでした。\n${dep.out.slice(-800)}`);
   say(`  OK  ${url}`);
 
-  step(7, "APIキーと合言葉を登録（secret）");
+  step(7, "APIキーを登録（secret）");
   const tmp = ".secrets.tmp.json";
-  writeFileSync(tmp, JSON.stringify({ GEMINI_API_KEY: vars.GEMINI_API_KEY, ADMIN_PASSCODE: vars.ADMIN_PASSCODE }));
+  writeFileSync(tmp, JSON.stringify({ GEMINI_API_KEY: vars.GEMINI_API_KEY }));
   const sec = wrangler(["secret", "bulk", tmp]);
   try {
     unlinkSync(tmp);
@@ -116,17 +115,17 @@ async function main() {
       const res = await fetch(`${url}/api/health`, { cache: "no-store" });
       if (res.ok) {
         health = await res.json();
-        if (health.hasKey && health.hasPasscode) break;
+        if (health.hasKey) break;
       }
     } catch {}
     await sleep(2500);
   }
   if (!health) stop(`${url}/api/health に届きません。1分ほど待ってから、もう一度 npm run setup を実行してください。`);
-  say(`  キー：${health.hasKey ? "OK" : "未登録"}　合言葉：${health.hasPasscode ? "OK" : "未登録"}　データベース：${health.db ? "OK" : "NG"}`);
+  say(`  キー：${health.hasKey ? "OK" : "未登録"}　データベース：${health.db ? "OK" : "NG"}`);
   try {
     const res = await fetch(`${url}/api/admin/test`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-admin-passcode": vars.ADMIN_PASSCODE },
+      headers: { "content-type": "application/json" },
       body: "{}",
     });
     const t = await res.json();
@@ -140,7 +139,7 @@ async function main() {
   say(`LSCW専用ページ（QR）  ：${url}/lscw`);
   say(`参加者用（普段使い）   ：${url}/`);
   say(`会場スクリーン用QR     ：${url}/qr?preset=lscw&url=${encodeURIComponent(url + "/lscw")}`);
-  say(`運営ページ             ：${url}/admin　（合言葉：${vars.ADMIN_PASSCODE}）`);
+  say(`運営ページ             ：${url}/admin　（合言葉なし。URLを知っている人はだれでも開ける）`);
   say(`リハーサル用（例文入り）：${url}/?demo=1`);
   say(`AI                     ：${aiOk ? "OK" : "NG（上の理由を確認）"}`);
   say("====================================================");

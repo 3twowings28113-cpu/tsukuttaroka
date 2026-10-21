@@ -7,16 +7,13 @@
  *           POST /api/style    過去の投稿から「書き方の癖」を分析する（1回だけ。結果は端末に保存）
  *           POST /api/refine    1パターンだけ書き直し
  *           POST /api/submit    「コピー」「あとで」の記録（共有ONのときだけ中身も保存）
- *           POST /api/report    「投稿したで！」の報告（名前・投稿のリンク・本文）。端末ごとに1件、送り直すと上書き
- *           GET  /api/stats     件数と、スクリーンに名前を出してOKな人（/qr の表示用）
+ *           GET  /api/stats     件数（/qr の表示用）
  *           GET  /api/health    動作確認（version で、いま公開中の版が分かる）
- *           GET  /api/event     イベント（?e=ID）の名前・ハッシュタグ・メンション・タイムスケジュールなど。POST /api/event/unlock であいことばを確かめる
+ *           GET  /api/event     イベント（?e=ID）の名前・ハッシュタグ・メンション・タイムスケジュールなど。あいことばは無い（URLを開いた人はだれでも使える）
  *           POST /api/clientlog 端末で起きた失敗の記録（運営ページの「最近のエラー」に出る）
  *           POST /api/hit       ページを開いた回数（運営ページの「利用状況」に出る。中身は送らない）
- * パネラー用 /api/judge/*        ヘッダー x-judge-key にパネラー用の鍵（合言葉から自動で作る）が必要
- *           GET  /api/judge/feed  報告された投稿（since 以降に増えた・変わったものだけ）
- *           POST /api/judge/star  ★を付ける・外す
- * 運営用     /api/admin/*        ヘッダー x-admin-passcode に合言葉が必要
+ * 運営用     /api/admin/*        合言葉なし（URLを知っている人はだれでも使える）
+ * 「投稿したで！」の報告・パネラーの★・受付の停止は 2026-10-22 になくした（10/6 の報告と★は /archive で見るだけ）
  */
 import {
   SYSTEM_PROMPT,
@@ -52,9 +49,9 @@ import {
   ABOUT_ACTIONS,
 } from "./ai.js";
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
-import { extractLinkedInUrl, cleanName, nameKey } from "./report.js";
+import { cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-22.lscw-4";
+const VERSION = "2026-10-22.lscw-5";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -81,33 +78,20 @@ async function route(request, env, ctx, url) {
   if (p === "/api/clientlog" && m === "POST") return clientLog(request, env, ctx);
   if (p === "/api/hit" && m === "POST") return hit(request, env, ctx);
   if (p === "/api/event" && m === "GET") return eventPublic(env, url);
-  if (p === "/api/event/unlock" && m === "POST") return eventUnlock(request, env);
   if (p === "/api/cal" && m === "POST") return calEvents(request, env);
   if (p === "/api/style" && m === "POST") return styleProfile(request, env);
   if (p === "/api/refine" && m === "POST") return refine(request, env, ctx);
   if (p === "/api/submit" && m === "POST") return submit(request, env);
-  if (p === "/api/report" && m === "POST") return report(request, env, ctx);
-  if (p.startsWith("/api/judge/")) {
-    if (!(await judgeOk(request, env))) return json({ ok: false, code: "auth", message: "パネラー用のリンクが正しくありません" }, 401);
-    if (p === "/api/judge/feed" && m === "GET") return judgeFeed(env, url);
-    if (p === "/api/judge/star" && m === "POST") return judgeStar(request, env);
-    return json({ ok: false, code: "not_found" }, 404);
-  }
+  // 運営用（合言葉なし。URLを知っている人はだれでも使える）
   if (p.startsWith("/api/admin/")) {
-    if (!String(env.ADMIN_PASSCODE || "")) return json({ ok: false, code: "no_passcode", message: "合言葉（ADMIN_PASSCODE）が未設定です" }, 403);
-    if (!adminOk(request, env)) return json({ ok: false, code: "auth", message: "合言葉がちがいます" }, 401);
     if (p === "/api/admin/summary" && m === "GET") return adminSummary(env, url);
     if (p === "/api/admin/posts" && m === "GET") return adminPosts(env, url);
     if (p === "/api/admin/export" && m === "GET") return adminExport(env, url);
     if (p === "/api/admin/archives" && m === "GET") return adminArchives(env);
     if (p === "/api/admin/archive" && m === "POST") return adminArchiveCreate(request, env);
-    if (p === "/api/admin/settings" && m === "POST") return adminSettings(request, env);
     if (p === "/api/admin/test" && m === "POST") return adminTest(env);
     if (p === "/api/admin/wipe" && m === "POST") return adminWipe(request, env);
     if (p === "/api/admin/reports" && m === "GET") return adminReports(env, url);
-    if (p === "/api/admin/report-hide" && m === "POST") return adminReportHide(request, env);
-    if (p === "/api/admin/judge-link" && m === "GET") return adminJudgeLink(env);
-    if (p === "/api/admin/roster" && m === "POST") return adminRoster(request, env);
     if (p === "/api/admin/export-reports" && m === "GET") return adminExportReports(env, url);
     if (p === "/api/admin/events" && m === "GET") return adminEvents(env);
     if (p === "/api/admin/event" && m === "POST") return adminEventSave(request, env);
@@ -197,7 +181,7 @@ const LSCW_NOTE = `この投稿は、学生向けのキャリアイベント「L
 async function seedEvents(db) {
   const r = await db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES ('seed.lscw', ?)").bind(String(Date.now())).run();
   if (!(r && r.meta && r.meta.changes)) return;
-  const data = { name: "LinkedIn Student Career Week 2026 Autumn", hashtags: [], pass: "", key: "", cheerAlways: true, active: true, preset: "lscw", aiNote: LSCW_NOTE };
+  const data = { name: "LinkedIn Student Career Week 2026 Autumn", hashtags: [], key: "", cheerAlways: true, active: true, preset: "lscw", aiNote: LSCW_NOTE };
   await db.prepare("INSERT OR IGNORE INTO event_settings (id, data, updated_at) VALUES ('lscw', ?, ?)").bind(JSON.stringify(data), Date.now()).run();
 }
 // 利用状況のための、端末の目印（端末IDの先頭だけ。名前などは入れない）
@@ -231,7 +215,6 @@ async function readSettings(env, fresh = false) {
   settingsCache = { at: Date.now(), map };
   return map;
 }
-const generationOpen = async (env) => (await readSettings(env)).generation !== "off";
 
 // ---------- 連打よけ（おおまかでOK。会場は全員同じWi-Fiの可能性があるので、IPはゆるめ） ----------
 const hits = new Map();
@@ -629,21 +612,13 @@ async function readEvent(env, id, fresh = false) {
   return ev;
 }
 const eventActive = (ev) => !!ev && ev.active !== false;
-const passError = () => json({ ok: false, code: "pass", message: "あいことばが変わったみたい。もう一度入れてな" }, 403);
-// 生成のヘッダー（x-event と x-event-pass）から、使うキーを決める。あいことばがちがうときは bad
+const eventOffError = () => json({ ok: false, code: "no_event", message: "このイベントは、いまは使えません" }, 403);
+// 生成のヘッダー（x-event）から、使うキーを決める。イベントのURLを開いた人はだれでも、イベントのキー（なければサーバーのキー）で作れる
 async function eventKeyOf(request, env) {
   const id = cleanEventId(request.headers.get("x-event"));
   if (!id) return NO_EVENT;
-  const raw = request.headers.get("x-event-pass") || "";
-  let pass = "";
-  try {
-    pass = decodeURIComponent(raw).trim();
-  } catch {
-    return { ...NO_EVENT, bad: true };
-  }
   const ev = await readEvent(env, id);
   if (!eventActive(ev)) return { ...NO_EVENT, id, bad: true };
-  if (ev.pass && !safeEqual(ev.pass, pass)) return { ...NO_EVENT, id, bad: true };
   return { key: ev.key || env.GEMINI_API_KEY || null, id };
 }
 // イベントごとのAIへの追加の指示（自分のキーで作る人にも効く。本文の event で受け取る）
@@ -656,7 +631,7 @@ async function eventNameOf(env, id) {
   const ev = await readEvent(env, cleanEventId(id)).catch(() => null);
   return eventActive(ev) ? oneLine(ev.name, 60) : "";
 }
-// 参加者の画面用（あいことばとキーは返さない）
+// 参加者の画面用（キーは返さない）
 async function eventPublic(env, url) {
   const ev = await readEvent(env, cleanEventId(url.searchParams.get("e")));
   if (!eventActive(ev)) return json({ ok: false, code: "no_event", message: "このイベントは、いまは使えません" }, 404);
@@ -669,9 +644,8 @@ async function eventPublic(env, url) {
       hashtags: ev.hashtags || [],
       cheerAlways: !!ev.cheerAlways,
       preset: ev.preset || "",
-      needsPass: !!ev.pass,
       hasKey,
-      open: !ev.pass && hasKey,
+      open: hasKey,
       mentions: ev.mentions || [],
       mentionInText: ev.mentionInText !== false,
       followUrl: ev.followUrl || "",
@@ -683,27 +657,12 @@ async function eventPublic(env, url) {
     },
   });
 }
-async function eventUnlock(request, env) {
-  const body = await readJson(request, 2000);
-  const ip = request.headers.get("cf-connecting-ip") || "local";
-  const cid = String((body && body.clientId) || "").slice(0, 64);
-  if (limited(`evu:${cid}`, 10, 60000) || limited(`evi:${ip}`, 300, 60000)) return json({ ok: false, code: "rate", message: "ちょっと待って、もう一回どうぞ" }, 429);
-  const id = cleanEventId(body && body.e);
-  const pass = String((body && body.pass) || "").trim().slice(0, 60);
-  if (!id || !pass) return json({ ok: false, code: "input", message: "あいことばを入れてな" }, 400);
-  const ev = await readEvent(env, id);
-  if (!eventActive(ev)) return json({ ok: false, code: "no_event", message: "このイベントは、いまは使えません" }, 404);
-  if (ev.pass && !safeEqual(ev.pass, pass)) return json({ ok: false, code: "pass", message: "あいことばがちがうみたい。スタッフに聞いてな" }, 403);
-  if (!ev.key && !env.GEMINI_API_KEY) return json({ ok: false, code: "no_key", message: "イベントのAIキーがまだ設定されてへん。スタッフに声かけてな" }, 503);
-  return json({ ok: true });
-}
 // 運営ページ：イベントの一覧・作成・変更・削除（キーは末尾4文字だけ見せる）
 function eventForAdmin(id, d, updatedAt) {
   return {
     id,
     name: d.name || "",
     hashtags: d.hashtags || [],
-    pass: d.pass || "",
     keySet: !!d.key,
     keyTail: d.key ? String(d.key).slice(-4) : "",
     cheerAlways: !!d.cheerAlways,
@@ -744,7 +703,6 @@ async function adminEventSave(request, env) {
   const data = {
     name: str(body.name, 60),
     hashtags: cleanHashtags(body.hashtags),
-    pass: str(body.pass, 60),
     key: body.clearKey ? "" : str(body.key, 300) || prev.key || "",
     cheerAlways: body.cheerAlways === true,
     active: body.active !== false,
@@ -789,14 +747,13 @@ async function generate(request, env, ctx) {
   const p = sanitizePayload(body);
   const images = sanitizeImages(body.images);
   if (!p.answers.length) return json({ ok: false, code: "input", message: "回答が空です" }, 400);
-  if (!(await generationOpen(env))) return json({ ok: false, code: "stopped", message: "受付停止中" }, 503);
   const cid = String(body.clientId || "").slice(0, 64);
   const ip = request.headers.get("cf-connecting-ip") || "local";
   if (limited(`c:${cid}`, 10, 60000) || limited(`i:${ip}`, 400, 60000)) return json({ ok: false, code: "rate" }, 429);
   const ukey = userKeyOf(request);
   const aiCfg = aiConfigOf(request);
   const ev = ukey || aiCfg ? NO_EVENT : await eventKeyOf(request, env);
-  if (ev.bad) return passError();
+  if (ev.bad) return eventOffError();
   const key = ukey || ev.key;
 
   const cards = p.answers.map((a) => a.label);
@@ -954,7 +911,7 @@ async function styleProfile(request, env) {
   if (sample.length < 200) return json({ ok: false, code: "input", message: "過去の投稿が少なすぎるみたい。もう1〜2件、投稿を足してな" }, 400);
   const ukey = userKeyOf(request);
   const ev = ukey ? NO_EVENT : await eventKeyOf(request, env);
-  if (ev.bad) return passError();
+  if (ev.bad) return eventOffError();
   const key = ukey || ev.key;
   if (!key) return json({ ok: false, code: "no_key", message: "先に、AIのキーを入れてな" }, 403);
   const ip = request.headers.get("cf-connecting-ip") || "local";
@@ -990,14 +947,13 @@ async function refine(request, env, ctx) {
   const ask = cleanRequest(body.request);
   if (!tone || !action || current.length < 10) return json({ ok: false, code: "input", message: "入力が足りません" }, 400);
   if (action === "custom" && !ask) return json({ ok: false, code: "input", message: "どう直すかを書いてください" }, 400);
-  if (!(await generationOpen(env))) return json({ ok: false, code: "stopped", message: "受付停止中" }, 503);
   const cid = String(body.clientId || "").slice(0, 64);
   const ip = request.headers.get("cf-connecting-ip") || "local";
   if (limited(`c:${cid}`, 10, 60000) || limited(`i:${ip}`, 400, 60000)) return json({ ok: false, code: "rate" }, 429);
   const ukey = userKeyOf(request);
   const aiCfg = aiConfigOf(request);
   const ev = ukey || aiCfg ? NO_EVENT : await eventKeyOf(request, env);
-  if (ev.bad) return passError();
+  if (ev.bad) return eventOffError();
   const key = ukey || ev.key;
   if (!key && !aiCfg) {
     if (env.GEMINI_API_KEY) return json({ ok: false, code: "no_key", message: NO_KEY_MSG }, 403);
@@ -1088,150 +1044,38 @@ async function submit(request, env) {
 
 let statsCache = { at: 0, data: null, e: "" };
 async function stats(env, url) {
-  // ?e=イベントID のときは、そのイベントで作られた件数だけ（報告の人数は全体）
+  // ?e=イベントID のときは、そのイベントで作られた件数だけ
   const e = cleanEventId(url && url.searchParams.get("e"));
   if (statsCache.data && statsCache.e === e && Date.now() - statsCache.at < 5000) return json(statsCache.data);
   const db = await getDb(env);
-  const data = { ok: true, generated: 0, copied: 0, later: 0, reported: 0, latest: [] };
+  const data = { ok: true, generated: 0, copied: 0, later: 0 };
   if (db) {
     // 会場スクリーンの数は、いまの期間だけ（過去のイベントの分は数えない）
     const rg = await rangeOf(env, null);
     const F = isoOf(rg.from);
-    const [ev, rc, latest] = await db.batch([
-      e
-        ? db.prepare("SELECT type, COUNT(*) AS n FROM events WHERE created_at >= ? AND json_extract(detail, '$.event') = ? GROUP BY type").bind(F, e)
-        : db.prepare("SELECT type, COUNT(*) AS n FROM events WHERE created_at >= ? GROUP BY type").bind(F),
-      db.prepare("SELECT COUNT(*) AS n FROM reports WHERE hidden = 0 AND created_at >= ?").bind(rg.from),
-      // 会場スクリーンに出すのは「名前を出してOK」の人の名前だけ（本文は出さない）
-      db.prepare("SELECT name, created_at FROM reports WHERE hidden = 0 AND screen_ok = 1 AND created_at >= ? ORDER BY created_at DESC LIMIT 8").bind(rg.from),
-    ]);
+    const ev = await (e
+      ? db.prepare("SELECT type, COUNT(*) AS n FROM events WHERE created_at >= ? AND json_extract(detail, '$.event') = ? GROUP BY type").bind(F, e)
+      : db.prepare("SELECT type, COUNT(*) AS n FROM events WHERE created_at >= ? GROUP BY type").bind(F)
+    ).all();
     for (const r of ev.results || []) {
       if (r.type === "generate") data.generated = r.n;
       if (r.type === "copy") data.copied = r.n;
       if (r.type === "later") data.later = r.n;
     }
-    data.reported = (rc.results && rc.results[0] && rc.results[0].n) || 0;
-    data.latest = (latest.results || []).map((r) => ({ name: r.name, at: r.created_at }));
   }
   statsCache = { at: Date.now(), data, e };
   return json(data);
 }
 
-// ---------- 「投稿したで！」の報告 ----------
-async function report(request, env, ctx) {
-  const body = await readJson(request, 20000);
-  if (!body) return json({ ok: false, code: "input", message: "入力が読めませんでした" }, 400);
-  const cid = String(body.clientId || "").slice(0, 64);
-  if (!cid) return json({ ok: false, code: "input", message: "端末IDがありません" }, 400);
-  const ip = request.headers.get("cf-connecting-ip") || "local";
-  if (limited(`r:${cid}`, 12, 60000) || limited(`ri:${ip}`, 600, 60000)) return json({ ok: false, code: "rate" }, 429);
-  const name = cleanName(body.name);
-  if (!name) return json({ ok: false, code: "name", message: "名前を入れてください" }, 400);
-  const u = extractLinkedInUrl(body.url);
-  if (u.error) return json({ ok: false, code: "url", message: "LinkedInのリンクではないようです" }, 400);
-  const source = body.source === "self" ? "self" : "app";
-  const text = String(body.body || "").replace(/\r\n?/g, "\n").trim().slice(0, 3500);
-  if (!u.url && !text) return json({ ok: false, code: "empty", message: "リンクか本文のどちらかを入れてください" }, 400);
-  const tone = TONE_IDS.includes(body.tone) ? body.tone : "";
-  const screenOk = body.screenOk === false ? 0 : 1;
-  const db = await getDb(env);
-  if (!db) return json({ ok: false, code: "no_db", message: "保存先（データベース）が未設定です" }, 500);
-  const now = Date.now();
-  await db
-    .prepare(
-      `INSERT INTO reports (id, created_at, updated_at, client_id, name, url, body, source, tone, screen_ok)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(client_id) DO UPDATE SET updated_at = excluded.updated_at, name = excluded.name, url = excluded.url,
-         body = excluded.body, source = excluded.source, tone = excluded.tone, screen_ok = excluded.screen_ok`
-    )
-    .bind(crypto.randomUUID(), now, now, cid, name, u.url || "", text, source, tone, screenOk)
-    .run();
-  const row = await db.prepare("SELECT id, created_at FROM reports WHERE client_id = ?").bind(cid).first();
-  if (row && row.created_at === now) logEvent(env, ctx, "report", { source, hasUrl: !!u.url, u: uidOf(cid), event: cleanEventId(body.event) });
-  statsCache = { at: 0, data: null };
-  return json({ ok: true, id: row ? row.id : "", createdAt: row ? row.created_at : now, url: u.url || "" });
-}
-
-// ---------- パネラー用 ----------
-// 鍵は運営の合言葉から作る（合言葉を変えると、パネラー用リンクも変わる）
-let judgeKeyCache = { pass: null, key: null };
-async function judgeKey(env) {
-  const pass = String(env.ADMIN_PASSCODE || "");
-  if (!pass) return null;
-  if (judgeKeyCache.pass === pass) return judgeKeyCache.key;
-  const enc = new TextEncoder();
-  const k = await crypto.subtle.importKey("raw", enc.encode(pass), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
-  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", k, enc.encode("tsukuttaroka-judge-v1")));
-  let bin = "";
-  for (const b of sig) bin += String.fromCharCode(b);
-  const key = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "").slice(0, 24);
-  judgeKeyCache = { pass, key };
-  return key;
-}
-async function judgeOk(request, env) {
-  const want = await judgeKey(env);
-  return !!want && safeEqual(want, String(request.headers.get("x-judge-key") || ""));
-}
-const cleanJudge = (s) => cleanName(s).slice(0, 30);
-
-async function judgeFeed(env, url) {
-  const db = await getDb(env);
-  if (!db) return json({ ok: false, code: "no_db", message: "データベースが未設定です" }, 500);
-  const j = cleanJudge(url.searchParams.get("j"));
-  const since = Math.max(0, Number(url.searchParams.get("since")) || 0);
-  const rg = await rangeOf(env, null); // パネラーの画面も、いまの期間の投稿だけ
-  const [rows, stars, picks] = await db.batch([
-    db.prepare("SELECT * FROM reports WHERE updated_at > ? AND created_at >= ? ORDER BY created_at DESC LIMIT 500").bind(since, rg.from),
-    db.prepare("SELECT report_id FROM stars WHERE judge = ?").bind(j),
-    db.prepare("SELECT judge, report_id FROM stars"),
-  ]);
-  const pickMap = {};
-  for (const s of picks.results || []) (pickMap[s.report_id] = pickMap[s.report_id] || []).push(s.judge);
-  const items = (rows.results || []).map((r) =>
-    r.hidden
-      ? { id: r.id, hidden: true, updatedAt: r.updated_at }
-      : {
-          id: r.id,
-          name: r.name,
-          url: r.url,
-          body: r.body,
-          source: r.source,
-          tone: r.tone,
-          createdAt: r.created_at,
-          updatedAt: r.updated_at,
-        }
-  );
-  return json({ ok: true, now: Date.now(), items, stars: (stars.results || []).map((r) => r.report_id), picks: pickMap });
-}
-
-async function judgeStar(request, env) {
-  const body = await readJson(request);
-  const j = cleanJudge(body && body.j);
-  const id = String((body && body.id) || "").slice(0, 64);
-  if (!j || !id) return json({ ok: false, code: "input" }, 400);
-  if (limited(`j:${j}`, 120, 60000)) return json({ ok: false, code: "rate" }, 429);
-  const db = await getDb(env);
-  if (!db) return json({ ok: false, code: "no_db" }, 500);
-  if (body.on) {
-    await db.prepare("INSERT OR IGNORE INTO stars (judge, report_id, created_at) VALUES (?, ?, ?)").bind(j, id, Date.now()).run();
-  } else {
-    await db.prepare("DELETE FROM stars WHERE judge = ? AND report_id = ?").bind(j, id).run();
-  }
-  return json({ ok: true, on: !!body.on });
-}
-
 async function health(env) {
-  const s = await readSettings(env, true);
   return json({
     ok: true,
     version: VERSION,
     hasKey: !!env.GEMINI_API_KEY,
-    hasPasscode: !!env.ADMIN_PASSCODE,
     db: !!(await getDb(env)),
     model: env.GEMINI_MODEL || "gemini-3.8-flash",
     fallback: env.GEMINI_FALLBACK_MODEL || "gemini-flash-lite-latest",
     style: env.GEMINI_API_STYLE || "interactions",
-    generation: s.generation === "off" ? "off" : "on",
   });
 }
 
@@ -1297,19 +1141,9 @@ async function adminArchiveCreate(request, env) {
 }
 
 // ---------- 運営用 ----------
-function safeEqual(want, got) {
-  if (!want || got.length !== want.length) return false;
-  let diff = 0;
-  for (let i = 0; i < want.length; i++) diff |= want.charCodeAt(i) ^ got.charCodeAt(i);
-  return diff === 0;
-}
-function adminOk(request, env) {
-  return safeEqual(String(env.ADMIN_PASSCODE || ""), String(request.headers.get("x-admin-passcode") || ""));
-}
 
 async function adminSummary(env, url) {
   const db = await getDb(env);
-  const s = await readSettings(env, true);
   const rg = await rangeOf(env, url);
   const F = isoOf(rg.from);
   const T = isoOf(rg.to);
@@ -1319,7 +1153,6 @@ async function adminSummary(env, url) {
     hasKey: !!env.GEMINI_API_KEY,
     model: env.GEMINI_MODEL || "gemini-3.8-flash",
     fallback: env.GEMINI_FALLBACK_MODEL || "gemini-flash-lite-latest",
-    generation: s.generation === "off" ? "off" : "on",
     counts: { generate: 0, refine: 0, copy: 0, later: 0, error: 0, report: 0 },
     posts: 0,
     topCards: [],
@@ -1458,21 +1291,6 @@ async function adminExport(env, url) {
       "cache-control": "no-store",
     },
   });
-}
-
-async function adminSettings(request, env) {
-  const body = await readJson(request);
-  const db = await getDb(env);
-  if (!db) return json({ ok: false, code: "no_db", message: "データベースが未設定です" }, 500);
-  if (body && (body.generation === "on" || body.generation === "off")) {
-    await db
-      .prepare("INSERT INTO settings (key, value) VALUES ('generation', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-      .bind(body.generation)
-      .run();
-  }
-  settingsCache.at = 0;
-  const s = await readSettings(env, true);
-  return json({ ok: true, generation: s.generation === "off" ? "off" : "on" });
 }
 
 async function adminTest(env) {
@@ -1687,15 +1505,9 @@ async function adminPromptTest(request, env) {
 }
 
 // ---------- 運営用：投稿報告 ----------
-async function readRoster(env) {
-  const s = await readSettings(env, true);
-  const list = safeParse(s.roster, []);
-  return Array.isArray(list) ? list.filter((x) => typeof x === "string" && x) : [];
-}
-
 async function adminReports(env, url) {
   const db = await getDb(env);
-  if (!db) return json({ ok: true, rows: [], roster: null, rosterText: "" });
+  if (!db) return json({ ok: true, rows: [] });
   const rg = await rangeOf(env, url);
   const [rows, stars] = await db.batch([
     db.prepare("SELECT * FROM reports WHERE created_at >= ? AND created_at < ? ORDER BY created_at DESC LIMIT 1000").bind(rg.from, rg.to),
@@ -1717,54 +1529,7 @@ async function adminReports(env, url) {
     hidden: !!r.hidden,
     stars: byReport[r.id] || [],
   }));
-  const roster = await readRoster(env);
-  let rosterInfo = null;
-  if (roster.length) {
-    const rosterKeys = new Set(roster.map(nameKey));
-    const reported = new Set(list.filter((r) => !r.hidden).map((r) => nameKey(r.name)));
-    for (const r of list) r.inRoster = rosterKeys.has(nameKey(r.name));
-    const missing = roster.filter((n) => !reported.has(nameKey(n)));
-    rosterInfo = { total: roster.length, reported: roster.length - missing.length, missing };
-  }
-  return json({ ok: true, rows: list, roster: rosterInfo, rosterText: roster.join("\n") });
-}
-
-async function adminReportHide(request, env) {
-  const body = await readJson(request);
-  const id = String((body && body.id) || "").slice(0, 64);
-  if (!id) return json({ ok: false, code: "input" }, 400);
-  const db = await getDb(env);
-  if (!db) return json({ ok: false, code: "no_db" }, 500);
-  // updated_at を進めると、パネラーの画面からも消える（戻すと、また出る）
-  await db.prepare("UPDATE reports SET hidden = ?, updated_at = ? WHERE id = ?").bind(body.hidden ? 1 : 0, Date.now(), id).run();
-  statsCache = { at: 0, data: null };
-  return json({ ok: true });
-}
-
-async function adminJudgeLink(env) {
-  const key = await judgeKey(env);
-  return json({ ok: true, path: `/judge?k=${encodeURIComponent(key)}` });
-}
-
-async function adminRoster(request, env) {
-  const body = await readJson(request, 60000);
-  const db = await getDb(env);
-  if (!db) return json({ ok: false, code: "no_db" }, 500);
-  const seen = new Set();
-  const names = [];
-  for (const raw of String((body && body.text) || "").split(/\r?\n|,|、|\t/)) {
-    const n = cleanName(raw);
-    if (!n || seen.has(nameKey(n))) continue;
-    seen.add(nameKey(n));
-    names.push(n);
-    if (names.length >= 500) break;
-  }
-  await db
-    .prepare("INSERT INTO settings (key, value) VALUES ('roster', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-    .bind(JSON.stringify(names))
-    .run();
-  settingsCache.at = 0;
-  return json({ ok: true, count: names.length });
+  return json({ ok: true, rows: list });
 }
 
 async function adminExportReports(env, url) {

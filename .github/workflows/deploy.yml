@@ -2,7 +2,7 @@
 # 使うには、GitHub のリポジトリの Settings → Secrets and variables → Actions に
 # CLOUDFLARE_API_TOKEN（Cloudflare の「Edit Cloudflare Workers」テンプレートで作ったトークン）を1回だけ登録する。
 # 登録していないあいだは、公開をとばして「未登録」と出るだけ（エラーにはならない）。
-# GEMINI_API_KEY と ADMIN_PASSCODE は、Cloudflare に登録ずみのものがそのまま使われる。
+# GEMINI_API_KEY は、Cloudflare に登録ずみのものがそのまま使われる。
 name: Cloudflareに公開
 on:
   push:

@@ -152,7 +152,7 @@
   .pr-text { min-height: 360px; font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, "BIZ UDGothic", monospace; font-size: 13px; }
   .pr-test { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 10px; padding: 10px 12px; border: 1px dashed var(--rule); border-radius: 10px; }
   .pr-test input, .pr-test select { min-height: 38px; padding: 0 10px; border: 1px solid var(--rule); border-radius: 8px; background: #fff; font: inherit; font-size: 14px; }
-  /* タブ（ようす／イベント／投稿報告／AIの指示文／データ） */
+  /* タブ（ようす／イベント／集まった投稿／AIの指示文／データ） */
   .tabs { position: sticky; top: 58px; z-index: 4; display: flex; gap: 6px; overflow-x: auto; padding: 6px; background: var(--bg); border: 1px solid var(--rule); border-radius: 12px; }
   .tabs button { flex: none; min-height: 42px; padding: 0 14px; border: 2px solid transparent; border-radius: 9px; background: transparent; font-weight: 700; cursor: pointer; white-space: nowrap; }
   .tabs button[aria-selected="true"] { background: var(--blue); color: #fff; border-color: var(--ink); }
@@ -187,29 +187,19 @@
 <header>
   <div class="bar">
     <h1 class="title">運営ページ<small>投稿、つくったろか。</small></h1>
-    <div class="row" id="topActions" hidden>
+    <div class="row" id="topActions">
       <button class="btn" id="reloadBtn" type="button">更新</button>
-      <button class="btn" id="logoutBtn" type="button">ログアウト</button>
     </div>
   </div>
 </header>
 
 <main>
-  <section class="panel login" id="login">
-    <h2>合言葉を入れてください</h2>
-    <label for="pass" class="msg">合言葉</label>
-    <input id="pass" type="password" autocomplete="current-password" inputmode="text">
-    <button class="btn btn-primary" id="loginBtn" type="button">ひらく</button>
-    <p class="msg bad" id="loginMsg" role="alert"></p>
-  </section>
-
-  <div id="dash" hidden style="display:grid;grid-template-columns:minmax(0,1fr);gap:16px">
+  <div id="dash" style="display:grid;grid-template-columns:minmax(0,1fr);gap:16px">
     <section class="panel">
       <div class="status" id="status"></div>
       <div class="row" style="margin-top:10px">
         <button class="btn btn-primary" id="testBtn" type="button">AIの接続テスト</button>
         <button class="btn" id="keyHelpBtn" type="button" aria-expanded="false" aria-controls="keyHelp">AIのキーを入れる・変える</button>
-        <button class="btn" id="toggleBtn" type="button">受付を止める</button>
       </div>
       <div class="key-help" id="keyHelp" hidden>
         <h3>AIのキー（Gemini APIキー）を入れる場所は2つ</h3>
@@ -217,6 +207,7 @@
           <li><b>サーバー全体のキー（おすすめ）</b>：GitHub の <a href="https://github.com/3twowings28113-cpu/tsukuttaroka/actions/workflows/set-gemini-key.yml" target="_blank" rel="noopener">「Geminiのキーを登録」</a> を開く →「Run workflow」→ キーを貼って実行。どのイベントも、このキーで動きます。</li>
           <li><b>イベントだけのキー</b>：<button class="linkbtn" type="button" data-goto="event">「イベント」タブ</button> → そのイベントの「AIのキーを入れる」→ キーを貼って「保存」。そのイベントだけ、こちらのキーを使います。</li>
         </ol>
+        <p class="msg bad" style="margin:0 0 8px"><b>会場で大勢が使うなら、そのキーは必ず「課金を設定」（Tier 1 以上）にしてください。</b>無料のままだと、Googleの上限（いちばん賢いモデルで1日20回ほど・1分あたりの回数も少ない）ですぐ止まります。AI Studio の<a href="https://aistudio.google.com/rate-limit" target="_blank" rel="noopener">上限・課金のページ</a>で、いまの段階を確認できます。前払い5ドル（約750円）から。投稿1本あたり約1〜5円。</p>
         <p class="empty" style="margin:0">キーは「AIza」か「AQ.」で始まる文字です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> で作れます。</p>
       </div>
       <p class="msg" id="opMsg" role="status" aria-live="polite"></p>
@@ -227,7 +218,7 @@
     <nav class="tabs" role="tablist" aria-label="運営ページの中身">
       <button type="button" role="tab" data-tab="home" aria-selected="true">ようす</button>
       <button type="button" role="tab" data-tab="event" aria-selected="false">イベント</button>
-      <button type="button" role="tab" data-tab="report" aria-selected="false">投稿報告・集まった投稿</button>
+      <button type="button" role="tab" data-tab="report" aria-selected="false">集まった投稿・使った人</button>
       <button type="button" role="tab" data-tab="prompt" aria-selected="false">AIの指示文</button>
       <button type="button" role="tab" data-tab="data" aria-selected="false">データ・過去の記録</button>
     </nav>
@@ -247,17 +238,17 @@
         <div><h3>使った人の流れ（人数）</h3><div class="funnel" id="stFunnel"></div></div>
         <div><h3>今日の時間ごとの「作った」回数</h3><div class="chart" id="stHourly" role="img" aria-label="今日の時間ごとの作った回数"></div><div class="axis"><span>0時</span><span>6時</span><span>12時</span><span>18時</span><span>23時</span></div></div>
         <div style="grid-column:1/-1"><h3>日ごとの使った人数</h3><div class="chart" id="stDaily" role="img" aria-label="日ごとの使った人数"></div><div class="axis" id="stDailyAxis"></div>
-          <details style="margin-top:8px"><summary class="msg" style="cursor:pointer">表で見る</summary><div class="table-wrap"><table class="st"><thead><tr><th>日付</th><th class="n">使った人</th><th class="n">開いた</th><th class="n">作った</th><th class="n">書き直し</th><th class="n">コピー</th><th class="n">報告</th><th class="n">エラー</th></tr></thead><tbody id="stDailyRows"></tbody></table></div></details>
+          <details style="margin-top:8px"><summary class="msg" style="cursor:pointer">表で見る</summary><div class="table-wrap"><table class="st"><thead><tr><th>日付</th><th class="n">使った人</th><th class="n">開いた</th><th class="n">作った</th><th class="n">書き直し</th><th class="n">コピー</th><th class="n">エラー</th></tr></thead><tbody id="stDailyRows"></tbody></table></div></details>
         </div>
       </div>
       <h3 style="margin:14px 0 6px;font-size:14px">イベントごと</h3>
-      <div class="table-wrap"><table class="st"><thead><tr><th>イベント</th><th class="n">使った人</th><th class="n">開いた</th><th class="n">作った</th><th class="n">コピー</th><th class="n">報告</th><th class="n">エラー</th></tr></thead><tbody id="stByEvent"></tbody></table></div>
+      <div class="table-wrap"><table class="st"><thead><tr><th>イベント</th><th class="n">使った人</th><th class="n">開いた</th><th class="n">作った</th><th class="n">コピー</th><th class="n">エラー</th></tr></thead><tbody id="stByEvent"></tbody></table></div>
       <p class="st-note" id="stNote"></p>
     </section>
 
     <section class="panel" id="evPanel" data-pane="event">
       <div class="rep-head">
-        <h2>イベント（参加者用のURL・あいことば・ハッシュタグ）</h2>
+        <h2>イベント（参加者用のURL・ハッシュタグ）</h2>
         <button class="btn btn-primary" id="evNewBtn" type="button">イベントを作る</button>
       </div>
       <p class="empty" style="margin:0 0 10px">イベントを作ると、参加者用のURLとQRができます。参加者は、ここで登録したAIキー（空ならサーバーのキー）で文章を作れます（自分のキーはいりません）。ハッシュタグ・メンション・フォロー・AIへの追加の指示・タイムスケジュールも、イベントごとに決められます。</p>
@@ -273,8 +264,8 @@
           <label class="chk"><input type="checkbox" id="aevActive" checked> 参加者が使える状態にする</label>
         </fieldset>
         <fieldset>
-          <legend>AIのキーとあいことば</legend>
-          <label>あいことば<small>空にすると「あいことばなし」：URL（QR）を開いた人は、だれでも下のAIキーで作れます。入れると、あいことばを知っている人だけ（QR用URLには最初から入っています）</small><input type="text" id="aevPass" maxlength="60" autocomplete="off"></label>
+          <legend>AIのキー</legend>
+          <p class="empty" style="margin:0">URL（QR）を開いた人は、だれでもこのキーで作れます。</p>
           <label class="key-field" id="aevKeyField">Gemini APIキー<small id="aevKeyHint">空のままなら、サーバーのキー（GEMINI_API_KEY）を使います</small><input type="password" id="aevKey" maxlength="300" autocomplete="off" placeholder="AIza… / AQ.…"></label>
           <label class="chk"><input type="checkbox" id="aevClearKey"> 登録してあるキーを消す</label>
         </fieldset>
@@ -346,43 +337,6 @@
       <p class="msg" id="prMsg" role="status" aria-live="polite"></p>
     </section>
 
-    <section class="panel" id="repPanel" data-pane="report">
-      <div class="rep-head">
-        <h2>投稿報告（パネラーが読む投稿）<span id="repCount" class="empty"></span></h2>
-        <div class="row">
-          <button class="btn btn-primary" id="judgeBtn" type="button">パネラー用リンク</button>
-          <button class="btn" id="repCsvBtn" type="button">報告のCSV</button>
-        </div>
-      </div>
-      <div class="judge-box" id="judgeBox" hidden>
-        <div class="judge-qr" id="judgeQr" role="img" aria-label="パネラー用リンクのQRコード"></div>
-        <div class="judge-side">
-          <p class="msg">このリンクをパネラーに送ってください（LINEやメッセージで）。開くと、届いた投稿が自動で並び、新しい投稿が来ると音で知らせます。</p>
-          <input id="judgeUrl" readonly aria-label="パネラー用リンク">
-          <div class="row">
-            <button class="btn" id="judgeCopy" type="button">リンクをコピー</button>
-            <a class="btn" id="judgeOpen" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;text-decoration:none;color:inherit">自分でも開く</a>
-          </div>
-          <p class="empty">リンクは合言葉から作っています。合言葉を変えると、このリンクも変わります。</p>
-        </div>
-      </div>
-      <div class="roster-line" id="rosterLine"></div>
-      <div class="awards" id="awards" aria-label="表彰リスト（呼ぶ順）"></div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>報告</th><th>名前</th><th>作り方</th><th>★</th><th>本文（冒頭）</th><th>リンク</th><th></th></tr></thead>
-          <tbody id="repRows"></tbody>
-        </table>
-      </div>
-      <p class="empty" id="noReps" hidden>まだありません。参加者が「投稿したで！」と報告すると、ここに並びます（10秒ごとに更新）。</p>
-      <details class="roster">
-        <summary>参加者名簿を入れる（任意）</summary>
-        <p class="empty" style="margin:0">1行に1人、名前だけ貼り付けてください。報告の名前と照らし合わせて、まだ報告していない人が分かります。</p>
-        <textarea id="rosterText" rows="6" aria-label="参加者名簿"></textarea>
-        <div class="row"><button class="btn" id="rosterSave" type="button">名簿を保存</button><span class="msg" id="rosterMsg" role="status"></span></div>
-      </details>
-    </section>
-
     <div class="cols" data-pane="home">
       <section class="panel"><h2>よく選ばれたネタ TOP5</h2><div class="bars" id="topCards"></div></section>
       <section class="panel"><h2>選ばれたパターン</h2><div class="bars" id="tones"></div></section>
@@ -392,7 +346,7 @@
     <section class="panel" id="peoplePanel" data-pane="report">
       <h2>アプリを使った人（最初に入れた名前）<span id="peopleCount" class="empty"></span></h2>
       <div class="table-wrap"><table class="people">
-        <thead><tr><th>名前</th><th>フォロー</th><th>作った</th><th>コピー</th><th>報告</th></tr></thead>
+        <thead><tr><th>名前</th><th>フォロー</th><th>作った</th><th>コピー</th></tr></thead>
         <tbody id="peopleRows"></tbody>
       </table></div>
       <p class="empty" id="noPeople" hidden>まだいません。参加者が名前を入れて投稿文を作ると、ここに並びます。</p>
@@ -415,12 +369,12 @@
 
     <section class="panel" data-pane="data">
       <h2>過去の記録（終わったイベント）</h2>
-      <p class="empty" style="margin:0 0 8px">終わったイベントの投稿報告・★・集まった投稿・件数は、ここで分けて見られます。運営ページには「いまの期間」のデータだけが出ます。</p>
+      <p class="empty" style="margin:0 0 8px">終わったイベントの集まった投稿・件数（10/6 の回は投稿報告・★も）は、ここで分けて見られます。運営ページには「いまの期間」のデータだけが出ます。</p>
       <div id="archiveList" class="archive-list"></div>
       <p style="margin:10px 0"><a class="btn" style="display:inline-flex;align-items:center;text-decoration:none;color:inherit" href="archive">過去の記録のページをひらく</a></p>
       <details class="roster">
         <summary>イベントが終わったら：ここまでを過去のイベントにする</summary>
-        <p class="empty" style="margin:0">いまの期間のデータ（投稿報告・★・集まった投稿・件数）を、名前をつけて「過去の記録」に移します。データは消えません。運営ページは空の状態から始まります。</p>
+        <p class="empty" style="margin:0">いまの期間のデータ（集まった投稿・件数）を、名前をつけて「過去の記録」に移します。データは消えません。運営ページは空の状態から始まります。</p>
         <div class="row" style="margin-top:8px">
           <input id="archiveName" type="text" maxlength="80" placeholder="例：LSCW 2026 Autumn（10/31）" style="min-height:42px;padding:0 10px;border:1px solid var(--rule);border-radius:8px;flex:1;min-width:220px" aria-label="過去のイベントの名前">
           <button class="btn btn-primary" id="archiveBtn" type="button">過去のイベントにする</button>
@@ -431,7 +385,7 @@
 
     <section class="panel" data-pane="data">
       <h2>データの削除</h2>
-      <p class="empty" style="margin:0 0 8px">リハーサルのテストデータを消すときに使います。いまの期間の集まった投稿・件数・投稿報告・★が消えます（過去の記録と参加者名簿は残ります）。</p>
+      <p class="empty" style="margin:0 0 8px">リハーサルのテストデータを消すときに使います。いまの期間の集まった投稿・件数が消えます（過去の記録は残ります）。</p>
       <button class="btn btn-danger" id="wipeBtn" type="button">全データを削除</button>
       <div class="confirm" id="wipeConfirm" hidden style="margin-top:8px">
         <span class="msg bad">本当に消す？元に戻せません。</span>
@@ -450,55 +404,14 @@
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const TONE = { emo: "エモい", humor: "ユーモア", straight: "学び" };
-  let pass = "";
-  try { pass = sessionStorage.getItem(KEY) || localStorage.getItem(KEY) || ""; } catch {}
-  // URLの「#k=合言葉」で開いたら、そのままログイン（# のあとはサーバーに送られない）。読んだら URL から消す
-  const hashK = new URLSearchParams(location.hash.slice(1)).get("k");
-  if (hashK) {
-    pass = hashK.trim();
-    try { localStorage.setItem(KEY, pass); } catch {}
-    history.replaceState(null, "", location.pathname);
-  }
+  // 前の版の合言葉（端末に残っていたら消す）。運営ページは合言葉なしで、URLを知っている人はだれでも使える
+  try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch {}
+  if (location.hash) history.replaceState(null, "", location.pathname);
   let offset = 0;
   let summary = null;
-  let reps = null;
-  const openReps = new Set();
-  let rosterTouched = false;
 
   async function api(path, opts = {}) {
-    const res = await fetch(path, { ...opts, headers: { "content-type": "application/json", "x-admin-passcode": pass, ...(opts.headers || {}) } });
-    if (res.status === 401 || res.status === 403) {
-      const d = await res.json().catch(() => ({}));
-      throw Object.assign(new Error(d.message || "auth"), { auth: true });
-    }
-    return res;
-  }
-
-  async function login() {
-    pass = $("#pass").value.trim();
-    $("#loginMsg").textContent = "";
-    try {
-      await loadSummary();
-      try { localStorage.setItem(KEY, pass); } catch {}
-      showDash();
-      loadRows(true).catch(() => {});
-      loadReports().catch(() => {});
-      loadEvents().catch(() => {});
-      loadStats().catch(() => {});
-      loadPrompts().catch(() => {});
-      loadArchives().catch(() => {});
-    } catch (e) {
-      $("#loginMsg").textContent = e.auth ? e.message : "つながりませんでした。URLを確認してください。";
-    }
-  }
-  function showDash() {
-    $("#login").hidden = true;
-    $("#dash").hidden = false;
-    $("#topActions").hidden = false;
-  }
-  function logout() {
-    try { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); } catch {}
-    location.reload();
+    return fetch(path, { ...opts, headers: { "content-type": "application/json", ...(opts.headers || {}) } });
   }
 
   async function loadSummary() {
@@ -510,10 +423,8 @@
     const s = summary;
     $("#status").innerHTML = [
       `<span class="pill"><span class="dotc ${s.hasKey ? "on" : "off"}"></span>AI：${s.hasKey ? esc(s.model) + "（予備 " + esc(s.fallback) + "）" : "サーバーのキーなし（イベントにキーを入れたときだけ動く）→「AIのキーを入れる・変える」"}</span>`,
-      `<span class="pill"><span class="dotc ${s.generation === "on" ? "on" : "off"}"></span>受付：${s.generation === "on" ? "受付中" : "停止中"}</span>`,
       `<span class="pill"><span class="dotc ${s.db ? "on" : "off"}"></span>データベース：${s.db ? "OK" : "未設定"}</span>`,
     ].join("");
-    $("#toggleBtn").textContent = s.generation === "on" ? "受付を止める" : "受付を再開する";
     if (!s.hasKey && !keyHelpShown) {
       keyHelpShown = true;
       $("#keyHelp").hidden = false;
@@ -521,7 +432,7 @@
     }
     const c = s.counts;
     const cell = (label, n, warn, hot) => `<div class="num${warn && n ? " warn" : ""}${hot ? " hot" : ""}"><b>${n}</b><span>${label}</span></div>`;
-    $("#nums").innerHTML = cell("生成", c.generate) + cell("書き直し", c.refine) + cell("コピー", c.copy) + cell("あとで投稿", c.later) + cell("投稿報告", c.report || 0, false, true) + cell("エラー", c.error, true);
+    $("#nums").innerHTML = cell("生成", c.generate) + cell("書き直し", c.refine) + cell("コピー", c.copy) + cell("あとで投稿", c.later) + cell("エラー", c.error, true);
     const bars = (items) => {
       const max = Math.max(1, ...items.map((x) => x.n));
       return items.length
@@ -541,7 +452,7 @@
     $("#peopleCount").textContent = `　${people.length}人（主催をフォロー ${s.followed || 0}人）`;
     $("#noPeople").hidden = people.length > 0;
     $("#peopleRows").innerHTML = people
-      .map((p) => `<tr><td>${esc(p.name)}</td><td class="n">${p.followed ? "済" : "—"}</td><td class="n">${p.made ? p.made + "回" : "—"}</td><td class="n">${p.copied ? "済" : "—"}</td><td class="n">${p.reported ? "済" : "<b>まだ</b>"}</td></tr>`)
+      .map((p) => `<tr><td>${esc(p.name)}</td><td class="n">${p.followed ? "済" : "—"}</td><td class="n">${p.made ? p.made + "回" : "—"}</td><td class="n">${p.copied ? "済" : "—"}</td></tr>`)
       .join("");
   }
 
@@ -572,102 +483,6 @@
     $("#moreBtn").hidden = rows.length < 50;
   }
 
-  // ---------- 投稿報告 ----------
-  async function loadReports() {
-    const res = await api("api/admin/reports");
-    reps = await res.json();
-    renderReports();
-  }
-  function renderAwards(visible) {
-    const el = $("#awards");
-    if (!el) return;
-    const cfg = window.APP_CONFIG || {};
-    const judges = Array.isArray(cfg.judges) ? cfg.judges : [];
-    const picksBy = new Map();   // 審査員 -> 選んだ参加者の名前
-    const namePickers = new Map(); // 参加者 -> 選んだ審査員
-    for (const r of visible) {
-      for (const j of r.stars || []) {
-        if (!picksBy.has(j)) picksBy.set(j, []);
-        picksBy.get(j).push(r.name);
-        if (!namePickers.has(r.name)) namePickers.set(r.name, []);
-        namePickers.get(r.name).push(j);
-      }
-    }
-    const extra = [...picksBy.keys()].filter((j) => !judges.includes(j) && j !== "運営スタッフ");
-    const order = [...judges, "運営スタッフ", ...extra];
-    el.innerHTML = order.map((j) => {
-      const names = picksBy.get(j) || [];
-      const list = names.length
-        ? `<div class="award-names">${names.map((n) => {
-            const others = (namePickers.get(n) || []).filter((x) => x !== j);
-            return `<span>${esc(n)}${others.length ? `<span class="award-sub">（${esc(others.join("・"))}も）</span>` : ""}</span>`;
-          }).join("")}</div>`
-        : '<p class="none">まだ選んでいません</p>';
-      return `<div><h3>${esc(j)}</h3>${list}</div>`;
-    }).join("");
-  }
-  function renderReports() {
-    const d = reps || { rows: [] };
-    const rows = d.rows || [];
-    const visible = rows.filter((r) => !r.hidden);
-    renderAwards(visible);
-    $("#repCount").textContent = `　${visible.length}件`;
-    if (d.roster) {
-      const miss = d.roster.missing || [];
-      $("#rosterLine").innerHTML = `名簿 <b>${d.roster.total}</b>人中 <b>${d.roster.reported}</b>人が報告ずみ` +
-        (miss.length ? `<details><summary>まだの人（${miss.length}人）</summary><p>${miss.map(esc).join("、")}</p></details>` : "");
-    } else $("#rosterLine").innerHTML = "";
-    if (!rosterTouched) $("#rosterText").value = d.rosterText || "";
-    $("#noReps").hidden = rows.length > 0;
-    $("#repRows").innerHTML = rows.map((r) => {
-      const excerpt = String(r.body || "").replace(/\s+/g, " ");
-      const flags = (d.roster && !r.inRoster ? '<span class="tag warn">名簿になし</span>' : "") + (r.screenOk ? "" : '<span class="tag">スクリーン×</span>');
-      return `<tr class="item${r.hidden ? " is-hidden" : ""}" data-rid="${esc(r.id)}" tabindex="0">
-          <td class="at">${esc(String(r.at).slice(11))}</td>
-          <td><b>${esc(r.name)}</b> ${flags}</td>
-          <td class="role">${r.source === "self" ? "自分で" : "アプリ"}</td>
-          <td class="stars">${r.stars.length ? "★" + r.stars.length : ""}</td>
-          <td>${excerpt ? esc(excerpt.slice(0, 40)) + (excerpt.length > 40 ? "…" : "") : '<span class="empty">（本文なし）</span>'}</td>
-          <td>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener noreferrer">開く</a>` : "—"}</td>
-          <td><button class="btn btn-sm" type="button" data-hide="${esc(r.id)}" data-to="${r.hidden ? 0 : 1}">${r.hidden ? "戻す" : "隠す"}</button></td>
-        </tr>
-        <tr class="detail" id="rd-${esc(r.id)}"${openReps.has(r.id) ? "" : " hidden"}><td colspan="7">
-          <div class="pre">${esc(r.body || "（本文なし）")}</div>
-          ${r.stars.length ? `<p style="margin:6px 0 0">★を付けた人：${r.stars.map(esc).join("、")}</p>` : ""}
-        </td></tr>`;
-    }).join("");
-  }
-  async function hideReport(id, to) {
-    await api("api/admin/report-hide", { method: "POST", body: JSON.stringify({ id, hidden: to === "1" }) });
-    await loadReports();
-    loadSummary().catch(() => {});
-  }
-  async function showJudgeLink() {
-    const box = $("#judgeBox");
-    if (!box.hidden) { box.hidden = true; return; }
-    const d = await (await api("api/admin/judge-link")).json();
-    const url = location.origin + d.path;
-    $("#judgeUrl").value = url;
-    $("#judgeOpen").href = url;
-    const qr = qrcode(0, "M");
-    qr.addData(url);
-    qr.make();
-    $("#judgeQr").innerHTML = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
-    box.hidden = false;
-  }
-  async function copyJudgeLink() {
-    const input = $("#judgeUrl");
-    try { await navigator.clipboard.writeText(input.value); }
-    catch { input.select(); document.execCommand && document.execCommand("copy"); }
-    $("#judgeCopy").textContent = "コピーしました";
-    setTimeout(() => { $("#judgeCopy").textContent = "リンクをコピー"; }, 1600);
-  }
-  async function saveRoster() {
-    const d = await (await api("api/admin/roster", { method: "POST", body: JSON.stringify({ text: $("#rosterText").value }) })).json();
-    rosterTouched = false;
-    $("#rosterMsg").textContent = d.ok ? `${d.count}人を保存しました` : "保存できませんでした";
-    await loadReports();
-  }
   async function download(path, fallback) {
     try {
       const res = await api(path);
@@ -706,22 +521,12 @@
     return download("api/admin/export", "tsukuttaroka.csv");
   }
 
-  async function toggle() {
-    const next = summary.generation === "on" ? "off" : "on";
-    const d = await (await api("api/admin/settings", { method: "POST", body: JSON.stringify({ generation: next }) })).json();
-    summary.generation = d.generation;
-    renderSummary();
-    $("#opMsg").className = "msg";
-    $("#opMsg").textContent = d.generation === "on" ? "受付を再開しました。" : "受付を止めました（参加者には「受付を止めてる」と表示されます）。";
-  }
-
   async function wipe() {
     await api("api/admin/wipe", { method: "POST", body: JSON.stringify({ confirm: "DELETE" }) });
     $("#wipeConfirm").hidden = true;
     $("#opMsg").textContent = "全データを削除しました。";
     await loadSummary();
     await loadRows(true);
-    await loadReports();
   }
 
   // ---------- イベント ----------
@@ -729,12 +534,11 @@
   const PRESETS = window.APP_PRESETS || [];
   const presetLabel = (id) => (PRESETS.find((p) => p.id === id) || { label: id || "（いつもの）" }).label;
   // 参加者用のURL。専用ページのあるプリセット（LSCW → /lscw）は、そのページ。lscw のイベントは ?e= を省く
-  function eventUrl(ev, withPass) {
+  function eventUrl(ev) {
     const pg = (PRESETS.find((p) => p.id === ev.preset) || {}).pagePath || "";
     const u = new URL(location.origin + (pg || "/"));
     if (!(pg && ev.id === pg.replace(/^\//, ""))) u.searchParams.set("e", ev.id);
     if (ev.preset && !pg) u.searchParams.set("preset", ev.preset);
-    if (withPass && ev.pass) u.searchParams.set("p", ev.pass);
     return u.toString();
   }
   function qrSvg(text) {
@@ -758,7 +562,7 @@
     $("#noEvents").hidden = events.length > 0;
     $("#evList").innerHTML = events
       .map((ev) => {
-        const qrUrl = eventUrl(ev, true);
+        const qrUrl = eventUrl(ev);
         return `<div class="ev-item${ev.active ? "" : " off"}">
           <div class="ev-qr" role="img" aria-label="${esc(ev.name || ev.id)}のQRコード">${qrSvg(qrUrl)}</div>
           <div class="ev-side">
@@ -766,9 +570,9 @@
             <p>ID：<b>${esc(ev.id)}</b>　質問セット・色：${esc(presetLabel(ev.preset))}</p>
             <p>ハッシュタグ：${ev.hashtags.length ? esc(ev.hashtags.join(" ")) : "（質問セットの初期のもの）"}</p>
             <p>メンション：${ev.mentions.length ? esc(ev.mentions.map((m) => "@" + m.name).join(" ")) + (ev.mentionInText ? "（本文の最後に入れる）" : "（手順だけ出す）") : "なし"}${ev.followUrl ? `　フォロー：${esc(ev.followName || "LinkedInページ")}（${ev.followRequired ? "必須" : "おすすめ"}）` : ""}</p>
-            <p>あいことば：${ev.pass ? `<b>${esc(ev.pass)}</b>` : "<b>なし</b>（URLを開いた人は、だれでも作れます）"}　AIキー：${ev.keySet ? `登録ずみ（…${esc(ev.keyTail)}）` : "サーバーのキーを使う"}</p>
+            <p>AIキー：${ev.keySet ? `登録ずみ（…${esc(ev.keyTail)}）` : "サーバーのキーを使う"}</p>
             <p>LinkedInの一文：${ev.cheerAlways ? "すべての投稿に入れる" : "参加者が選ぶ"}　AIへの追加の指示：${ev.aiNote ? "あり" : "なし"}　タイムスケジュール：${ev.schedule.length ? ev.schedule.length + "行" : "初期のまま"}</p>
-            <label class="msg" for="evu-${esc(ev.id)}">QR用URL${ev.pass ? "（あいことば入り。参加者は何も入れずに使えます）" : ""}</label>
+            <label class="msg" for="evu-${esc(ev.id)}">QR用URL（開いた人は、だれでも作れます）</label>
             <input id="evu-${esc(ev.id)}" readonly value="${esc(qrUrl)}">
             <div class="row">
               <button class="btn btn-sm" type="button" data-evcopy="${esc(ev.id)}">URLをコピー</button>
@@ -786,7 +590,7 @@
   }
   function openEventForm(ev) {
     setTab("event");
-    const f = ev || { id: "", name: "", hashtags: [], preset: (PRESETS.find((p) => p.default) || { id: "" }).id, pass: "", keySet: false, keyTail: "", cheerAlways: false, active: true, mentions: [], mentionInText: true, followUrl: "", followName: "", followRequired: false, aiNote: "", info: {}, scheduleText: "", theme: null };
+    const f = ev || { id: "", name: "", hashtags: [], preset: (PRESETS.find((p) => p.default) || { id: "" }).id, keySet: false, keyTail: "", cheerAlways: false, active: true, mentions: [], mentionInText: true, followUrl: "", followName: "", followRequired: false, aiNote: "", info: {}, scheduleText: "", theme: null };
     const info = f.info || {};
     $("#aevMentions").value = (f.mentions || []).map((m) => (m.typeHint && m.typeHint !== "@" + m.name ? `${m.name} | ${m.typeHint}` : m.name)).join("\n");
     $("#aevMentionInText").checked = f.mentionInText !== false;
@@ -809,7 +613,6 @@
     $("#aevName").value = f.name;
     $("#aevTags").value = f.hashtags.join(" ");
     $("#aevPreset").innerHTML = PRESETS.map((p) => `<option value="${esc(p.id)}"${p.id === f.preset ? " selected" : ""}>${esc(p.label)}</option>`).join("");
-    $("#aevPass").value = f.pass;
     $("#aevKey").value = "";
     $("#aevKeyHint").textContent = f.keySet ? `登録ずみ（…${f.keyTail}）。変えるときだけ入れてください` : "空のままなら、サーバーのキー（GEMINI_API_KEY）を使います";
     $("#aevClearKey").checked = false;
@@ -828,7 +631,6 @@
       name: $("#aevName").value,
       hashtags: $("#aevTags").value,
       preset: $("#aevPreset").value,
-      pass: $("#aevPass").value,
       key: $("#aevKey").value.trim(),
       clearKey: $("#aevClearKey").checked,
       cheerAlways: $("#aevCheer").checked,
@@ -949,14 +751,13 @@
       tile(t.copy + t.later, "コピー・あとで（回）", `今日 ${d.today.copy + d.today.later}回`) +
       tile(t.view, "ページを開いた（回）", `今日 ${d.today.view}回`) +
       tile(t.refine, "書き直し（回）", "") +
-      tile(t.report, "投稿の報告（人）", "") +
       tile(d.photos.used, "写真つきで作った（回）", d.photos.used ? `写真 合計${d.photos.total}枚` : "") +
       tile(t.error, "エラー（回）", t.error ? "下の「最近のエラー」を見てな" : "");
     const f = d.funnel;
-    const fmax = Math.max(1, f.viewed, f.made, f.copied, f.reported);
+    const fmax = Math.max(1, f.viewed, f.made, f.copied);
     const fbase = Math.max(f.viewed, f.made); // 前の版から使っていた人は「開いた」が数えられていないので、多いほうを100%にする
     const step = (label, n, base) => `<div class="brow"><span>${label}</span><span class="track"><span class="fill" style="width:${(n / fmax) * 100}%;display:block"></span></span><span class="n">${n}人${base ? `（${Math.round((n / base) * 100)}%）` : ""}</span></div>`;
-    $("#stFunnel").innerHTML = step("ページを開いた", f.viewed, 0) + step("文章を作った", f.made, fbase) + step("コピーした", f.copied, fbase) + (f.reported ? step("報告した", f.reported, fbase) : "");
+    $("#stFunnel").innerHTML = step("ページを開いた", f.viewed, 0) + step("文章を作った", f.made, fbase) + step("コピーした", f.copied, fbase);
     barChart($("#stHourly"), d.hourly.map((h) => ({ k: `${h.h}時`, v: h.generate })), "回");
     barChart($("#stDaily"), d.daily.map((x) => ({ k: x.d.slice(5).replace("-", "/"), v: x.users })), "人");
     const dl = d.daily;
@@ -964,11 +765,11 @@
     $("#stDailyRows").innerHTML = dl
       .slice()
       .reverse()
-      .map((x) => `<tr><td>${esc(x.d)}</td><td class="n">${x.users}</td><td class="n">${x.view}</td><td class="n">${x.generate}</td><td class="n">${x.refine}</td><td class="n">${x.copy + x.later}</td><td class="n">${x.report}</td><td class="n">${x.error}</td></tr>`)
+      .map((x) => `<tr><td>${esc(x.d)}</td><td class="n">${x.users}</td><td class="n">${x.view}</td><td class="n">${x.generate}</td><td class="n">${x.refine}</td><td class="n">${x.copy + x.later}</td><td class="n">${x.error}</td></tr>`)
       .join("");
     $("#stByEvent").innerHTML = d.byEvent.length
-      ? d.byEvent.map((r) => `<tr><td>${esc(r.name)}${r.id ? ` <small class="empty">${esc(r.id)}</small>` : ""}</td><td class="n">${r.users}</td><td class="n">${r.view}</td><td class="n">${r.generate}</td><td class="n">${r.copy + r.later}</td><td class="n">${r.report}</td><td class="n">${r.error}</td></tr>`).join("")
-      : '<tr><td colspan="7" class="empty">まだありません</td></tr>';
+      ? d.byEvent.map((r) => `<tr><td>${esc(r.name)}${r.id ? ` <small class="empty">${esc(r.id)}</small>` : ""}</td><td class="n">${r.users}</td><td class="n">${r.view}</td><td class="n">${r.generate}</td><td class="n">${r.copy + r.later}</td><td class="n">${r.error}</td></tr>`).join("")
+      : '<tr><td colspan="6" class="empty">まだありません</td></tr>';
     const kinds = d.kinds || {};
     $("#stNote").textContent = `作ったものの内訳：投稿文 ${kinds.post || 0}回・見出し ${kinds.headline || 0}回・自己紹介 ${kinds.about || 0}回${kinds.profile ? `・プロフィール文（前の版）${kinds.profile}回` : ""}（じぶんのAIキーで作った ${d.ownKey}回）。「使った人」は端末の数で、名前などは集めていません。この数え方は 2026/10/16 の版からです（それより前の分は「回」だけ）。`;
   }
@@ -1053,7 +854,6 @@
     loadArchives().catch(() => {});
     loadSummary().catch(() => {});
     loadRows(true).catch(() => {});
-    loadReports().catch(() => {});
     loadEvents().catch(() => {});
     loadStats().catch(() => {});
     loadPrompts().catch(() => {});
@@ -1094,7 +894,7 @@
     line.hidden = !list.length;
     if (list.length) line.innerHTML = `この運営ページは <b>${esc(d.currentFromJst)}</b> からのデータです。それより前（${esc(list[0].name)}${list.length > 1 ? " など" : ""}）は <a href="archive">過去の記録</a> で見られます。`;
     $("#archiveList").innerHTML = list.length
-      ? list.map((a) => `<div class="archive-item"><div><b>${esc(a.name)}</b><br><span class="empty">${a.fromJst ? esc(a.fromJst) + " 〜 " : "〜 "}${esc(a.untilJst)}　報告 ${a.reports}件・作った ${a.made}回</span></div><a class="btn btn-sm" style="display:inline-flex;align-items:center;text-decoration:none;color:inherit" href="archive?a=${encodeURIComponent(a.id)}">記録を見る</a></div>`).join("")
+      ? list.map((a) => `<div class="archive-item"><div><b>${esc(a.name)}</b><br><span class="empty">${a.fromJst ? esc(a.fromJst) + " 〜 " : "〜 "}${esc(a.untilJst)}　${a.reports ? `報告 ${a.reports}件・` : ""}作った ${a.made}回</span></div><a class="btn btn-sm" style="display:inline-flex;align-items:center;text-decoration:none;color:inherit" href="archive?a=${encodeURIComponent(a.id)}">記録を見る</a></div>`).join("")
       : '<p class="empty">まだありません。</p>';
   }
   $("#archiveBtn").addEventListener("click", async () => {
@@ -1115,13 +915,9 @@
     }
   });
 
-  $("#loginBtn").addEventListener("click", login);
-  $("#pass").addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
-  $("#logoutBtn").addEventListener("click", logout);
   $("#reloadBtn").addEventListener("click", () => loadAll());
   $("#testBtn").addEventListener("click", test);
   $("#csvBtn").addEventListener("click", csv);
-  $("#toggleBtn").addEventListener("click", toggle);
   $("#moreBtn").addEventListener("click", () => loadRows(false));
   $("#wipeBtn").addEventListener("click", () => { $("#wipeConfirm").hidden = false; });
   $("#wipeNo").addEventListener("click", () => { $("#wipeConfirm").hidden = true; });
@@ -1129,29 +925,8 @@
   $("#rows").addEventListener("click", (e) => { const tr = e.target.closest("tr.item"); if (tr) toggleRow(tr); });
   $("#rows").addEventListener("keydown", (e) => { const tr = e.target.closest("tr.item"); if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleRow(tr); } });
 
-  $("#judgeBtn").addEventListener("click", () => showJudgeLink().catch(() => { $("#opMsg").textContent = "パネラー用リンクを作れませんでした。"; }));
-  $("#judgeCopy").addEventListener("click", copyJudgeLink);
-  $("#repCsvBtn").addEventListener("click", () => download("api/admin/export-reports", "tsukuttaroka_reports.csv"));
-  $("#rosterSave").addEventListener("click", () => saveRoster().catch(() => { $("#rosterMsg").textContent = "保存できませんでした"; }));
-  $("#rosterText").addEventListener("input", () => { rosterTouched = true; });
-  $("#repRows").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-hide]");
-    if (b) { e.stopPropagation(); hideReport(b.dataset.hide, b.dataset.to).catch(() => {}); return; }
-    if (e.target.closest("a")) return;
-    const tr = e.target.closest("tr.item");
-    if (!tr) return;
-    const id = tr.dataset.rid;
-    const d = document.getElementById("rd-" + id);
-    if (!d) return;
-    d.hidden = !d.hidden;
-    if (d.hidden) openReps.delete(id); else openReps.add(id);
-  });
-
-  if (pass) {
-    loadSummary().then(() => { showDash(); loadAll(); }).catch(() => { pass = ""; });
-  }
-  setInterval(() => { if (!$("#dash").hidden && !document.hidden) { loadSummary().catch(() => {}); loadStats().catch(() => {}); } }, 30000);
-  setInterval(() => { if (!$("#dash").hidden && !document.hidden) loadReports().catch(() => {}); }, 10000);
+  loadAll();
+  setInterval(() => { if (!document.hidden) { loadSummary().catch(() => {}); loadStats().catch(() => {}); } }, 30000);
 })();
 </script>
 </body>

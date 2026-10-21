@@ -72,13 +72,6 @@
   </div>
 </header>
 <main>
-  <section class="panel login" id="login" hidden>
-    <h2>運営ページの合言葉を入れてください</h2>
-    <input id="pass" type="password" autocomplete="current-password" aria-label="合言葉">
-    <button class="btn btn-primary" id="loginBtn" type="button">ひらく</button>
-    <p class="msg bad" id="loginMsg" role="alert"></p>
-  </section>
-
   <div id="dash" hidden style="display:grid;grid-template-columns:minmax(0,1fr);gap:16px">
     <section class="panel pick">
       <h2>どのイベントの記録を見る？</h2>
@@ -88,12 +81,12 @@
 
     <section class="nums" id="nums" aria-label="件数"></section>
 
-    <section class="panel">
+    <section class="panel" id="awardPanel">
       <h2>表彰リスト（呼ぶ順）</h2>
       <div class="awards" id="awards"></div>
     </section>
 
-    <section class="panel">
+    <section class="panel" id="repPanel">
       <div class="row" style="justify-content:space-between;margin-bottom:8px">
         <h2 style="margin:0">投稿報告<span class="empty" id="repCount"></span></h2>
         <button class="btn" id="repCsv" type="button">報告のCSV</button>
@@ -129,30 +122,21 @@
 <script src="config.js"></script>
 <script>
 (() => {
-  const KEY = "tsukuttaroka.admin";
   const $ = (s) => document.querySelector(s);
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const PRESETS = window.APP_PRESETS || [];
-  let pass = "";
-  try { pass = localStorage.getItem(KEY) || sessionStorage.getItem(KEY) || ""; } catch {}
   let archives = [];
   let cur = null;
   let offset = 0;
 
   async function api(path, opts = {}) {
-    const res = await fetch(path, { ...opts, headers: { "content-type": "application/json", "x-admin-passcode": pass } });
-    if (res.status === 401 || res.status === 403) {
-      const d = await res.json().catch(() => ({}));
-      throw Object.assign(new Error(d.message || "auth"), { auth: true });
-    }
-    return res;
+    return fetch(path, { ...opts, headers: { "content-type": "application/json" } });
   }
   const q = (path) => `${path}${path.includes("?") ? "&" : "?"}a=${encodeURIComponent(cur.id)}`;
 
   async function start() {
     const d = await (await api("api/admin/archives")).json();
     archives = d.archives || [];
-    $("#login").hidden = true;
     $("#dash").hidden = false;
     if (!archives.length) {
       $("#archiveSel").innerHTML = "";
@@ -166,11 +150,15 @@
   }
   async function show() {
     cur = archives.find((a) => a.id === $("#archiveSel").value) || archives[0];
-    $("#archiveNote").textContent = `${cur.fromJst ? `${cur.fromJst} から ` : ""}${cur.untilJst} までのデータです（報告 ${cur.reports}件・作った ${cur.made}回）。見るだけのページで、消したり変えたりはしません。`;
+    $("#archiveNote").textContent = `${cur.fromJst ? `${cur.fromJst} から ` : ""}${cur.untilJst} までのデータです（${cur.reports ? `報告 ${cur.reports}件・` : ""}作った ${cur.made}回）。見るだけのページで、消したり変えたりはしません。`;
     const [sum, reps] = await Promise.all([(await api(q("api/admin/summary"))).json(), (await api(q("api/admin/reports"))).json()]);
     const c = sum.counts || {};
     const cell = (label, n) => `<div class="num"><b>${n || 0}</b><span>${label}</span></div>`;
-    $("#nums").innerHTML = cell("作った", c.generate) + cell("書き直し", c.refine) + cell("コピー", c.copy) + cell("あとで投稿", c.later) + cell("投稿報告", c.report);
+    $("#nums").innerHTML = cell("作った", c.generate) + cell("書き直し", c.refine) + cell("コピー", c.copy) + cell("あとで投稿", c.later) + (c.report ? cell("投稿報告", c.report) : "");
+    // 投稿報告と★は、10/6 の回のように報告があった期間だけ出す（報告の機能は 2026-10-22 になくした）
+    const hasRep = (reps.rows || []).length > 0;
+    $("#awardPanel").hidden = !hasRep;
+    $("#repPanel").hidden = !hasRep;
     renderReports(reps.rows || []);
     const people = sum.people || [];
     $("#peopleCount").textContent = `　${people.length}人`;
@@ -244,19 +232,10 @@
   $("#moreBtn").addEventListener("click", () => loadPosts().catch(() => {}));
   $("#repCsv").addEventListener("click", () => download("api/admin/export-reports", "reports.csv").catch(() => {}));
   $("#postCsv").addEventListener("click", () => download("api/admin/export", "posts.csv").catch(() => {}));
-  async function login() {
-    pass = $("#pass").value.trim();
-    try {
-      await start();
-      try { localStorage.setItem(KEY, pass); } catch {}
-    } catch (e) {
-      $("#loginMsg").textContent = e.auth ? e.message : "つながりませんでした";
-    }
-  }
-  $("#loginBtn").addEventListener("click", login);
-  $("#pass").addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
-  if (pass) start().catch(() => { $("#login").hidden = false; });
-  else $("#login").hidden = false;
+  start().catch(() => {
+    $("#dash").hidden = false;
+    $("#archiveNote").textContent = "読みこめませんでした。ページを開き直してください。";
+  });
 })();
 </script>
 </body>
