@@ -602,6 +602,15 @@ window.APP_CONFIG = {
         { id: "dream5", size: 5, theme: "dream", label: "私の夢をじっくり", who: "夢と、いま力を入れていることと、今日の学びをつなげたい人に", cards: ["dream", "focus", "learn", "career", "next"] },
         { id: "career5", size: 5, theme: "career", label: "就活・キャリアじっくり", who: "考えてることと、今日の学びをつなげたい人に", cards: ["career", "learn", "session", "focus", "next"] },
       ],
+      // 最初の画面の上に出す「今日は、どんなことを書く？」（押したら、そのセットで質問へ直行。書き方は最後に選ぶだけの最速コース）
+      quickScenes: [
+        { set: "basic3", label: "迷ったらこれ", sub: "参加した感想（おすすめ）" },
+        { set: "company3", label: "企業ブースで話した", sub: "お礼も込めて残したい" },
+        { set: "session3", label: "セミナー・パネルを聞いた", sub: "心に残った学びを" },
+        { set: "people3", label: "出会い・つながり", sub: "話した人・つながった人" },
+        { set: "first3", label: "はじめて投稿する", sub: "自己紹介つきで" },
+        { set: "one", label: "1問だけ・最速", sub: "学びひとつだけ、約1分" },
+      ],
       // 参加企業（最初の画面の「どんな投稿にする？」に並べる）。ロゴを押すと採用ページがひらく
       // ロゴは public/logos/（公式サイトの協賛一覧から切り出し）。LinkedIn のロゴは使わない（デザインのルール）
       // url は 2026/10 に検索で確かめたもの。採用ページが見つからなかった会社は LSCW の公式サイトへ

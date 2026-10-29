@@ -140,6 +140,27 @@ main:focus { outline: none; }
 .sec-title { margin: 0; font-family: var(--f-display); font-weight: 900; font-size: 18px; line-height: 1.4; color: var(--on-ground); }
 .sec-note { margin: 0; font-size: 13px; font-weight: 700; color: var(--on-ground); }
 
+/* 「今日は、どんなことを書く？」シーンから直行するボタン */
+.scene-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.scene {
+  position: relative; display: flex; flex-direction: column; gap: 2px;
+  padding: 12px 12px 10px; min-height: 76px;
+  border: var(--line) solid var(--ink); border-radius: var(--r);
+  background: var(--paper); box-shadow: var(--shadow);
+  text-align: left; line-height: 1.4; color: var(--ink);
+  transition: transform 0.08s, box-shadow 0.08s;
+}
+.scene:active { transform: translate(3px, 3px); box-shadow: none; }
+.scene-t { font-size: 16px; font-weight: 900; }
+.scene-s { font-size: 12px; font-weight: 700; color: var(--ink-soft); }
+.scene-n {
+  position: absolute; top: 8px; right: 8px;
+  font-size: 11px; font-weight: 900; color: var(--blue);
+  background: var(--blue-tint); border-radius: 999px; padding: 1px 7px;
+}
+.style-extra { margin-top: 14px; }
+.style-extra .fields { padding: 14px 0 16px; }
+
 /* 何問にする？／ネタのセット（1つだけ選ぶ行） */
 .opts { display: grid; gap: 10px; }
 .opt {

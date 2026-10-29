@@ -406,6 +406,7 @@
     micBlocked: !SR,
     micReason: SR ? "" : "unsupported",
     swapOpen: false,
+    styleExtraOpen: false,
     ask: "", // 「こうしてほしい」の下書き
     modeFrom: "", // 書き方シートをどこから開いたか（gen＝作る前／regen＝作り直し）
     rep: null, // 報告シートの下書き
@@ -779,6 +780,19 @@
         : "";
     const quickSet = recommendedSet(SIZES.includes(C.defaultSize) ? C.defaultSize : SIZES[0]);
     const quickSize = C.sizes.find((z) => quickSet && z.n === quickSet.size);
+    // イベント用の「今日は、どんなことを書く？」：近いものを押したら、そのセットで質問へ直行する（config の quickScenes）
+    const sceneList = (C.quickScenes || []).map((sc) => ({ sc, set: setById(sc.set) })).filter((x) => x.set);
+    const scenesHtml = sceneList.length
+      ? `<section class="block scene-block">
+        <h2 class="sec-title">今日は、どんなことを書く？</h2>
+        <p class="sec-note bx">近いものを押したら、<wbr>そのまま質問に進むで。<wbr>書き方は最後に選ぶだけ。</p>
+        <div class="scene-grid">${sceneList
+          .map(
+            ({ sc, set }) => `<button type="button" class="scene" data-act="scene" data-id="${esc(set.id)}"><span class="scene-t bx">${fmt(sc.label || set.label)}</span><span class="scene-s bx">${fmt(sc.sub || set.who || "")}</span><span class="scene-n">${set.size}問</span></button>`
+          )
+          .join("")}</div>
+      </section>`
+      : "";
     const html = `
       <div class="big-row"><button type="button" class="big-toggle" data-act="bigText" aria-pressed="${isBig()}"><span class="big-a" aria-hidden="true">あ</span>${isBig() ? "文字を元にもどす" : "文字を大きくする"}</button></div>
       ${eventHeadHtml()}
@@ -802,11 +816,13 @@
           <p class="name-note bx">LinkedInと同じ名前で</p>
         </div>
         ${followNeeded() ? followGateHtml() : ""}
+        ${!isProfile() && quickSet ? `<button type="button" class="btn btn-primary btn-block btn-quick" data-act="quickStart">おまかせで始める<span class="btn-sub">${esc(plain(quickSet.label))}・${quickSet.size}問${quickSize && quickSize.minutes ? `・${esc(quickSize.minutes)}` : ""}／書き方は最後に選ぶだけ</span></button>` : ""}
         <p class="hero-note bx">${isProfile() ? "下で条件を決めると、<wbr>あなたに合わせた質問になるで。<wbr>書いたことだけ使うで" : "何も選ばんでOK。<wbr>質問に答えるだけで<wbr>投稿文ができるで"}</p>
         ${!eventContext() && !eventKeyReady() && !aiReady() ? `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block is-unset" data-act="openKey"><span class="badge-unset">未設定</span>文章を作るAIを紐づける（無料・約5分）</button></p>` : ""}
         ${noteBannerHtml()}
         ${featuresHtml()}
       </section>
+      ${isProfile() ? "" : scenesHtml}
       ${
         isProfile()
           ? condFormHtml()
@@ -1271,6 +1287,18 @@
         </div>${note}
       </div>`;
     };
+    const phraseField = `<div class="field">
+          <label class="field-label" for="phrase">入れたい一言（任意）</label>
+          <input id="phrase" class="phrase" type="text" maxlength="40" autocomplete="off" placeholder="例：今日もええ日やった！" value="${esc(S.style.phrase)}">
+          <p class="field-note">口ぐせや決め台詞。作る投稿文に、そのまま入るで。</p>
+        </div>`;
+    // イベントの参加者は、決めることを減らす：立場と長さだけ見せて、文体・関西弁・絵文字・一言は「こだわり設定」にしまう
+    const styleFields = eventContext()
+      ? `${field("role")}${field("length")}`
+      : `${field("role")}${field("formality")}${field("kansai")}${field("length")}${field("emoji")}${C.style.sign ? field("sign") : ""}${C.style.cheer && !C.cheerAlways ? field("cheer") : ""}`;
+    const styleExtra = eventContext()
+      ? `<details class="swap style-extra" id="styleExtra"${T.styleExtraOpen ? " open" : ""}><summary><span>こだわり設定（変えなくてOK）</span><span class="swap-count">文体・関西弁・絵文字</span></summary><div class="fields">${field("formality")}${field("kansai")}${field("emoji")}${C.style.sign ? field("sign") : ""}${C.style.cheer && !C.cheerAlways ? field("cheer") : ""}${phraseField}</div></details>`
+      : "";
     const html = `
       <div class="page-head has-scribble">
         <p class="page-step">3 / 4</p>
@@ -1294,17 +1322,14 @@
           <div class="opts" role="radiogroup" aria-labelledby="lab-mode">${modeOpts()}</div>
           ${introField()}${stylePromptField()}
         </div>
-        ${field("role")}${field("formality")}${field("kansai")}${field("length")}${field("emoji")}${C.style.sign ? field("sign") : ""}${C.style.cheer && !C.cheerAlways ? field("cheer") : ""}
+        ${styleFields}
         <div class="field">
           <div class="field-label">写真（任意・${PHOTO_LIMIT}枚まで）</div>
           ${photoFieldHtml()}
         </div>
-        <div class="field">
-          <label class="field-label" for="phrase">入れたい一言（任意）</label>
-          <input id="phrase" class="phrase" type="text" maxlength="40" autocomplete="off" placeholder="例：今日もええ日やった！" value="${esc(S.style.phrase)}">
-          <p class="field-note">口ぐせや決め台詞。作る投稿文に、そのまま入るで。</p>
-        </div>
-      </div>`;
+        ${eventContext() ? "" : phraseField}
+      </div>
+      ${styleExtra}`;
     const dockHtml = `
       <button type="button" class="btn btn-secondary btn-icon" data-act="back" aria-label="もどる">${ICON.back}</button>
       <button type="button" class="btn btn-primary" data-act="generate">${T.error ? "もう一回つくる" : "つくってもらう"}</button>`;
@@ -1670,6 +1695,23 @@
   function openModeSheet(from) {
     T.modeFrom = from;
     openSheet(modeSheetHtml(), "[data-act=modeGo]");
+  }
+  // おまかせ／シーンから始める：セットを決めて、すぐ質問へ。書き方は最後に選ぶだけ（S.quick）
+  function startWithSet(set) {
+    if (!set) return;
+    S.kind = "post";
+    S.free = false;
+    S.customTheme = "";
+    if (S.setId !== set.id) {
+      S.selected = setCards(set.id);
+      S.answers = {};
+    }
+    S.size = set.size;
+    S.setId = set.id;
+    S.quick = true;
+    S.cursor = 0;
+    save();
+    go("answer");
   }
   function followGateHtml() {
     const done = FOLLOW === "done";
@@ -3355,6 +3397,16 @@
       case "demo":
         fillDemo();
         break;
+      case "quickStart": {
+        if (needName()) break;
+        startWithSet(recommendedSet(SIZES.includes(C.defaultSize) ? C.defaultSize : SIZES[0]) || setById(S.setId));
+        break;
+      }
+      case "scene": {
+        if (needName()) break;
+        startWithSet(setById(el.dataset.id));
+        break;
+      }
       case "toAnswer": {
         if (needName()) break;
         if (isProfile() && !S.pcond.role) {
@@ -3951,6 +4003,7 @@
     "toggle",
     (e) => {
       if (e.target.id === "swap") T.swapOpen = e.target.open;
+      if (e.target.id === "styleExtra") T.styleExtraOpen = e.target.open;
     },
     true
   );
