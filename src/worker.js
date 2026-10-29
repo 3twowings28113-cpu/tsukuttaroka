@@ -51,7 +51,7 @@ import {
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-29.lscw-16";
+const VERSION = "2026-10-30.lscw-17";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -452,6 +452,7 @@ async function openaiJSON({ baseUrl, model, key, system, input, images = [], tim
 let primaryCoolUntil = 0;
 async function callAI(env, { system, input, schema, validate, userKey, adv, images = [] }) {
   // 上級者設定（Gemini以外）があるときは、そのAI一本でいく（予備チェーンなし）
+  // ただしイベント指定のAI（fromEvent）は、失敗したら Gemini のチェーンに切り替える
   if (adv) {
     const args = { baseUrl: adv.baseUrl, model: adv.model, key: adv.key, system, input, images };
     let r = adv.provider === "anthropic" ? await anthropicJSON(args) : await openaiJSON(args);
@@ -459,9 +460,10 @@ async function callAI(env, { system, input, schema, validate, userKey, adv, imag
       const v = validate(r.json);
       if (v) return { ...r, value: v };
       r = { ...r, ok: false, reason: "BAD_SHAPE", message: String(r.text || "").slice(0, 200) };
-    }
+    } else if (r.ok) return r;
     console.warn("ai failed", JSON.stringify({ model: r.model, style: r.style, status: r.status, reason: r.reason, message: r.message }));
-    return r;
+    if (!adv.fromEvent) return r;
+    console.warn("event ai fallback to gemini", JSON.stringify({ model: r.model, reason: r.reason }));
   }
   const styleName = env.GEMINI_API_STYLE === "generateContent" ? "generateContent" : "interactions";
   // 写真が多いほど、AIの返事に時間がかかる。その分だけ待つ
@@ -705,6 +707,15 @@ async function eventKeyOf(request, env) {
   if (!eventActive(ev)) return { ...NO_EVENT, id, bad: true };
   return { key: ev.key || env.GEMINI_API_KEY || null, id };
 }
+// イベント指定のAI（運営が aiProvider: "claude" にしたイベントだけ）。キーはサーバーの secret（ANTHROPIC_API_KEY）から取る
+// 失敗したときは callAI が Gemini に切り替える（fromEvent）
+async function eventAiOf(request, env) {
+  const id = cleanEventId(request.headers.get("x-event"));
+  if (!id || !env.ANTHROPIC_API_KEY) return null;
+  const ev = await readEvent(env, id).catch(() => null);
+  if (!eventActive(ev) || ev.aiProvider !== "claude") return null;
+  return { provider: "anthropic", baseUrl: "https://api.anthropic.com", model: env.ANTHROPIC_MODEL || "claude-sonnet-4-5", key: env.ANTHROPIC_API_KEY, fromEvent: true };
+}
 // イベントごとのAIへの情報：概要（会場の様子を理解するための参考）＋追加の指示。自分のキーで作る人にも効く。本文の event で受け取る
 async function eventNoteOf(env, id) {
   const ev = await readEvent(env, cleanEventId(id)).catch(() => null);
@@ -730,7 +741,7 @@ async function eventNameOf(env, id) {
 async function eventPublic(env, url) {
   const ev = await readEvent(env, cleanEventId(url.searchParams.get("e")));
   if (!eventActive(ev)) return json({ ok: false, code: "no_event", message: "このイベントは、いまは使えません" }, 404);
-  const hasKey = !!(ev.key || env.GEMINI_API_KEY);
+  const hasKey = !!(ev.key || env.GEMINI_API_KEY || (ev.aiProvider === "claude" && env.ANTHROPIC_API_KEY));
   return json({
     ok: true,
     event: {
@@ -739,6 +750,7 @@ async function eventPublic(env, url) {
       hashtags: ev.hashtags || [],
       cheerAlways: !!ev.cheerAlways,
       preset: ev.preset || "",
+      aiProvider: ev.aiProvider || "",
       hasKey,
       open: hasKey,
       mentions: ev.mentions || [],
@@ -770,6 +782,7 @@ function eventForAdmin(id, d, updatedAt) {
     followName: d.followName || "",
     followRequired: d.followRequired === true,
     aiNote: d.aiNote || "",
+    aiProvider: d.aiProvider || "",
     overview: d.overview || "",
     features: d.features || null,
     info: d.info || {},
@@ -811,6 +824,7 @@ async function adminEventSave(request, env) {
     followName: oneLine(body.followName, 40),
     followRequired: !!followUrl && body.followRequired === true,
     aiNote: multiLine(body.aiNote, 1500),
+    aiProvider: typeof body.aiProvider === "string" ? (body.aiProvider === "claude" ? "claude" : "") : prev.aiProvider || "",
     overview: multiLine(body.overview, 3000),
     features: cleanFeatures(body.features),
     info: cleanInfo(body.info),
@@ -852,6 +866,8 @@ async function generate(request, env, ctx) {
   if (limited(`c:${cid}`, 10, 60000) || limited(`i:${ip}`, 400, 60000)) return json({ ok: false, code: "rate" }, 429);
   const ukey = userKeyOf(request);
   const aiCfg = aiConfigOf(request);
+  const evAi = !ukey && !aiCfg ? await eventAiOf(request, env) : null;
+  const adv = aiCfg || evAi;
   const ev = ukey || aiCfg ? NO_EVENT : await eventKeyOf(request, env);
   if (ev.bad) return eventOffError();
   const key = ukey || ev.key;
@@ -860,7 +876,7 @@ async function generate(request, env, ctx) {
   const who = cleanName(body.name);
   const evId = ev.id || cleanEventId(body.event);
   const base = { u: uidOf(cid), event: evId, page: oneLine(body.page, 20), name: who, kind: p.kind, followed: body.followed === true };
-  if (!key && !aiCfg) {
+  if (!key && !aiCfg && !evAi) {
     if (env.GEMINI_API_KEY) return json({ ok: false, code: "no_key", message: NO_KEY_MSG }, 403);
     logEvent(env, ctx, "generate", { ...base, cards, sample: true, mode: p.mode });
     return json({ ok: true, sample: true });
@@ -872,7 +888,7 @@ async function generate(request, env, ctx) {
   // 見出しだけ（5案）／自己紹介だけ。先に決めた【条件】と回答から作る。写真は使わない
   if (p.kind === "headline" || p.kind === "about") {
     const isH = p.kind === "headline";
-    const r = await callAI(env, { userKey: key, adv: aiCfg, system: isH ? prompts.headline : prompts.about, input: buildPartInput(p, p.kind), schema: isH ? HEADLINES_SCHEMA : ABOUT_SCHEMA, validate: isH ? normalizeHeadlines : normalizeAbout });
+    const r = await callAI(env, { userKey: key, adv: adv, system: isH ? prompts.headline : prompts.about, input: buildPartInput(p, p.kind), schema: isH ? HEADLINES_SCHEMA : ABOUT_SCHEMA, validate: isH ? normalizeHeadlines : normalizeAbout });
     if (!r.ok) {
       logEvent(env, ctx, "error", { where: p.kind, status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey, u: base.u, event: evId });
       return json({ ok: false, code: "failed", message: ukey ? explainFailure(r) : "生成に失敗しました" }, 502);
@@ -882,7 +898,7 @@ async function generate(request, env, ctx) {
   }
   // プロフィール文（見出し3案＋自己紹介。前の版の画面から）。写真は使わない
   if (p.kind === "profile") {
-    const r = await callAI(env, { userKey: key, adv: aiCfg, system: prompts.profile, input: buildProfileInput(p), schema: PROFILE_SCHEMA, validate: normalizeProfile });
+    const r = await callAI(env, { userKey: key, adv: adv, system: prompts.profile, input: buildProfileInput(p), schema: PROFILE_SCHEMA, validate: normalizeProfile });
     if (!r.ok) {
       logEvent(env, ctx, "error", { where: "profile", status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey, u: base.u, event: evId });
       return json({ ok: false, code: "failed", message: ukey ? explainFailure(r) : "生成に失敗しました" }, 502);
@@ -892,7 +908,7 @@ async function generate(request, env, ctx) {
   }
   const opts = (imgs) => ({
     userKey: key,
-    adv: aiCfg,
+    adv: adv,
     system: prompts.system,
     input: buildUserInput({ ...p, photos: imgs.length }),
     images: imgs,
@@ -1052,10 +1068,12 @@ async function refine(request, env, ctx) {
   if (limited(`c:${cid}`, 10, 60000) || limited(`i:${ip}`, 400, 60000)) return json({ ok: false, code: "rate" }, 429);
   const ukey = userKeyOf(request);
   const aiCfg = aiConfigOf(request);
+  const evAi = !ukey && !aiCfg ? await eventAiOf(request, env) : null;
+  const adv = aiCfg || evAi;
   const ev = ukey || aiCfg ? NO_EVENT : await eventKeyOf(request, env);
   if (ev.bad) return eventOffError();
   const key = ukey || ev.key;
-  if (!key && !aiCfg) {
+  if (!key && !aiCfg && !evAi) {
     if (env.GEMINI_API_KEY) return json({ ok: false, code: "no_key", message: NO_KEY_MSG }, 403);
     return json({ ok: true, sample: true });
   }
@@ -1067,7 +1085,7 @@ async function refine(request, env, ctx) {
 
   if (part) {
     const isH = part === "headline";
-    const r = await callAI(env, { userKey: key, adv: aiCfg, system: isH ? prompts.headline : prompts.about, input: buildPartRefineInput(p, part, current, action, ask), schema: isH ? HEADLINES_SCHEMA : ABOUT_SCHEMA, validate: isH ? normalizeHeadlines : normalizeAbout });
+    const r = await callAI(env, { userKey: key, adv: adv, system: isH ? prompts.headline : prompts.about, input: buildPartRefineInput(p, part, current, action, ask), schema: isH ? HEADLINES_SCHEMA : ABOUT_SCHEMA, validate: isH ? normalizeHeadlines : normalizeAbout });
     if (!r.ok) {
       logEvent(env, ctx, "error", { where: `refine:${part}`, status: r.status, reason: r.reason, model: r.model, ownKey: !!ukey, u: uidOf(cid), event: evId });
       return json({ ok: false, code: "failed", message: ukey ? explainFailure(r) : "書き直しに失敗しました" }, 502);
@@ -1077,7 +1095,7 @@ async function refine(request, env, ctx) {
   }
   const opts = (imgs) => ({
     userKey: key,
-    adv: aiCfg,
+    adv: adv,
     system: isProfile ? prompts.profile : prompts.system,
     input: isProfile ? buildProfileRefineInput(p, current, action, ask) : buildRefineInput({ ...p, photos: imgs.length }, tone, current, action, ask),
     images: imgs,
@@ -1173,6 +1191,7 @@ async function health(env) {
     ok: true,
     version: VERSION,
     hasKey: !!env.GEMINI_API_KEY,
+    claude: !!env.ANTHROPIC_API_KEY,
     db: !!(await getDb(env)),
     model: env.GEMINI_MODEL || "gemini-3.8-flash",
     fallback: env.GEMINI_FALLBACK_MODEL || "gemini-flash-lite-latest",
