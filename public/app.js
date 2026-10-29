@@ -262,6 +262,46 @@
   // 問数を変えたとき：同じ theme のセットがあればそれ、なければおすすめ
   const setForSize = (n, theme) => setsOf(n).find((s) => theme && s.theme === theme) || recommendedSet(n);
   const fitSize = (len) => SIZES.find((n) => n >= len) || SIZES[SIZES.length - 1];
+  // テーマの組み合わせ：各テーマの3問セットを合成する。重なる質問（学び・次の一歩など）は1つにまとめ、
+  // 締めの質問（config の lastCards）は最後に回し、全体は最大5問に収める（必須と締めは必ず残す）
+  const COMBO_MAX = 5;
+  function comboCards(themes) {
+    const reps = themes.map((t) => C.sets.find((s) => s.theme === t && s.size === 3) || C.sets.find((s) => s.theme === t)).filter(Boolean);
+    const lastIds = C.lastCards || [];
+    const main = [];
+    const tail = [];
+    const push = (arr, id) => {
+      if (CARD[id] && !main.includes(id) && !tail.includes(id)) arr.push(id);
+    };
+    for (const r of reps) {
+      const lead = r.cards.find((id) => !lastIds.includes(id));
+      if (lead) push(main, lead);
+    }
+    for (const r of reps) for (const id of r.cards) push(lastIds.includes(id) ? tail : main, id);
+    let all = [...main, ...tail];
+    if (all.length > COMBO_MAX) {
+      const kept = [];
+      const add = (id) => {
+        if (!kept.includes(id) && kept.length < COMBO_MAX) kept.push(id);
+      };
+      main.slice(0, reps.length).forEach(add); // 各テーマの入口は残す
+      all.filter((id) => CARD[id].required || lastIds.includes(id)).forEach(add); // 必須と締めは残す
+      all.forEach(add);
+      all = all.filter((id) => kept.includes(id));
+    }
+    return all;
+  }
+  const comboActive = () => Array.isArray(S.comboThemes) && S.comboThemes.length >= 2;
+  // AIに渡す組み合わせテーマの文（例：LSCWに参加した感想＋LSCWの企業ブースで話したこと）
+  const comboThemeText = () =>
+    comboActive()
+      ? S.comboThemes
+          .map((t) => {
+            const s = C.sets.find((x) => x.theme === t);
+            return (s && (s.aiTheme || s.label)) || t;
+          })
+          .join("＋")
+      : "";
   const styleDefault = (k) => (!C.style[k] ? "" : C.style[k].default !== undefined ? C.style[k].default : C.style[k].options[0]);
   const defaultStyle = () => ({
     role: styleDefault("role"),
@@ -289,6 +329,8 @@
       cursor: 0,
       answers: {},
       free: false, // ボリューム「じぶんで選ぶ」（ネタをいくつでも）
+      comboMode: false, // テーマを「組み合わせる」モードか
+      comboThemes: [], // 組み合わせているテーマ（2〜3個）。質問は重なりを1つにまとめて最大5問にする
       customTheme: "", // 「じぶんで決める」のテーマ（AIにそのまま渡る）
       note: null, // ネタ帳のメモから作るとき {id, date, text}（AIに渡す。サーバーには残さない）
       style: defaultStyle(),
@@ -426,7 +468,11 @@
     st.selected = (st.selected || []).filter((id, i, a) => CARD[id] && a.indexOf(id) === i);
     if (!st.selected.includes(C.requiredCardId) && CARD[C.requiredCardId]) st.selected.unshift(C.requiredCardId);
     // 問数（前の版で保存された状態にも対応）。選んでいる数が問数を超えないようにする
-    if (st.free) {
+    if (Array.isArray(st.comboThemes) && st.comboThemes.length >= 2) {
+      // テーマの組み合わせは、合成した質問数がそのまま問数
+      st.size = st.selected.length;
+      st.setId = null;
+    } else if (st.free) {
       // 「じぶんで選ぶ」は、選んだ数がそのまま問数（15まで）
       st.selected = st.selected.slice(0, 15);
       st.size = st.selected.length;
@@ -490,6 +536,7 @@
     if (isProfile()) return profileCards();
     const sel = S.selected.map((id) => CARD[id]).filter(Boolean);
     // keepSetOrder のプリセット（LSCW）は、テーマのセットを config.js に書いた順で聞く（「はじめての投稿」は自己紹介から）。それ以外とじぶんで選ぶときは必須を先に
+    if (comboActive()) return [...sel, FEEL_CARD];
     if (C.keepSetOrder && S.setId && !S.free && setById(S.setId)) return [...sel, FEEL_CARD];
     return [...sel.filter((c) => c.required), ...sel.filter((c) => !c.required), FEEL_CARD];
   }
@@ -567,7 +614,7 @@
     return {
       answers,
       // 「じぶんで決める」のテーマ。なければ、選んだテーマのAI向けの説明（config.js の aiTheme。LSCW の「はじめての投稿」など）
-      theme: (String(S.customTheme || "").trim() || (S.free ? "" : (setById(S.setId) || {}).aiTheme || "")).slice(0, 60),
+      theme: (String(S.customTheme || "").trim() || comboThemeText() || (S.free ? "" : (setById(S.setId) || {}).aiTheme || "")).slice(0, 60),
       voice: VOICE.on && VOICE.text ? VOICE.text.slice(0, 2000) : "",
       profile: { role: S.style.role || "" },
       style: {
@@ -736,12 +783,21 @@
     const themeReps = [];
     for (const s of C.sets) if (!themeReps.some((t) => t.theme === s.theme)) themeReps.push(C.sets.find((x) => x.theme === s.theme && x.size === 3) || s);
     const curTheme = (setById(S.setId) || {}).theme || "";
-    const themeNow = String(S.customTheme || "").trim() ? "じぶんで決める" : S.free ? "じぶんでネタを選ぶ" : (themeReps.find((t) => t.theme === curTheme) || {}).label || "おまかせ";
+    const themeNow = String(S.customTheme || "").trim() ? "じぶんで決める" : S.free ? "じぶんでネタを選ぶ" : comboActive() ? `組み合わせ（${S.comboThemes.length}テーマ）` : S.comboMode ? "組み合わせる" : (themeReps.find((t) => t.theme === curTheme) || {}).label || "おまかせ";
     const sizeNow = S.free ? `じぶんで選ぶ（${S.selected.length}問）` : `${S.size}問`;
     const themeRows =
       themeReps
         .map(
-          (s) => `<button type="button" class="opt" role="radio" aria-checked="${!customOn && curTheme === s.theme}" data-act="theme" data-v="${esc(s.theme)}">
+          (s) => S.comboMode
+            ? `<button type="button" class="opt" role="checkbox" aria-checked="${(S.comboThemes || []).includes(s.theme)}" data-act="themeCombo" data-v="${esc(s.theme)}">
+          <span class="opt-dot" aria-hidden="true"></span>
+          <span class="opt-main">
+            <span class="opt-head"><span class="opt-name">${esc(s.label)}</span>${s.recommended ? badge : ""}</span>
+            <span class="opt-cards">${s.cards.filter((id) => CARD[id]).map((id) => `<span class="nw">${esc(plain(CARD[id].label))}</span>`).join("／<wbr>")}</span>
+            <span class="opt-who bx">${fmt(s.who || "")}</span>
+          </span>
+        </button>`
+            : `<button type="button" class="opt" role="radio" aria-checked="${!customOn && curTheme === s.theme}" data-act="theme" data-v="${esc(s.theme)}">
           <span class="opt-dot" aria-hidden="true"></span>
           <span class="opt-main">
             <span class="opt-head"><span class="opt-name">${esc(s.label)}</span>${s.recommended ? badge : ""}</span>
@@ -751,13 +807,13 @@
         </button>`
         )
         .join("") +
-      `<button type="button" class="opt" role="radio" aria-checked="${customOn}" data-act="themeCustom">
+      (S.comboMode ? "" : `<button type="button" class="opt" role="radio" aria-checked="${customOn}" data-act="themeCustom">
           <span class="opt-dot" aria-hidden="true"></span>
           <span class="opt-main">
             <span class="opt-head"><span class="opt-name">じぶんで決める</span></span>
             <span class="opt-who bx">下の入力欄に書くと、そのテーマで作る</span>
           </span>
-        </button>`;
+        </button>`);
     const cards = C.cards
       .map((c) => {
         const on = S.selected.includes(c.id);
@@ -839,13 +895,19 @@
           pane === "size"
             ? `<div class="opts" role="radiogroup" aria-label="質問数">${sizeRows}</div>
         <p class="sec-note bx">質問数を変えても、テーマはそのまま。<wbr>テーマを変えるときは、上の「1 テーマ」のタブへ。</p>`
-            : `<div class="opts" role="radiogroup" aria-label="テーマ">${themeRows}</div>
-        <p class="sec-note bx">テーマを押すと、質問の並びが自動で切りかわるで。<wbr>何問にするかは、上の「2 質問数」のタブで選べる。</p>
+            : `<div class="seg theme-mode" role="group" aria-label="テーマの選び方" style="--cols:2">
+          <button type="button" class="bx" data-act="themeMode" data-v="single" aria-pressed="${!S.comboMode}">1つだけ</button>
+          <button type="button" class="bx" data-act="themeMode" data-v="combo" aria-pressed="${!!S.comboMode}">組み合わせる</button>
+        </div>
+        <div class="opts" role="group" aria-label="テーマ">${themeRows}</div>
+        ${S.comboMode
+          ? `<p class="sec-note bx">${comboActive() ? `いま${S.comboThemes.length}テーマの組み合わせ。質問は${S.selected.length}問＋任意1問やで。` : "言いたいテーマを2〜3個押してな。"}<wbr>重なる質問（学び・次の一歩など）は1つにまとめて、<wbr>多くても5問に収めるで。</p>`
+          : `<p class="sec-note bx">テーマを押すと、質問の並びが自動で切りかわるで。<wbr>何問にするかは、上の「2 質問数」のタブで選べる。<wbr>2つ以上言いたい人は「組み合わせる」へ。</p>
         <div class="field custom-theme">
           <label class="field-label" for="customTheme">じぶんで決める${customOn ? '<span class="req-inline">必須</span>' : "（任意）"}</label>
           <input id="customTheme" class="phrase" type="text" maxlength="60" autocomplete="off" placeholder="例：娘の運動会の話を書きたい" value="${esc(S.customTheme || "")}">
           <p class="field-note bx">ここに書いたテーマがAIにそのまま伝わるで。<wbr>${customOn ? "「じぶんで決める」のときは、<wbr>テーマを書くのが必須やで。" : "当てはまるテーマが無いときは、<wbr>ここに書いてな。"}</p>
-        </div>`
+        </div>`}`
         }
         </div>
       </section>
@@ -1701,6 +1763,8 @@
     if (!set) return;
     S.kind = "post";
     S.free = false;
+    S.comboMode = false;
+    S.comboThemes = [];
     S.customTheme = "";
     if (S.setId !== set.id) {
       S.selected = setCards(set.id);
@@ -2693,7 +2757,7 @@
       S.step = "result";
       histAdd({
         at: Date.now(),
-        theme: String(S.customTheme || "").trim() || (setById(S.setId) || {}).label || "",
+        theme: String(S.customTheme || "").trim() || comboThemeText() || (setById(S.setId) || {}).label || "",
         bodies: TONES.map((t) => ({ id: t.id, label: t.label, body: (S.results[t.id] && S.results[t.id].body) || "" })).filter((b) => b.body),
       });
       save();
@@ -3128,7 +3192,9 @@
       }
       case "size": {
         const n = Number(el.dataset.n);
-        if (!S.free && n === S.size) break;
+        if (!S.free && n === S.size && !comboActive()) break;
+        S.comboMode = false;
+        S.comboThemes = [];
         S.free = false;
         const theme = (setById(S.setId) || {}).theme;
         const next = setForSize(n, theme);
@@ -3141,6 +3207,8 @@
       }
       case "sizeFree":
         if (S.free) break;
+        S.comboMode = false;
+        S.comboThemes = [];
         S.free = true;
         S.setId = null;
         S.answers = {};
@@ -3336,9 +3404,82 @@
         keepScroll(render);
         { const b = $(`[data-act=pickPane][data-v="${T.pickPane}"]`); if (b) b.focus({ preventScroll: true }); }
         break;
+      case "themeMode": {
+        const combo = el.dataset.v === "combo";
+        if (combo === !!S.comboMode) break;
+        S.comboMode = combo;
+        if (combo) {
+          const cur = (setById(S.setId) || {}).theme;
+          S.comboThemes = cur ? [cur] : [];
+          toast("組み合わせモードやで。言いたいテーマを2〜3個押してな", 2600);
+        } else if (comboActive()) {
+          // 1つだけに戻すときは、組み合わせの最初のテーマのセットに戻す
+          const next = C.sets.find((s) => s.theme === S.comboThemes[0] && s.size === 3) || C.sets.find((s) => s.theme === S.comboThemes[0]);
+          if (next) {
+            S.size = next.size;
+            S.setId = next.id;
+            S.selected = setCards(next.id);
+            S.answers = {};
+            S.cursor = 0;
+          }
+          S.comboThemes = [];
+        }
+        keepScroll(render);
+        save();
+        break;
+      }
+      case "themeCombo": {
+        const t = el.dataset.v;
+        let list = Array.isArray(S.comboThemes) ? [...S.comboThemes] : [];
+        if (list.includes(t)) list = list.filter((x) => x !== t);
+        else {
+          if (list.length >= 3) {
+            toast("組み合わせは3テーマまでやで", 2200);
+            break;
+          }
+          list.push(t);
+        }
+        S.comboThemes = list;
+        S.free = false;
+        S.customTheme = "";
+        if (list.length >= 2) {
+          const cards = comboCards(list);
+          if (cards.join() !== S.selected.join()) {
+            S.selected = cards;
+            S.answers = {};
+            S.cursor = 0;
+          }
+          S.size = cards.length;
+          S.setId = null;
+          toast(`組み合わせたで。質問は${cards.length}問＋任意1問にまとめたで`, 2400);
+        } else if (list.length === 1) {
+          const next = C.sets.find((s) => s.theme === list[0] && s.size === 3) || C.sets.find((s) => s.theme === list[0]);
+          if (next) {
+            S.size = next.size;
+            S.setId = next.id;
+            S.selected = setCards(next.id);
+            S.answers = {};
+            S.cursor = 0;
+          }
+        } else {
+          const first = recommendedSet(SIZES.includes(C.defaultSize) ? C.defaultSize : SIZES[0]);
+          if (first) {
+            S.size = first.size;
+            S.setId = first.id;
+            S.selected = setCards(first.id);
+            S.answers = {};
+            S.cursor = 0;
+          }
+        }
+        keepScroll(render);
+        save();
+        break;
+      }
       case "theme": {
         const theme = el.dataset.v;
         const hadCustom = !!String(S.customTheme || "").trim();
+        S.comboMode = false;
+        S.comboThemes = [];
         S.customTheme = ""; // 「じぶんで決める」をやめて、テーマ一覧に切り替えたときは入力を空にする
         if (!S.free && (setById(S.setId) || {}).theme === theme) {
           if (hadCustom) {

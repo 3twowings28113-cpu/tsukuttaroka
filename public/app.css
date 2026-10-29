@@ -160,6 +160,7 @@ main:focus { outline: none; }
 }
 .style-extra { margin-top: 14px; }
 .style-extra .fields { padding: 14px 0 16px; }
+.theme-mode { margin-bottom: 12px; }
 
 /* 何問にする？／ネタのセット（1つだけ選ぶ行） */
 .opts { display: grid; gap: 10px; }
