@@ -51,7 +51,7 @@ import {
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-30.lscw-17";
+const VERSION = "2026-10-30.lscw-18";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -707,14 +707,16 @@ async function eventKeyOf(request, env) {
   if (!eventActive(ev)) return { ...NO_EVENT, id, bad: true };
   return { key: ev.key || env.GEMINI_API_KEY || null, id };
 }
-// イベント指定のAI（運営が aiProvider: "claude" にしたイベントだけ）。キーはサーバーの secret（ANTHROPIC_API_KEY）から取る
+// イベント指定のAI（運営が aiProvider: "claude" にしたイベントだけ）。キーはイベント設定（aiKey）か、サーバーの secret（ANTHROPIC_API_KEY）から取る
 // 失敗したときは callAI が Gemini に切り替える（fromEvent）
 async function eventAiOf(request, env) {
   const id = cleanEventId(request.headers.get("x-event"));
-  if (!id || !env.ANTHROPIC_API_KEY) return null;
+  if (!id) return null;
   const ev = await readEvent(env, id).catch(() => null);
   if (!eventActive(ev) || ev.aiProvider !== "claude") return null;
-  return { provider: "anthropic", baseUrl: "https://api.anthropic.com", model: env.ANTHROPIC_MODEL || "claude-sonnet-4-5", key: env.ANTHROPIC_API_KEY, fromEvent: true };
+  const key = ev.aiKey || env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+  return { provider: "anthropic", baseUrl: "https://api.anthropic.com", model: env.ANTHROPIC_MODEL || "claude-sonnet-4-5", key, fromEvent: true };
 }
 // イベントごとのAIへの情報：概要（会場の様子を理解するための参考）＋追加の指示。自分のキーで作る人にも効く。本文の event で受け取る
 async function eventNoteOf(env, id) {
@@ -741,7 +743,7 @@ async function eventNameOf(env, id) {
 async function eventPublic(env, url) {
   const ev = await readEvent(env, cleanEventId(url.searchParams.get("e")));
   if (!eventActive(ev)) return json({ ok: false, code: "no_event", message: "このイベントは、いまは使えません" }, 404);
-  const hasKey = !!(ev.key || env.GEMINI_API_KEY || (ev.aiProvider === "claude" && env.ANTHROPIC_API_KEY));
+  const hasKey = !!(ev.key || env.GEMINI_API_KEY || (ev.aiProvider === "claude" && (ev.aiKey || env.ANTHROPIC_API_KEY)));
   return json({
     ok: true,
     event: {
@@ -783,6 +785,8 @@ function eventForAdmin(id, d, updatedAt) {
     followRequired: d.followRequired === true,
     aiNote: d.aiNote || "",
     aiProvider: d.aiProvider || "",
+    aiKeySet: !!d.aiKey,
+    aiKeyTail: d.aiKey ? String(d.aiKey).slice(-4) : "",
     overview: d.overview || "",
     features: d.features || null,
     info: d.info || {},
@@ -825,6 +829,7 @@ async function adminEventSave(request, env) {
     followRequired: !!followUrl && body.followRequired === true,
     aiNote: multiLine(body.aiNote, 1500),
     aiProvider: typeof body.aiProvider === "string" ? (body.aiProvider === "claude" ? "claude" : "") : prev.aiProvider || "",
+    aiKey: body.clearAiKey ? "" : str(body.aiKey, 300) || prev.aiKey || "",
     overview: multiLine(body.overview, 3000),
     features: cleanFeatures(body.features),
     info: cleanInfo(body.info),
