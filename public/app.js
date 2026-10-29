@@ -4136,24 +4136,23 @@
         closeSheet();
         T.liBusy = true;
         render();
-        try {
-          const data = await postJSON("api/linkedin/post", { token: T.li.token, text: finalText(S.tab) }, 45000);
-          if (!data.ok) throw Object.assign(new Error(data.message || "failed"), { code: data.code || "" });
-          record("linkedin");
-          S.done = { action: "linkedin", tone: S.tab, text: finalText(S.tab), url: data.url || "", shared: false };
-          save();
-          go("done");
-          toast("投稿できたで！", 2600);
-        } catch (err) {
-          if (err && err.code === "li_auth") {
-            liSave(null);
-            toast("連携が切れてたみたい。もう一度「LinkedInと連携」から試してな", 3600);
-          } else toast((err && err.message) || "投稿に失敗したみたい。時間をおいて試してな", 3600);
-          render();
-        } finally {
-          T.liBusy = false;
-          if (S.step === "guide") render();
-        }
+        postJSON("api/linkedin/post", { token: T.li.token, text: finalText(S.tab) }, 45000)
+          .then((data) => {
+            T.liBusy = false;
+            record("linkedin");
+            S.done = { action: "linkedin", tone: S.tab, text: finalText(S.tab), url: data.url || "", shared: false };
+            save();
+            go("done");
+            toast("投稿できたで！", 2600);
+          })
+          .catch((err) => {
+            T.liBusy = false;
+            if (err && err.code === "li_auth") {
+              liSave(null);
+              toast("連携が切れてたみたい。もう一度「LinkedInと連携」から試してな", 3600);
+            } else toast((err && err.message) || "投稿に失敗したみたい。時間をおいて試してな", 3600);
+            if (S.step === "guide") render();
+          });
         break;
       }
       case "copyOpen": {
