@@ -82,6 +82,10 @@ async function route(request, env, ctx, url) {
   if (p === "/api/style" && m === "POST") return styleProfile(request, env);
   if (p === "/api/refine" && m === "POST") return refine(request, env, ctx);
   if (p === "/api/submit" && m === "POST") return submit(request, env);
+  if (p === "/api/linkedin/config" && m === "GET") return linkedinConfig(env);
+  if (p === "/api/linkedin/callback" && m === "GET") return linkedinCallback(request, url);
+  if (p === "/api/linkedin/exchange" && m === "POST") return linkedinExchange(request, env);
+  if (p === "/api/linkedin/post" && m === "POST") return linkedinPost(request, env);
   // 運営用（合言葉なし。URLを知っている人はだれでも使える）
   if (p.startsWith("/api/admin/")) {
     if (p === "/api/admin/summary" && m === "GET") return adminSummary(env, url);
@@ -102,6 +106,86 @@ async function route(request, env, ctx, url) {
     if (p === "/api/admin/prompt-test" && m === "POST") return adminPromptTest(request, env);
   }
   return json({ ok: false, code: "not_found" }, 404);
+}
+
+// ---------- LinkedIn そのまま投稿（OAuth + Posts API） ----------
+// 参加者が自分の LinkedIn で許可すると、アプリから直接投稿できる。Client ID / Secret は Worker の secret
+// （LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET）に置く。アクセストークンは参加者の端末だけに保存し、サーバーに残さない
+const LI_REDIRECT = "https://tsukuttaroka.3twowings28113.workers.dev/api/linkedin/callback";
+const liConfigured = (env) => !!(env.LINKEDIN_CLIENT_ID && env.LINKEDIN_CLIENT_SECRET);
+
+function linkedinConfig(env) {
+  if (!liConfigured(env)) return json({ ok: true, configured: false });
+  return json({ ok: true, configured: true, clientId: env.LINKEDIN_CLIENT_ID, redirect: LI_REDIRECT });
+}
+
+// LinkedIn からの戻り先。認可コードを端末の localStorage に渡して、元のページへ戻す（コードは URL に残さない）
+function linkedinCallback(request, url) {
+  const code = url.searchParams.get("code") || "";
+  const state = url.searchParams.get("state") || "";
+  const error = url.searchParams.get("error") || "";
+  const cookie = request.headers.get("cookie") || "";
+  const m = cookie.match(/(?:^|;\s*)li_return=([^;]*)/);
+  let ret = "/";
+  try {
+    const v = decodeURIComponent(m ? m[1] : "");
+    if (v.startsWith("/") && !v.startsWith("//") && v.length <= 80) ret = v;
+  } catch {}
+  const payload = JSON.stringify({ code: /^[A-Za-z0-9_-]{10,600}$/.test(code) ? code : "", state: String(state).slice(0, 80), error: String(error).slice(0, 80), ts: Date.now() });
+  const html = `<!DOCTYPE html><html lang="ja"><head><meta charset="utf-8"><title>LinkedIn連携</title></head><body><p>アプリに戻っています…</p><script>try{localStorage.setItem("tsukuttaroka.li.code", ${JSON.stringify(payload)});}catch(e){}location.replace(${JSON.stringify(ret)});</script></body></html>`;
+  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+}
+
+async function linkedinExchange(request, env) {
+  if (!liConfigured(env)) return json({ ok: false, code: "li_off", message: "LinkedIn連携は準備中です" }, 503);
+  const body = await readJson(request, 4000);
+  const code = String((body && body.code) || "");
+  if (!/^[A-Za-z0-9_-]{10,600}$/.test(code)) return json({ ok: false, code: "input", message: "コードが読めませんでした" }, 400);
+  const ip = request.headers.get("cf-connecting-ip") || "local";
+  if (limited(`li:${ip}`, 30, 60000)) return json({ ok: false, code: "rate", message: "少し待ってから、もう一度試してください" }, 429);
+  const form = new URLSearchParams({ grant_type: "authorization_code", code, client_id: env.LINKEDIN_CLIENT_ID, client_secret: env.LINKEDIN_CLIENT_SECRET, redirect_uri: LI_REDIRECT });
+  const tr = await fetch("https://www.linkedin.com/oauth/v2/accessToken", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: form.toString() });
+  if (!tr.ok) return json({ ok: false, code: "li_exchange", message: "LinkedInとの連携に失敗しました。もう一度、連携からやり直してください" }, 502);
+  const tj = await tr.json().catch(() => null);
+  const token = tj && tj.access_token;
+  if (!token) return json({ ok: false, code: "li_exchange", message: "LinkedInとの連携に失敗しました" }, 502);
+  const ur = await fetch("https://api.linkedin.com/v2/userinfo", { headers: { authorization: `Bearer ${token}` } });
+  if (!ur.ok) return json({ ok: false, code: "li_exchange", message: "LinkedInのアカウント情報が取れませんでした" }, 502);
+  const uj = await ur.json().catch(() => ({}));
+  return json({ ok: true, token, expiresIn: Number(tj.expires_in) || 0, name: String(uj.name || "").slice(0, 80) });
+}
+
+async function linkedinPost(request, env) {
+  const body = await readJson(request, 20000);
+  const token = String((body && body.token) || "");
+  const text = String((body && body.text) || "").trim();
+  if (token.length < 20 || token.length > 2000) return json({ ok: false, code: "li_auth", message: "LinkedInの連携が切れています。もう一度連携してください" }, 401);
+  if (!text || text.length > 3000) return json({ ok: false, code: "input", message: "投稿文が空か、長すぎます" }, 400);
+  const ip = request.headers.get("cf-connecting-ip") || "local";
+  if (limited(`lip:${ip}`, 30, 60000)) return json({ ok: false, code: "rate", message: "少し待ってから、もう一度試してください" }, 429);
+  const ur = await fetch("https://api.linkedin.com/v2/userinfo", { headers: { authorization: `Bearer ${token}` } });
+  if (!ur.ok) return json({ ok: false, code: "li_auth", message: "LinkedInの連携が切れています。もう一度連携してください" }, 401);
+  const uj = await ur.json().catch(() => ({}));
+  const sub = String(uj.sub || "");
+  if (!/^[A-Za-z0-9_-]{1,80}$/.test(sub)) return json({ ok: false, code: "li_auth", message: "LinkedInのアカウントが特定できませんでした" }, 401);
+  const pr = await fetch("https://api.linkedin.com/v2/ugcPosts", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "x-restli-protocol-version": "2.0.0" },
+    body: JSON.stringify({
+      author: `urn:li:person:${sub}`,
+      lifecycleState: "PUBLISHED",
+      specificContent: { "com.linkedin.ugc.ShareContent": { shareCommentary: { text }, shareMediaCategory: "NONE" } },
+      visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" },
+    }),
+  });
+  if (pr.status !== 201) {
+    const t = await pr.text().catch(() => "");
+    console.error("linkedin post failed", pr.status, t.slice(0, 200));
+    if (pr.status === 401 || pr.status === 403) return json({ ok: false, code: "li_auth", message: "LinkedInの連携が切れています。もう一度連携してください" }, 401);
+    return json({ ok: false, code: "li_post", message: "LinkedInへの投稿に失敗しました。時間をおいて試してください" }, 502);
+  }
+  const id = pr.headers.get("x-restli-id") || "";
+  return json({ ok: true, postId: id, url: id ? `https://www.linkedin.com/feed/update/${id}/` : "https://www.linkedin.com/feed/" });
 }
 
 // ---------- データベース（D1）。無くても生成は動く ----------

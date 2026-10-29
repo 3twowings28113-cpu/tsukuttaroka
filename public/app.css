@@ -161,6 +161,13 @@ main:focus { outline: none; }
 .style-extra { margin-top: 14px; }
 .style-extra .fields { padding: 14px 0 16px; }
 .theme-mode { margin-bottom: 12px; }
+.li-box .btn-primary, .li-box .btn-secondary { margin-top: 10px; }
+.li-box .btn-text { margin-top: 6px; }
+.sheet-wrap .preview {
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--paper); border: var(--line) solid var(--ink); border-radius: var(--r);
+  padding: 12px; font-size: 14px; line-height: 1.55; max-height: 40vh; overflow-y: auto;
+}
 
 /* 何問にする？／ネタのセット（1つだけ選ぶ行） */
 .opts { display: grid; gap: 10px; }

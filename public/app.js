@@ -456,7 +456,55 @@
     photoBusy: false, // 写真を小さくしている途中
     photoWhat: "",
     photoWant: "",
+    liConfig: null, // LinkedIn連携が使えるか（/api/linkedin/config の結果）
+    li: null, // LinkedIn連携 {token, expiresAt, name}（端末の localStorage にだけ保存）
+    liBusy: false,
   };
+
+  // ---------- LinkedIn そのまま投稿 ----------
+  const LI_KEY = "tsukuttaroka.li.v1";
+  const liLoad = () => {
+    try {
+      const v = JSON.parse(localStorage.getItem(LI_KEY) || "null");
+      if (v && v.token && v.expiresAt > Date.now()) return v;
+    } catch {}
+    return null;
+  };
+  const liSave = (v) => {
+    try {
+      if (v) localStorage.setItem(LI_KEY, JSON.stringify(v));
+      else localStorage.removeItem(LI_KEY);
+    } catch {}
+    T.li = v;
+  };
+  async function liBoot() {
+    T.li = liLoad();
+    // LinkedInの許可画面から戻ってきた直後：認可コードをトークンに交換する
+    try {
+      const raw = localStorage.getItem("tsukuttaroka.li.code");
+      if (raw) {
+        localStorage.removeItem("tsukuttaroka.li.code");
+        const pend = JSON.parse(raw);
+        const nonce = sessionStorage.getItem("tsukuttaroka.li.state") || "";
+        sessionStorage.removeItem("tsukuttaroka.li.state");
+        if (pend && pend.code && nonce && pend.state === nonce && Date.now() - (pend.ts || 0) < 10 * 60000) {
+          const data = await postJSON("api/linkedin/exchange", { code: pend.code }, 30000).catch(() => null);
+          if (data && data.ok && data.token) {
+            liSave({ token: data.token, expiresAt: Date.now() + (Number(data.expiresIn) || 5184000) * 1000, name: data.name || "" });
+            setTimeout(() => toast("LinkedInと連携したで！", 2600), 600);
+          } else setTimeout(() => toast("LinkedInの連携に失敗したみたい。もう一度試してな", 3200), 600);
+        } else if (pend && pend.error) setTimeout(() => toast("LinkedInの連携がキャンセルされたみたい", 2600), 600);
+      }
+    } catch {}
+    try {
+      const r = await fetch("api/linkedin/config");
+      const cfg = await r.json();
+      T.liConfig = cfg && cfg.configured ? cfg : { configured: false };
+      if (S.step === "guide" || S.step === "result") render();
+    } catch {
+      T.liConfig = { configured: false };
+    }
+  }
 
   function save() {
     const copy = { ...S, step: S.step === "loading" ? "style" : S.step, updatedAt: Date.now() };
@@ -1599,11 +1647,26 @@
   }
   function viewGuide() {
     const text = finalText(S.tab);
+    const liBlock = T.liConfig && T.liConfig.configured
+      ? T.li
+        ? `<section class="block li-box">
+            <h2 class="sec-title">LinkedInに、そのまま投稿</h2>
+            <p class="sec-note bx">${esc(T.li.name || "あなた")}さんのLinkedInと連携済みやで。<wbr>コピーの手間なしで、このまま投稿できる。</p>
+            <button type="button" class="btn btn-primary btn-block" data-act="liPost" ${T.liBusy ? "disabled" : ""}>${T.liBusy ? "投稿してるで…" : "このままLinkedInに投稿する"}</button>
+            <button type="button" class="btn-text" data-act="liDisconnect">連携をやめる</button>
+          </section>`
+        : `<section class="block li-box">
+            <h2 class="sec-title">LinkedInに、そのまま投稿</h2>
+            <p class="sec-note bx">初回だけ、LinkedInの許可画面が出る。<wbr>許可したら、コピーの手間なしで<wbr>そのまま投稿できるようになるで。</p>
+            <button type="button" class="btn btn-secondary btn-block" data-act="liConnect">LinkedInと連携して、そのまま投稿する</button>
+          </section>`
+      : "";
     const html = `
       <div class="done-cloud cloud" data-bump="34" data-seed="9">
         <h1 class="done-title" tabindex="-1">あとは投稿するだけ！</h1>
         <p class="done-lead bx">先に、この順番を見てな。<wbr>見たら、いちばん下の<wbr>青いボタンを押すと、<wbr>文章をコピーして<wbr>LinkedInがひらくで。</p>
       </div>
+      ${liBlock}
       ${C.followUrl && (!followed() || followSuggest()) ? `<div class="follow-first"><p class="follow-lead"><b>${followSuggest() ? "よかったら、フォローも" : "投稿の前に、まずフォロー"}</b><span class="sub">${esc(followName())}の<wbr>LinkedInページを<wbr>フォローしておくと、<wbr>最新の情報が届くで</span></p><a class="btn btn-secondary btn-block" href="${esc(C.followUrl)}" target="_blank" rel="noopener" data-act="followOpen">${esc(followName())}をフォローする</a></div>` : ""}
       ${guideSteps(false)}
       <details class="copied">
@@ -1624,18 +1687,21 @@
   function viewDone() {
     const d = S.done;
     const tag = C.feedTag || C.hashtags[0];
-    const title = d.action === "later" ? (d.shared ? "送ったで！" : "コピーしたで！") : "いってらっしゃい！";
+    const title = d.action === "linkedin" ? "投稿できたで！" : d.action === "later" ? (d.shared ? "送ったで！" : "コピーしたで！") : "いってらっしゃい！";
     const lead =
-      d.action === "later"
-        ? "投稿するときは、この順番でどうぞ。"
-        : "無事に投稿できたら完璧やで。<wbr>つぎの投稿も、<wbr>また作りに来てな。";
+      d.action === "linkedin"
+        ? "LinkedInに投稿したで。<wbr>つぎの投稿も、<wbr>また作りに来てな。"
+        : d.action === "later"
+          ? "投稿するときは、この順番でどうぞ。"
+          : "無事に投稿できたら完璧やで。<wbr>つぎの投稿も、<wbr>また作りに来てな。";
     const html = `
       <div class="done-cloud cloud" data-bump="34" data-seed="9">
         <h1 class="done-title" tabindex="-1">${title}</h1>
         <p class="done-lead bx">${lead}</p>
       </div>
       <div class="stack">
-        <a class="btn btn-primary btn-block" href="${esc(composeUrl(d.text))}" target="_blank" rel="noopener">LinkedInをもう一回ひらく</a>
+        ${d.action === "linkedin" && d.url ? `<a class="btn btn-primary btn-block" href="${esc(d.url)}" target="_blank" rel="noopener">投稿を見る</a>` : ""}
+        <a class="btn ${d.action === "linkedin" && d.url ? "btn-secondary" : "btn-primary"} btn-block" href="${esc(composeUrl(d.text))}" target="_blank" rel="noopener">LinkedInをもう一回ひらく</a>
         <button type="button" class="btn btn-secondary btn-block" data-act="recopy">${ICON.copy}<span>もう一回コピー</span></button>
         ${C.eventPage && (C.eventPage.schedule || []).length ? '<button type="button" class="btn btn-secondary btn-block" data-act="schedule">つぎは何がある？（タイムスケジュール）</button>' : ""}
         ${followSuggest() ? `<a class="btn btn-secondary btn-block" href="${esc(C.followUrl)}" target="_blank" rel="noopener" data-act="followOpen">${esc(followName())}をフォローする</a>` : ""}
@@ -4026,6 +4092,70 @@
         save();
         el.setAttribute("aria-checked", String(S.consent));
         break;
+      case "liConnect": {
+        if (!T.liConfig || !T.liConfig.configured || !T.liConfig.clientId) {
+          toast("LinkedIn連携は準備中やで", 2400);
+          break;
+        }
+        const nonce = Math.random().toString(36).slice(2) + Date.now().toString(36);
+        try {
+          sessionStorage.setItem("tsukuttaroka.li.state", nonce);
+          document.cookie = `li_return=${encodeURIComponent(location.pathname)}; path=/; max-age=900; samesite=lax`;
+        } catch {}
+        const q = new URLSearchParams({
+          response_type: "code",
+          client_id: T.liConfig.clientId,
+          redirect_uri: T.liConfig.redirect || "https://tsukuttaroka.3twowings28113.workers.dev/api/linkedin/callback",
+          scope: "openid profile w_member_social",
+          state: nonce,
+        });
+        location.href = `https://www.linkedin.com/oauth/v2/authorization?${q.toString()}`;
+        break;
+      }
+      case "liDisconnect":
+        liSave(null);
+        toast("LinkedInの連携をやめたで", 2000);
+        keepScroll(render);
+        break;
+      case "liPost": {
+        if (!T.li) break;
+        const text = finalText(S.tab);
+        openSheet(
+          `<h2 class="sheet-title" id="sheetTitle">このまま投稿する？</h2>
+           <p class="sheet-lead">LinkedInに、この文章で投稿されるで。</p>
+           <div class="preview">${esc(text)}</div>
+           <div class="stack">
+             <button type="button" class="btn btn-primary btn-block" data-act="liPostGo">投稿する</button>
+             <button type="button" class="btn btn-secondary btn-block" data-act="closeSheet">やめとく</button>
+           </div>`
+        );
+        break;
+      }
+      case "liPostGo": {
+        if (!T.li || T.liBusy) break;
+        closeSheet();
+        T.liBusy = true;
+        render();
+        try {
+          const data = await postJSON("api/linkedin/post", { token: T.li.token, text: finalText(S.tab) }, 45000);
+          if (!data.ok) throw Object.assign(new Error(data.message || "failed"), { code: data.code || "" });
+          record("linkedin");
+          S.done = { action: "linkedin", tone: S.tab, text: finalText(S.tab), url: data.url || "", shared: false };
+          save();
+          go("done");
+          toast("投稿できたで！", 2600);
+        } catch (err) {
+          if (err && err.code === "li_auth") {
+            liSave(null);
+            toast("連携が切れてたみたい。もう一度「LinkedInと連携」から試してな", 3600);
+          } else toast((err && err.message) || "投稿に失敗したみたい。時間をおいて試してな", 3600);
+          render();
+        } finally {
+          T.liBusy = false;
+          if (S.step === "guide") render();
+        }
+        break;
+      }
       case "copyOpen": {
         if (disabled) {
           e.preventDefault();
@@ -4298,6 +4428,7 @@
     } catch {}
   }
   async function start() {
+    liBoot();
     const evLoad = loadEvent();
     if (EVID) await Promise.race([evLoad, new Promise((r) => setTimeout(r, 2500))]);
     let shown = false;
