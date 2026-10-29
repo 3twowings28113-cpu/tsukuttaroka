@@ -183,6 +183,8 @@
   }
   // イベントのURLを開いただけで、イベントのAIキー（なければサーバーのキー）で作れる
   const eventKeyReady = () => !!(EVENT && EVENT.hasKey);
+  // イベント専用ページ（/lscw）か、イベントのURL（?e=）で開いた人は参加者。キーの設定は絶対に出さない（主催が用意したキーで作る）
+  const eventContext = () => !!(PAGE || EVID);
 
   // Googleカレンダー（秘密のiCalアドレス）。URLはこの端末にだけ保存する
   const CAL_KEY = "tsukuttaroka.cal";
@@ -801,7 +803,7 @@
         </div>
         ${followNeeded() ? followGateHtml() : ""}
         <p class="hero-note bx">${isProfile() ? "下で条件を決めると、<wbr>あなたに合わせた質問になるで。<wbr>書いたことだけ使うで" : "何も選ばんでOK。<wbr>質問に答えるだけで<wbr>投稿文ができるで"}</p>
-        ${!eventKeyReady() && !aiReady() ? `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block is-unset" data-act="openKey"><span class="badge-unset">未設定</span>文章を作るAIを紐づける（無料・約5分）</button></p>` : ""}
+        ${!eventContext() && !eventKeyReady() && !aiReady() ? `<p class="key-entry"><button type="button" class="btn btn-secondary btn-block is-unset" data-act="openKey"><span class="badge-unset">未設定</span>文章を作るAIを紐づける（無料・約5分）</button></p>` : ""}
         ${noteBannerHtml()}
         ${featuresHtml()}
       </section>
@@ -836,13 +838,14 @@
         <p class="flow-now">${flowCards()
           .map((c) => `<span class="nw">${esc(plain(c.label))}</span>`)
           .join("／<wbr>")}</p>
+        <p class="sec-note bx">最後の「投稿に入れたいこと・気持ち」は任意（とばしてOK）で、<wbr>質問数の数には入ってへんで。</p>
       </section>
       ${swap}`
       }
       ${MODE === "preview" ? '<p class="center"><button type="button" class="btn-text" data-act="demo">例文を入れて試す</button></p>' : ""}`;
     const dockHtml = isProfile()
       ? `<button type="button" class="btn btn-primary" data-act="toAnswer">この条件で質問へ<span class="btn-sub">${flowCards().length}問</span></button>`
-      : `<button type="button" class="btn btn-primary" data-act="toAnswer">このネタで始める<span class="btn-sub">${n}問</span></button>`;
+      : `<button type="button" class="btn btn-primary" data-act="toAnswer">このネタで始める<span class="btn-sub">${n}問＋任意1問</span></button>`;
     return { html, dockHtml };
   }
 
@@ -1019,7 +1022,7 @@
       const n = notesGet().length;
       rows.push(row("notes", "ネタ帳", n ? "ためたメモから、<wbr>そのまま投稿を作れる。<wbr>直す・消すもここ" : "思いついた投稿のネタを、<wbr>日付つきでメモしておける。<wbr>メモから投稿も作れる", n ? `メモ ${n}件` : "ひらく", n > 0));
     }
-    if (!eventKeyReady() && aiReady()) rows.push(row("openKey", "文章を作るAI", advOn() ? `Gemini以外のAI（${esc(AISET.model)}）で作ってる。<wbr>変えるときはここ` : "あなたのGeminiのキーで作ってる。<wbr>キーを変える・回数の上限を見るときはここ", "つないでる", true));
+    if (!eventContext() && !eventKeyReady() && aiReady()) rows.push(row("openKey", "文章を作るAI", advOn() ? `Gemini以外のAI（${esc(AISET.model)}）で作ってる。<wbr>変えるときはここ` : "あなたのGeminiのキーで作ってる。<wbr>キーを変える・回数の上限を見るときはここ", "つないでる", true));
     if (featureOn("calendar")) rows.push(row("cal", "カレンダーから作る", "Googleカレンダーの予定を読んで、<wbr>その日の出来事から投稿文を作る", CALURL ? "つないでる" : "", !!CALURL));
     if (featureOn("voice")) rows.push(row("voice", "じぶんの書き方", "これまでの投稿を読ませると、<wbr>投稿文をあなたの書きぐせに寄せて書く", VOICE.text ? (VOICE.on ? "使ってる" : "止めてる") : "", !!(VOICE.text && VOICE.on)));
     const hn = histGet().length;
@@ -1713,7 +1716,7 @@
       <div class="help-staff cloud" data-bump="26" data-seed="21"><b class="bx">${fmt(H.staff || "")}</b><span>${esc(H.staffSub || "")}</span></div>
       ${tips.length ? `<ul class="help-tips">${tips.map((t) => `<li class="bx">${fmt(t)}</li>`).join("")}</ul>` : ""}
       ${C.eventPage && (C.eventPage.schedule || []).length ? '<button type="button" class="btn btn-secondary btn-block" data-act="schedule">タイムスケジュールを見る</button>' : ""}
-      ${eventKeyReady() ? "" : `<button type="button" class="btn btn-secondary btn-block" data-act="openKey">文章を作るAIを紐づける${aiReady() ? "（紐づけずみ）" : ""}</button>`}
+      ${eventContext() || eventKeyReady() ? "" : `<button type="button" class="btn btn-secondary btn-block" data-act="openKey">文章を作るAIを紐づける${aiReady() ? "（紐づけずみ）" : ""}</button>`}
       <button type="button" class="btn btn-secondary btn-block" data-act="bigText"><span class="big-a" aria-hidden="true">あ</span>${isBig() ? "文字を元の大きさにもどす" : "文字を大きくする"}</button>
       <div class="stack">
         <button type="button" class="btn btn-primary btn-block" data-act="closeSheet">とじる</button>
@@ -1736,6 +1739,7 @@
         <li class="bx">この画面にもどって、下の「<b>貼り付け</b>」ボタンを押す（長押し貼り付けでもOK）</li>
         <li class="bx">最後に<b>「これで紐づける」</b>を押す。確認がとれて「つながった！」が出たら完成</li>
       </ol>
+      <p class="key-note bx"><b>大学・会社のアカウントやと、AI Studioが開けへんことがあるで。</b><wbr>「AI Studioへのアクセス権がありません」という画面が出たら、そのアカウントでは使えへんということ。<wbr>画面の下の「別のアカウントでログイン」から、<b>個人のGmailアカウント</b>でログインし直して、もう一度やってな。</p>
       <div class="key-box">
         <label class="key-label" for="apiKeyInput">Gemini APIキー${MYKEY ? '<span class="key-ok">紐づけずみ（この端末）</span>' : '<span class="key-ng">未設定</span>'}</label>
         <input id="apiKeyInput" class="name-input" type="password" autocomplete="off" inputmode="text" maxlength="300" placeholder="キーをまるごと貼り付け" value="${esc(MYKEY)}">
@@ -2443,17 +2447,50 @@
   }
 
   // キーが無いと作れない。シートを出して、保存したら続きを自動でやる
+  // ただしイベントの参加者には、キーの設定は絶対に出さない。イベントの読みこみ直しを案内する
+  // （2026-10-29：読みこみが間に合わなかった参加者がAI Studioへ案内され、大学アカウントで「アクセス権がありません」になって詰んだ）
   function needKey(after) {
+    if (eventContext()) {
+      T.keyAfter = after || "";
+      openSheet(eventWaitHtml(), "[data-act=retryEvent]");
+      toast("イベントの読みこみが、まだ終わってへんみたい。キーの設定は要らんで", 4000);
+      loadEvent().then(() => {
+        if (!eventKeyReady()) return;
+        closeSheet();
+        keepScroll(render);
+        if (T.keyAfter === "generate") {
+          T.keyAfter = "";
+          generate();
+        }
+      });
+      return;
+    }
     T.keyAfter = after || "";
     openSheet(keyHtml(), "#apiKeyInput");
     toast("作るには、まず文章を作るAIを紐づけるで。シートの手順どおりなら5分ぐらいでできる", 4000);
+  }
+  // イベントの参加者向け：キーは主催が用意しているので、設定は一切いらないことを伝えるシート
+  function eventWaitHtml() {
+    const H = C.help || {};
+    return `
+      <div class="sheet-grip" aria-hidden="true"></div>
+      <h2 class="sheet-title" id="sheetTitle">キーの設定は、いらんで</h2>
+      <p class="sheet-lead bx">このイベントのページは、<wbr>主催が用意したAIで作るから、<wbr><b>あなたがAPIキーを作ったり、<wbr>設定したりする必要は一切ない</b>で。</p>
+      <p class="sheet-lead bx">いまはイベントの情報を<wbr>読みこんでいる途中か、<wbr>通信で読みこめへんかったみたい。<wbr>電波のええところで、<wbr>下のボタンを押してみてな。</p>
+      ${H.staff ? `<div class="help-staff cloud" data-bump="26" data-seed="21"><b class="bx">${fmt(H.staff)}</b><span>${esc(H.staffSub || "")}</span></div>` : ""}
+      <div class="stack">
+        <button type="button" class="btn btn-primary btn-block" data-act="retryEvent">もう一度読み込む</button>
+        <button type="button" class="btn btn-secondary btn-block" data-act="closeSheet">とじる</button>
+      </div>`;
   }
 
   // ---------- イベント ----------
   async function loadEvent() {
     if (!EVID || MODE === "preview") return;
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 10000); // 弱い電波で待ちっぱなしにならないように
     try {
-      const res = await fetch(`api/event?e=${encodeURIComponent(EVID)}`, { cache: "no-store" });
+      const res = await fetch(`api/event?e=${encodeURIComponent(EVID)}`, { cache: "no-store", signal: ctl.signal });
       const d = await res.json().catch(() => ({}));
       if (!d.ok || !d.event) {
         // 消された・止められたイベントからは外れる
@@ -2479,7 +2516,9 @@
       }
       applyEvent(EVENT);
       saveEvent();
-    } catch {}
+    } catch {} finally {
+      clearTimeout(timer);
+    }
   }
   // 運営ページで決めたイベントの中身を、画面の設定に重ねる（空の項目は config.js のまま）
   function applyEvent(ev) {
@@ -2731,6 +2770,7 @@
 
   async function refine(actionId, request) {
     if (T.refining) return;
+    if (!aiReady() && MODE !== "preview" && EVID && !EVENT) await loadEvent();
     if (!aiReady() && MODE !== "preview") return needKey("");
     if (isProfile()) return refinePart(actionId, request);
     const t = S.tab;
@@ -3075,8 +3115,9 @@
       case "voiceLearn": {
         if (T.voiceBusy) break;
         if (!aiReady() && MODE !== "preview") {
-          openSheet(keyHtml(), "#apiKeyInput");
-          toast("先に、文章を作るAIを紐づけてな。そのあとにも一回、学習やで", 3200);
+          if (eventContext()) openSheet(eventWaitHtml(), "[data-act=retryEvent]");
+          else openSheet(keyHtml(), "#apiKeyInput");
+          if (!eventContext()) toast("先に、文章を作るAIを紐づけてな。そのあとにも一回、学習やで", 3200);
           break;
         }
         if (!T.voiceRaw || T.voiceRaw.length < 200) {
@@ -3345,7 +3386,12 @@
         openSheet(scheduleHtml(), "[data-act=closeSheet]");
         break;
       case "openKey":
-        openSheet(keyHtml(), "#apiKeyInput");
+        if (eventContext()) openSheet(eventWaitHtml(), "[data-act=retryEvent]");
+        else openSheet(keyHtml(), "#apiKeyInput");
+        break;
+      case "retryEvent":
+        closeSheet();
+        location.reload();
         break;
       case "cal":
         toPostKind();
