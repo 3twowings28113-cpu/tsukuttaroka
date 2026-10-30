@@ -51,7 +51,7 @@ import {
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-31.lscw-24";
+const VERSION = "2026-10-31.lscw-25";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -1366,7 +1366,8 @@ async function adminSummary(env, url) {
     const pp = person(r.name);
     if (pp) pp.reported = true;
   }
-  out.people = [...people.values()].sort((a, b) => (b.posted || 0) - (a.posted || 0) || (b.copied || 0) - (a.copied || 0) || (b.made || 0) - (a.made || 0) || a.name.localeCompare(b.name, "ja"));
+  // 作っても投稿もしていない人（報告だけの名前など）は一覧に出さない
+  out.people = [...people.values()].filter((p) => p.made > 0 || p.copied > 0 || p.posted > 0 || p.followed).sort((a, b) => (b.posted || 0) - (a.posted || 0) || (b.copied || 0) - (a.copied || 0) || (b.made || 0) - (a.made || 0) || a.name.localeCompare(b.name, "ja"));
   out.followed = out.people.filter((x) => x.followed).length;
   out.recentErrors = (errs.results || []).map((r) => {
     const d = safeParse(r.detail);
