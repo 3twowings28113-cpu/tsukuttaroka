@@ -51,7 +51,7 @@ import {
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-30.lscw-18";
+const VERSION = "2026-10-30.lscw-19";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -868,7 +868,7 @@ async function generate(request, env, ctx) {
   if (!p.answers.length) return json({ ok: false, code: "input", message: "回答が空です" }, 400);
   const cid = String(body.clientId || "").slice(0, 64);
   const ip = request.headers.get("cf-connecting-ip") || "local";
-  if (limited(`c:${cid}`, 10, 60000) || limited(`i:${ip}`, 400, 60000)) return json({ ok: false, code: "rate" }, 429);
+  if (limited(`c:${cid}`, 10, 60000) || limited(`i:${ip}`, 3000, 60000)) return json({ ok: false, code: "rate" }, 429);
   const ukey = userKeyOf(request);
   const aiCfg = aiConfigOf(request);
   const evAi = !ukey && !aiCfg ? await eventAiOf(request, env) : null;
@@ -1070,7 +1070,7 @@ async function refine(request, env, ctx) {
   if (action === "custom" && !ask) return json({ ok: false, code: "input", message: "どう直すかを書いてください" }, 400);
   const cid = String(body.clientId || "").slice(0, 64);
   const ip = request.headers.get("cf-connecting-ip") || "local";
-  if (limited(`c:${cid}`, 10, 60000) || limited(`i:${ip}`, 400, 60000)) return json({ ok: false, code: "rate" }, 429);
+  if (limited(`c:${cid}`, 10, 60000) || limited(`i:${ip}`, 3000, 60000)) return json({ ok: false, code: "rate" }, 429);
   const ukey = userKeyOf(request);
   const aiCfg = aiConfigOf(request);
   const evAi = !ukey && !aiCfg ? await eventAiOf(request, env) : null;

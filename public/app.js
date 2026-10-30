@@ -459,8 +459,21 @@
     liConfig: null, // LinkedIn連携が使えるか（/api/linkedin/config の結果）
     li: null, // LinkedIn連携 {token, expiresAt, name}（端末の localStorage にだけ保存）
     liBusy: false,
+    liAfterCheck: false, // 結果画面から直接投稿するとき、投稿前チェックを挟んだ印
   };
 
+  function openLiPostSheet() {
+    const text = finalText(S.tab);
+    openSheet(
+      `<h2 class="sheet-title" id="sheetTitle">このまま投稿する？</h2>
+       <p class="sheet-lead">LinkedInに、この文章で投稿されるで。</p>
+       <div class="preview">${esc(text)}</div>
+       <div class="stack">
+         <button type="button" class="btn btn-primary btn-block" data-act="liPostGo">投稿する</button>
+         <button type="button" class="btn btn-secondary btn-block" data-act="closeSheet">やめとく</button>
+       </div>`
+    );
+  }
   // ---------- LinkedIn そのまま投稿 ----------
   const LI_KEY = "tsukuttaroka.li.v1";
   const liLoad = () => {
@@ -915,9 +928,9 @@
         }
         <p class="hero-lead bx">${S.kind === "headline" ? "条件を決めて、<wbr>質問に答えるだけ。<br>プロフィールの<wbr>「見出し」の案が<wbr>5つできるで。" : S.kind === "about" ? "条件を決めて、<wbr>質問に答えるだけ。<br>プロフィールの<wbr>「自己紹介（概要）」が<wbr>できるで。" : "しゃべって答えるだけ。<br>LinkedInの投稿文が<wbr>できあがるで。"}</p>
         <div class="name-box${T.nameMissing ? " is-missing" : ""}">
-          <label class="name-label" for="myName">まず、お名前<span class="req-inline">必須</span></label>
+          <label class="name-label" for="myName">まず、お名前（任意）</label>
           <input id="myName" class="name-input" type="text" maxlength="40" autocomplete="name" enterkeyhint="done" placeholder="例：山下 翼" value="${esc(MYNAME)}">
-          <p class="name-note bx">LinkedInと同じ名前で</p>
+          <p class="name-note bx">入れると署名や自己紹介に使えるで。なくても作れる</p>
         </div>
         ${followNeeded() ? followGateHtml() : ""}
         ${!isProfile() && quickSet ? `<button type="button" class="btn btn-primary btn-block btn-quick" data-act="quickStart">おまかせで始める<span class="btn-sub">${esc(plain(quickSet.label))}・${quickSet.size}問${quickSize && quickSize.minutes ? `・${esc(quickSize.minutes)}` : ""}／書き方は最後に選ぶだけ</span></button>` : ""}
@@ -1420,9 +1433,9 @@
         myName()
           ? ""
           : `<div class="name-box${T.nameMissing ? " is-missing" : ""}">
-        <label class="name-label" for="myName">まず、お名前<span class="req-inline">必須</span></label>
+        <label class="name-label" for="myName">まず、お名前（任意）</label>
         <input id="myName" class="name-input" type="text" maxlength="40" autocomplete="name" enterkeyhint="done" placeholder="例：山下 翼" value="${esc(MYNAME)}">
-        <p class="name-note bx">LinkedInと同じ名前で</p>
+        <p class="name-note bx">入れると署名や自己紹介に使えるで。なくても作れる</p>
       </div>`
       }
       ${T.error ? `<div class="alert" role="alert">${esc(T.error)}</div>` : ""}
@@ -1452,7 +1465,7 @@
       <div class="loading">
         <div class="cloud load-cloud" data-bump="34" data-seed="11">
           <p class="loading-line" id="loadLine" aria-live="polite">${esc(C.loadingLines[0])}</p>
-          <p class="loading-sub">10秒くらいでできるで</p>
+          <p class="loading-sub">10〜20秒くらいでできるで</p>
         </div>
         <div class="feed" aria-hidden="true">
           <div class="li-card sk">
@@ -1605,7 +1618,8 @@
                 <p class="field-note bx">${S.results.single ? "表示中の文を<wbr>直すで。" : `いま表示中の<wbr>「${esc(tone.label)}」の文だけ<wbr>直すで。`}</p>
               </div>`
         }
-      </section>`;
+      </section>
+      ${T.editing ? "" : liBlockHtml()}`;
     const dockHtml = T.editing
       ? `<button type="button" class="btn btn-secondary" data-act="editCancel">やめる</button>
          <button type="button" class="btn btn-primary" data-act="editSave">この文にする</button>`
@@ -1645,22 +1659,25 @@
     steps.push(`<b>右上の「投稿」をタップ</b><span class="sub">${lastNote}</span>`);
     return `<ol class="guide">${steps.map((s, i) => `<li><span class="n" aria-hidden="true">${i + 1}</span><div>${s}</div></li>`).join("")}</ol>`;
   }
-  function viewGuide() {
-    const text = finalText(S.tab);
-    const liBlock = T.liConfig && T.liConfig.configured
-      ? T.li
-        ? `<section class="block li-box">
+  // LinkedIn直接投稿のブロック（結果画面と投稿案内画面で共用）
+  function liBlockHtml() {
+    if (!T.liConfig || !T.liConfig.configured) return "";
+    return T.li
+      ? `<section class="block li-box">
             <h2 class="sec-title">LinkedInに、そのまま投稿</h2>
             <p class="sec-note bx">${esc(T.li.name || "あなた")}さんのLinkedInと連携済みやで。<wbr>コピーの手間なしで、このまま投稿できる。</p>
             <button type="button" class="btn btn-primary btn-block" data-act="liPost" ${T.liBusy ? "disabled" : ""}>${T.liBusy ? "投稿してるで…" : "このままLinkedInに投稿する"}</button>
             <button type="button" class="btn-text" data-act="liDisconnect">連携をやめる</button>
           </section>`
-        : `<section class="block li-box">
+      : `<section class="block li-box">
             <h2 class="sec-title">LinkedInに、そのまま投稿</h2>
             <p class="sec-note bx">初回だけ、LinkedInの許可画面が出る。<wbr>許可したら、コピーの手間なしで<wbr>そのまま投稿できるようになるで。</p>
             <button type="button" class="btn btn-secondary btn-block" data-act="liConnect">LinkedInと連携して、そのまま投稿する</button>
-          </section>`
-      : "";
+          </section>`;
+  }
+  function viewGuide() {
+    const text = finalText(S.tab);
+    const liBlock = liBlockHtml();
     const html = `
       <div class="done-cloud cloud" data-bump="34" data-seed="9">
         <h1 class="done-title" tabindex="-1">あとは投稿するだけ！</h1>
@@ -1739,6 +1756,7 @@
     if (f) f.focus({ preventScroll: true });
   }
   function closeSheet() {
+    T.liAfterCheck = false;
     // 「書き方を変える」を開いて、作り直さずに閉じたときは、元の書き方にもどす
     if (T.modeFrom === "regen" && S.results && S.resultMode != null && S.mode !== S.resultMode) {
       S.mode = S.resultMode;
@@ -1758,7 +1776,7 @@
     return `
       <div class="sheet-grip" aria-hidden="true"></div>
       <h2 class="sheet-title" id="sheetTitle">投稿前チェック</h2>
-      <p class="sheet-lead">4つ確認したら、ボタンが押せるようになるで。</p>
+      <p class="sheet-lead">${T.liAfterCheck ? "投稿の前に4つ確認してな。終わったら、そのまま投稿の確認に進むで。" : "4つ確認したら、ボタンが押せるようになるで。"}</p>
       <div class="checklist">
         ${C.checklist.map((c, i) => `<button type="button" class="check" role="checkbox" aria-checked="${S.checks[i]}" data-act="check" data-i="${i}"><span class="box" aria-hidden="true">${S.checks[i] ? ICON.check : ""}</span><span>${esc(c)}</span></button>`).join("")}
       </div>
@@ -1767,7 +1785,7 @@
         <div><div class="consent-label bx" id="consentLabel">${fmt(C.consentLabel)}</div><div class="consent-note">${esc(C.consentNote)}</div></div>
       </div>
       <div class="stack">
-        <button type="button" class="btn btn-primary btn-block" id="toGuide" data-act="toGuide" aria-disabled="${!ready}">つぎへ（投稿のしかた）</button>
+        <button type="button" class="btn btn-primary btn-block" id="toGuide" data-act="toGuide" aria-disabled="${!ready}">${T.liAfterCheck ? "チェックOK・投稿の確認へ" : "つぎへ（投稿のしかた）"}</button>
         <button type="button" class="btn-text" data-act="closeSheet">もどって直す</button>
       </div>`;
   }
@@ -1855,17 +1873,7 @@
   }
   // 始める前の確認：名前 → フォロー
   function needName() {
-    if (!myName()) {
-      T.nameMissing = true;
-      keepScroll(render);
-      const box = $("#myName");
-      if (box) {
-        box.scrollIntoView({ block: "center" });
-        box.focus({ preventScroll: true });
-      }
-      toast("最初に、お名前を入れてな", 2000);
-      return true;
-    }
+    // 名前は任意（署名・自己紹介に使うだけ）。止めるのはフォロー必須のときだけ
     if (!followed()) {
       T.followMissing = true;
       keepScroll(render);
@@ -4084,7 +4092,12 @@
           toast("チェックを4つ付けてな", 1800);
           break;
         }
+        const afterCheck = T.liAfterCheck;
         closeSheet();
+        if (afterCheck) {
+          openLiPostSheet();
+          break;
+        }
         go("guide");
         break;
       case "consent":
@@ -4119,16 +4132,13 @@
         break;
       case "liPost": {
         if (!T.li) break;
-        const text = finalText(S.tab);
-        openSheet(
-          `<h2 class="sheet-title" id="sheetTitle">このまま投稿する？</h2>
-           <p class="sheet-lead">LinkedInに、この文章で投稿されるで。</p>
-           <div class="preview">${esc(text)}</div>
-           <div class="stack">
-             <button type="button" class="btn btn-primary btn-block" data-act="liPostGo">投稿する</button>
-             <button type="button" class="btn btn-secondary btn-block" data-act="closeSheet">やめとく</button>
-           </div>`
-        );
+        // 結果画面から直接の投稿は、先に投稿前チェック（4つ）を通す
+        if (S.step === "result" && !S.checks.every(Boolean)) {
+          T.liAfterCheck = true;
+          openSheet(checkSheetHtml(), ".check");
+          break;
+        }
+        openLiPostSheet();
         break;
       }
       case "liPostGo": {
