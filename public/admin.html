@@ -544,6 +544,15 @@
       .join("");
   }
 
+  // 開きっぱなしでも数字が古くならないよう、見ている間だけ30秒ごとに読み直す
+  setInterval(() => {
+    if (document.hidden) return;
+    const pane = document.querySelector(".tab.on");
+    if (!pane || pane.dataset.tab !== "report") return;
+    if (document.querySelector("#rows tr.detail:not([hidden])")) return; // 詳細を開いている間は邪魔しない
+    loadSummary().catch(() => {});
+    loadRows(true).catch(() => {});
+  }, 30000);
   let rowsGen = 0; // 絞り込み切替と初期読み込みが競合したら、古い応答は捨てる
   async function loadRows(reset) {
     if (reset) { offset = 0; rowsGen++; $("#rows").innerHTML = ""; }
