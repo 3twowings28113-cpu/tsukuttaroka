@@ -399,6 +399,12 @@
       <section class="panel"><h2>書き方（作るときに選んだもの）</h2><div class="bars" id="modes"></div></section>
     </div>
 
+    <div class="row" data-pane="report" style="margin:0 0 10px;align-items:center;gap:8px">
+      <label class="msg" for="rpEvent">イベントで分ける</label>
+      <select id="rpEvent"><option value="">ぜんぶ</option><option value="-">イベントなし（普段使い）</option></select>
+      <span class="empty" id="rpScopeNote"></span>
+    </div>
+
     <section class="panel" id="peoplePanel" data-pane="report">
       <h2>アプリを使った人（最初に入れた名前）<span id="peopleCount" class="empty"></span></h2>
       <div class="table-wrap"><table class="people">
@@ -471,7 +477,8 @@
   }
 
   async function loadSummary() {
-    const res = await api("api/admin/summary");
+    const ev = rpEventVal();
+    const res = await api("api/admin/summary" + (ev ? `?e=${encodeURIComponent(ev)}` : ""));
     summary = await res.json();
     renderSummary();
   }
@@ -515,7 +522,8 @@
 
   async function loadRows(reset) {
     if (reset) { offset = 0; $("#rows").innerHTML = ""; }
-    const res = await api(`api/admin/posts?limit=50&offset=${offset}`);
+    const ev2 = rpEventVal();
+    const res = await api(`api/admin/posts?limit=50&offset=${offset}` + (ev2 ? `&e=${encodeURIComponent(ev2)}` : ""));
     const d = await res.json();
     const rows = d.rows || [];
     offset += rows.length;
@@ -583,7 +591,8 @@
   }
 
   function csv() {
-    return download("api/admin/export", "tsukuttaroka.csv");
+    const ev = rpEventVal();
+    return download("api/admin/export" + (ev ? `?e=${encodeURIComponent(ev)}` : ""), "tsukuttaroka.csv");
   }
 
   async function wipe() {
@@ -868,12 +877,37 @@
 
   // ---------- 利用状況 ----------
   function fillEventSelects() {
-    for (const id of ["#stEvent", "#prEvent"]) {
+    for (const id of ["#stEvent", "#prEvent", "#rpEvent"]) {
       const sel = $(id);
+      if (!sel) continue;
       const cur = sel.value;
-      const base = id === "#stEvent" ? '<option value="">ぜんぶ</option><option value="-">イベントなし（普段使い）</option>' : '<option value="">入れない</option>';
+      const base = id === "#prEvent" ? '<option value="">入れない</option>' : '<option value="">ぜんぶ</option><option value="-">イベントなし（普段使い）</option>';
       sel.innerHTML = base + events.map((ev) => `<option value="${esc(ev.id)}">${esc(ev.name || ev.id)}（${esc(ev.id)}）</option>`).join("");
       if ([...sel.options].some((o) => o.value === cur)) sel.value = cur;
+      // 「集まった投稿・使った人」は、最初は開催中のイベントに絞る（?e= があればそれ優先）
+      if (id === "#rpEvent" && !sel.dataset.init) {
+        sel.dataset.init = "1";
+        const q = new URLSearchParams(location.search).get("e");
+        const act = events.find((ev) => ev.active);
+        const want = q || (act ? act.id : "");
+        if (want && [...sel.options].some((o) => o.value === want)) {
+          sel.value = want;
+          rpChanged(true);
+        }
+      }
+    }
+  }
+  function rpEventVal() {
+    const sel = $("#rpEvent");
+    return sel ? sel.value : "";
+  }
+  function rpChanged(reload = true) {
+    const sel = $("#rpEvent");
+    const note = $("#rpScopeNote");
+    if (note && sel) note.textContent = sel.value ? `表示中：${sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : sel.value}` : "表示中：ぜんぶ";
+    if (reload) {
+      loadSummary().catch(() => {});
+      loadRows(true).catch(() => {});
     }
   }
   function barChart(el, items, label) {
@@ -996,6 +1030,7 @@
   $("#prTest").addEventListener("click", testPrompt);
   $("#stDays").addEventListener("change", () => loadStats().catch(() => {}));
   $("#stEvent").addEventListener("change", () => loadStats().catch(() => {}));
+  $("#rpEvent").addEventListener("change", () => rpChanged(true));
   function loadAll() {
     loadArchives().catch(() => {});
     loadSummary().catch(() => {});

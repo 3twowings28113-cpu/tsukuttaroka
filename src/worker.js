@@ -51,7 +51,7 @@ import {
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-31.lscw-21";
+const VERSION = "2026-10-31.lscw-22";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -204,7 +204,8 @@ const SCHEMA = [
     edited INTEGER NOT NULL DEFAULT 0,
     client_id TEXT,
     post_url TEXT,
-    li_name TEXT
+    li_name TEXT,
+    event TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1150,7 +1151,7 @@ async function submit(request, env) {
     stmts.push(
       db
         .prepare(
-          "INSERT INTO posts (created_at, action, role, cards, answers, style, patterns, tone, final_text, edited, client_id, post_url, li_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO posts (created_at, action, role, cards, answers, style, patterns, tone, final_text, edited, client_id, post_url, li_name, event) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(
           now,
@@ -1165,7 +1166,8 @@ async function submit(request, env) {
           body.edited ? 1 : 0,
           cid,
           postUrl,
-          liName
+          liName,
+          cleanEventId(body.event)
         )
     );
   }
@@ -1173,6 +1175,7 @@ async function submit(request, env) {
     // 既存の posts テーブルに列が無ければ足す（直接投稿のURL・LinkedIn名の保存用）
     try { await db.exec("ALTER TABLE posts ADD COLUMN post_url TEXT"); } catch {}
     try { await db.exec("ALTER TABLE posts ADD COLUMN li_name TEXT"); } catch {}
+    try { await db.exec("ALTER TABLE posts ADD COLUMN event TEXT"); } catch {}
   }
   await db.batch(stmts);
   return json({ ok: true, stored: consent });
@@ -1300,12 +1303,21 @@ async function adminSummary(env, url) {
     people: [],
   };
   if (!db) return json(out);
+  // イベントで分ける（?e=イベントID／?e=- はイベントなし）。events は detail の event、posts は event 列で絞る
+  const eRawS = String(url.searchParams.get("e") || "");
+  const eF = eRawS === "-" ? "-" : cleanEventId(eRawS);
+  const evc = eF === "-" ? " AND COALESCE(json_extract(detail, '$.event'), '') = ''" : eF ? " AND json_extract(detail, '$.event') = ?" : "";
+  const evb = eF && eF !== "-" ? [eF] : [];
+  const pcond = eF === "-" ? " AND COALESCE(event, '') = ''" : eF ? " AND event = ?" : "";
+  try { await db.exec("ALTER TABLE posts ADD COLUMN event TEXT"); } catch {}
+  try { await db.exec("ALTER TABLE posts ADD COLUMN post_url TEXT"); } catch {}
+  try { await db.exec("ALTER TABLE posts ADD COLUMN li_name TEXT"); } catch {}
   const [cnt, posts, gens, picks, errs, reps, repNames] = await db.batch([
-    db.prepare("SELECT type, COUNT(*) AS n FROM events WHERE created_at >= ? AND created_at < ? GROUP BY type").bind(F, T),
-    db.prepare("SELECT COUNT(*) AS n FROM posts WHERE created_at >= ? AND created_at < ?").bind(F, T),
-    db.prepare("SELECT detail FROM events WHERE type = 'generate' AND created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT 3000").bind(F, T),
-    db.prepare("SELECT type, detail FROM events WHERE type IN ('copy', 'later', 'linkedin') AND created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT 3000").bind(F, T),
-    db.prepare("SELECT created_at, detail FROM events WHERE type = 'error' AND created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT 20").bind(F, T),
+    db.prepare(`SELECT type, COUNT(*) AS n FROM events WHERE created_at >= ? AND created_at < ?${evc} GROUP BY type`).bind(F, T, ...evb),
+    db.prepare(`SELECT COUNT(*) AS n FROM posts WHERE created_at >= ? AND created_at < ?${pcond}`).bind(F, T, ...evb),
+    db.prepare(`SELECT detail FROM events WHERE type = 'generate' AND created_at >= ? AND created_at < ?${evc} ORDER BY id DESC LIMIT 3000`).bind(F, T, ...evb),
+    db.prepare(`SELECT type, detail FROM events WHERE type IN ('copy', 'later', 'linkedin') AND created_at >= ? AND created_at < ?${evc} ORDER BY id DESC LIMIT 3000`).bind(F, T, ...evb),
+    db.prepare(`SELECT created_at, detail FROM events WHERE type = 'error' AND created_at >= ? AND created_at < ?${evc} ORDER BY id DESC LIMIT 20`).bind(F, T, ...evb),
     db.prepare("SELECT COUNT(*) AS n FROM reports WHERE hidden = 0 AND created_at >= ? AND created_at < ?").bind(rg.from, rg.to),
     db.prepare("SELECT name, created_at FROM reports WHERE hidden = 0 AND created_at >= ? AND created_at < ?").bind(rg.from, rg.to),
   ]);
@@ -1372,7 +1384,14 @@ async function adminPosts(env, url) {
   const limit = Math.min(100, Math.max(1, Number(url.searchParams.get("limit")) || 50));
   const offset = Math.max(0, Number(url.searchParams.get("offset")) || 0);
   const rg = await rangeOf(env, url);
-  const { results } = await db.prepare("SELECT * FROM posts WHERE created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT ? OFFSET ?").bind(isoOf(rg.from), isoOf(rg.to), limit, offset).all();
+  const eRawP = String(url.searchParams.get("e") || "");
+  const eP = eRawP === "-" ? "-" : cleanEventId(eRawP);
+  const pcondP = eP === "-" ? " AND COALESCE(event, '') = ''" : eP ? " AND event = ?" : "";
+  const pb = eP && eP !== "-" ? [eP] : [];
+  try { await db.exec("ALTER TABLE posts ADD COLUMN event TEXT"); } catch {}
+  try { await db.exec("ALTER TABLE posts ADD COLUMN post_url TEXT"); } catch {}
+  try { await db.exec("ALTER TABLE posts ADD COLUMN li_name TEXT"); } catch {}
+  const { results } = await db.prepare(`SELECT * FROM posts WHERE created_at >= ? AND created_at < ?${pcondP} ORDER BY id DESC LIMIT ? OFFSET ?`).bind(isoOf(rg.from), isoOf(rg.to), ...pb, limit, offset).all();
   const rows = (results || []).map((r) => ({
     id: r.id,
     at: jst(r.created_at),
@@ -1394,10 +1413,17 @@ async function adminPosts(env, url) {
 async function adminExport(env, url) {
   const db = await getDb(env);
   const rg = await rangeOf(env, url);
-  const header = ["日時", "行動", "立場", "ネタ", "回答", "文体", "関西弁", "長さ", "絵文字", "入れたい一言", "選んだパターン", "自分で直した", "投稿文", "エモい案", "ユーモア案", "学び案"];
+  const header = ["日時", "行動", "立場", "ネタ", "回答", "文体", "関西弁", "長さ", "絵文字", "入れたい一言", "選んだパターン", "自分で直した", "投稿文", "エモい案", "ユーモア案", "学び案", "イベント", "LinkedIn名", "投稿URL"];
   const lines = [header];
   if (db) {
-    const { results } = await db.prepare("SELECT * FROM posts WHERE created_at >= ? AND created_at < ? ORDER BY id ASC").bind(isoOf(rg.from), isoOf(rg.to)).all();
+    const eRawX = String(url.searchParams.get("e") || "");
+    const eX = eRawX === "-" ? "-" : cleanEventId(eRawX);
+    const pcondX = eX === "-" ? " AND COALESCE(event, '') = ''" : eX ? " AND event = ?" : "";
+    const xb = eX && eX !== "-" ? [eX] : [];
+    try { await db.exec("ALTER TABLE posts ADD COLUMN event TEXT"); } catch {}
+    try { await db.exec("ALTER TABLE posts ADD COLUMN post_url TEXT"); } catch {}
+    try { await db.exec("ALTER TABLE posts ADD COLUMN li_name TEXT"); } catch {}
+    const { results } = await db.prepare(`SELECT * FROM posts WHERE created_at >= ? AND created_at < ?${pcondX} ORDER BY id ASC`).bind(isoOf(rg.from), isoOf(rg.to), ...xb).all();
     const toneName = { emo: "エモい", humor: "ユーモア", straight: "学び" };
     for (const r of results || []) {
       const st = safeParse(r.style, {});
@@ -1407,7 +1433,7 @@ async function adminExport(env, url) {
         .join("\n");
       lines.push([
         jst(r.created_at),
-        r.action === "later" ? "あとで投稿" : "コピーしてLinkedIn",
+        r.action === "later" ? "あとで投稿" : r.action === "linkedin" ? "LinkedInに直接投稿" : "コピーしてLinkedIn",
         r.role || "",
         safeParse(r.cards, []).join("、"),
         answers,
@@ -1422,6 +1448,9 @@ async function adminExport(env, url) {
         pt.emo || "",
         pt.humor || "",
         pt.straight || "",
+        r.event || "",
+        r.li_name || "",
+        r.post_url || "",
       ]);
     }
   }
