@@ -51,7 +51,7 @@ import {
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-31.lscw-20";
+const VERSION = "2026-10-31.lscw-21";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -202,7 +202,9 @@ const SCHEMA = [
     tone TEXT,
     final_text TEXT,
     edited INTEGER NOT NULL DEFAULT 0,
-    client_id TEXT
+    client_id TEXT,
+    post_url TEXT,
+    li_name TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1129,6 +1131,9 @@ async function submit(request, env) {
   const cid = String(body.clientId || "").slice(0, 64);
   if (limited(`s:${cid}`, 20, 60000)) return json({ ok: false, code: "rate" }, 429);
   const action = ["later", "linkedin"].includes(body.action) ? body.action : "copy";
+  const liName = action === "linkedin" ? cleanName(body.liName) : "";
+  const postUrlRaw = action === "linkedin" ? String(body.postUrl || "") : "";
+  const postUrl = /^https:\/\/www\.linkedin\.com\/[\w\-/%:.?=&]+$/.test(postUrlRaw) && postUrlRaw.length <= 220 ? postUrlRaw : "";
   const tone = TONE_IDS.includes(body.tone) ? body.tone : "";
   const p = sanitizePayload(body);
   p.answers = p.answers.filter((a) => a.id !== "memo"); // ネタ帳のメモは、サーバーに残さない（端末でも外しているが念のため）
@@ -1137,7 +1142,7 @@ async function submit(request, env) {
   const now = new Date().toISOString();
   const consent = body.consent === true;
   const stmts = [
-    db.prepare("INSERT INTO events (created_at, type, detail) VALUES (?, ?, ?)").bind(now, action, JSON.stringify({ tone, consent, name: cleanName(body.name), mode: p.mode, kind: p.kind, u: uidOf(cid), event: cleanEventId(body.event), page: oneLine(body.page, 20) })),
+    db.prepare("INSERT INTO events (created_at, type, detail) VALUES (?, ?, ?)").bind(now, action, JSON.stringify({ tone, consent, name: cleanName(body.name) || liName, liName, url: postUrl, mode: p.mode, kind: p.kind, u: uidOf(cid), event: cleanEventId(body.event), page: oneLine(body.page, 20) })),
   ];
   if (consent) {
     const patterns = {};
@@ -1145,7 +1150,7 @@ async function submit(request, env) {
     stmts.push(
       db
         .prepare(
-          "INSERT INTO posts (created_at, action, role, cards, answers, style, patterns, tone, final_text, edited, client_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+          "INSERT INTO posts (created_at, action, role, cards, answers, style, patterns, tone, final_text, edited, client_id, post_url, li_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
         )
         .bind(
           now,
@@ -1158,9 +1163,16 @@ async function submit(request, env) {
           tone,
           String(body.finalText || "").slice(0, 3500),
           body.edited ? 1 : 0,
-          cid
+          cid,
+          postUrl,
+          liName
         )
     );
+  }
+  if (consent) {
+    // 既存の posts テーブルに列が無ければ足す（直接投稿のURL・LinkedIn名の保存用）
+    try { await db.exec("ALTER TABLE posts ADD COLUMN post_url TEXT"); } catch {}
+    try { await db.exec("ALTER TABLE posts ADD COLUMN li_name TEXT"); } catch {}
   }
   await db.batch(stmts);
   return json({ ok: true, stored: consent });
@@ -1373,6 +1385,8 @@ async function adminPosts(env, url) {
     tone: r.tone,
     finalText: r.final_text,
     edited: !!r.edited,
+    postUrl: r.post_url || "",
+    liName: r.li_name || "",
   }));
   return json({ ok: true, rows });
 }

@@ -530,6 +530,8 @@
           </div>
           <div>
             <h3>投稿文（${esc(TONE[r.tone] || "")}${r.edited ? "・自分で直した" : ""}／${r.action === "later" ? "あとで投稿" : r.action === "linkedin" ? "LinkedInに直接投稿" : "コピーしてLinkedIn"}）</h3>
+            ${r.liName ? `<p class="msg">LinkedInの名前：${esc(r.liName)}</p>` : ""}
+            ${r.postUrl ? `<p class="msg"><a href="${esc(r.postUrl)}" target="_blank" rel="noopener">投稿を見る（LinkedIn）</a></p>` : ""}
             <div class="pre">${esc(r.finalText)}</div>
           </div>
         </div>`;

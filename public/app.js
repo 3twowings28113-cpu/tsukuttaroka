@@ -2977,7 +2977,7 @@
     }
   }
 
-  function record(action) {
+  function record(action, postUrl) {
     const t = S.tab;
     const text = finalText(t);
     const key = `${action}|${t}|${count(text)}|${text.slice(0, 24)}`;
@@ -2994,6 +2994,9 @@
       patterns: Object.fromEntries(TONES.map((x) => [x.id, (S.results[x.id] && S.results[x.id].body) || ""])),
       consent: !!S.consent,
       cardIds: flowCards().map((c) => c.id),
+      // 直接投稿のときだけ、投稿URLとLinkedInの表示名（あとから探せるように）
+      postUrl: action === "linkedin" ? String(postUrl || "") : "",
+      liName: action === "linkedin" && T.li ? String(T.li.name || "") : "",
     });
   }
 
@@ -4149,7 +4152,7 @@
         postJSON("api/linkedin/post", { token: T.li.token, text: finalText(S.tab) }, 45000)
           .then((data) => {
             T.liBusy = false;
-            record("linkedin");
+            record("linkedin", data.url || "");
             S.done = { action: "linkedin", tone: S.tab, text: finalText(S.tab), url: data.url || "", shared: false };
             save();
             go("done");
