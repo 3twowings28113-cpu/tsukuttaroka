@@ -220,8 +220,14 @@
 
 <main>
   <div id="dash" style="display:grid;grid-template-columns:minmax(0,1fr);gap:16px">
-    <section class="panel">
-      <div class="status" id="status"></div>
+    <div class="row" id="scopeBar" style="align-items:center;gap:8px;background:#fff;border:2px solid #0a66c2;border-radius:12px;padding:10px 12px">
+      <label for="rpEvent" style="font-weight:700;font-size:17px">イベント</label>
+      <select id="rpEvent" style="font-size:16px;padding:8px;max-width:62vw"><option value="">ぜんぶ</option><option value="-">イベントなし（普段使い）</option></select>
+      <span class="empty" id="rpScopeNote"></span>
+    </div>
+    <details class="panel" id="sysPanel">
+      <summary style="cursor:pointer;font-weight:700">AI・システムの設定（必要なときだけ開く）</summary>
+      <div class="status" id="status" style="margin-top:10px"></div>
       <div class="row" style="margin-top:10px">
         <button class="btn btn-primary" id="testBtn" type="button">AIの接続テスト</button>
         <button class="btn" id="keyHelpBtn" type="button" aria-expanded="false" aria-controls="keyHelp">AIのキーを入れる・変える</button>
@@ -236,14 +242,14 @@
         <p class="empty" style="margin:0">キーは「AIza」か「AQ.」で始まる文字です。<a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> で作れます。</p>
       </div>
       <p class="msg" id="opMsg" role="status" aria-live="polite"></p>
-    </section>
+    </details>
 
     <p class="period" id="periodLine" hidden></p>
 
     <nav class="tabs" role="tablist" aria-label="運営ページの中身">
       <button type="button" role="tab" data-tab="home" aria-selected="true">ようす</button>
       <button type="button" role="tab" data-tab="event" aria-selected="false">イベント</button>
-      <button type="button" role="tab" data-tab="report" aria-selected="false">集まった投稿・使った人</button>
+      <button type="button" role="tab" data-tab="report" aria-selected="false">投稿と使った人</button>
       <button type="button" role="tab" data-tab="prompt" aria-selected="false">AIの指示文</button>
       <button type="button" role="tab" data-tab="data" aria-selected="false">データ・過去の記録</button>
     </nav>
@@ -399,14 +405,10 @@
       <section class="panel"><h2>書き方（作るときに選んだもの）</h2><div class="bars" id="modes"></div></section>
     </div>
 
-    <div class="row" data-pane="report" style="margin:0 0 10px;align-items:center;gap:8px">
-      <label class="msg" for="rpEvent">イベントで分ける</label>
-      <select id="rpEvent"><option value="">ぜんぶ</option><option value="-">イベントなし（普段使い）</option></select>
-      <span class="empty" id="rpScopeNote"></span>
-    </div>
+    <section class="nums" id="rpNums" data-pane="report" aria-label="件数"></section>
 
     <section class="panel" id="peoplePanel" data-pane="report">
-      <h2>アプリを使った人（最初に入れた名前）<span id="peopleCount" class="empty"></span></h2>
+      <h2>使った人（投稿した人が上）<span id="peopleCount" class="empty"></span></h2>
       <div class="table-wrap"><table class="people">
         <thead><tr><th>名前</th><th>フォロー</th><th>作った</th><th>コピー</th><th>投稿</th></tr></thead>
         <tbody id="peopleRows"></tbody>
@@ -421,7 +423,7 @@
       <h2>集まった投稿（共有ONの人だけ）<span id="postCount" class="empty"></span></h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>日時</th><th>立場</th><th>ネタ</th><th>パターン</th><th>投稿文（冒頭）</th></tr></thead>
+          <thead><tr><th>名前</th><th>日時</th><th>どうした</th><th>投稿文（冒頭）</th></tr></thead>
           <tbody id="rows"></tbody>
         </table>
       </div>
@@ -497,6 +499,8 @@
     const c = s.counts;
     const cell = (label, n, warn, hot) => `<div class="num${warn && n ? " warn" : ""}${hot ? " hot" : ""}"><b>${n}</b><span>${label}</span></div>`;
     $("#nums").innerHTML = cell("生成", c.generate) + cell("書き直し", c.refine) + cell("コピー", c.copy) + cell("あとで投稿", c.later) + cell("LinkedIn投稿", c.linkedin || 0) + cell("エラー", c.error, true);
+    const rpNumsEl = $("#rpNums");
+    if (rpNumsEl) rpNumsEl.innerHTML = cell("LinkedInに投稿", c.linkedin || 0, false, true) + cell("コピーした", c.copy + (c.later || 0)) + cell("文章を作った", c.generate) + cell("使った人", (s.people || []).length);
     const bars = (items) => {
       const max = Math.max(1, ...items.map((x) => x.n));
       return items.length
@@ -541,12 +545,13 @@
           </div>
           <div>
             <h3>投稿文（${esc(TONE[r.tone] || "")}${r.edited ? "・自分で直した" : ""}／${r.action === "later" ? "あとで投稿" : r.action === "linkedin" ? "LinkedInに直接投稿" : "コピーしてLinkedIn"}）</h3>
-            ${r.liName ? `<p class="msg">LinkedInの名前：${esc(r.liName)}</p>` : ""}
+            ${r.name ? `<p class="msg">名前：${esc(r.name)}${r.role ? `（${esc(r.role)}）` : ""}／ネタ：${esc((r.cards || []).join("、"))}</p>` : ""}
             ${r.postUrl ? `<p class="msg"><a href="${esc(r.postUrl)}" target="_blank" rel="noopener">投稿を見る（LinkedIn）</a></p>` : ""}
             <div class="pre">${esc(r.finalText)}</div>
           </div>
         </div>`;
-      return `<tr class="item" data-id="${r.id}" tabindex="0"><td class="at">${esc(r.at)}</td><td class="role">${esc(r.role || "—")}</td><td>${esc((r.cards || []).join("、"))}</td><td class="tone">${esc(TONE[r.tone] || "")}</td><td>${esc(String(r.finalText || "").replace(/\s+/g, " ").slice(0, 48))}…</td></tr><tr class="detail" id="d${r.id}" hidden><td colspan="5">${detail}</td></tr>`;
+      const KIND = { linkedin: "LinkedInに投稿", copy: "コピーした", later: "あとで投稿" };
+      return `<tr class="item" data-id="${r.id}" tabindex="0"><td><b>${esc(r.name || "（名前なし）")}</b></td><td class="at">${esc(r.at)}</td><td>${esc(KIND[r.action] || r.action)}</td><td>${esc(String(r.finalText || "").replace(/\s+/g, " ").slice(0, 48))}…</td></tr><tr class="detail" id="d${r.id}" hidden><td colspan="4">${detail}</td></tr>`;
     }).join("");
     $("#rows").insertAdjacentHTML("beforeend", html);
     $("#noRows").hidden = offset > 0;
@@ -911,6 +916,11 @@
     if (reload) {
       loadSummary().catch(() => {});
       loadRows(true).catch(() => {});
+      const st = $("#stEvent");
+      if (st && [...st.options].some((o) => o.value === sel.value)) {
+        st.value = sel.value;
+        loadStats().catch(() => {});
+      }
     }
   }
   function barChart(el, items, label) {
@@ -1044,7 +1054,7 @@
   }
 
   // ---------- タブ ----------
-  const TAB_KEY = "tsukuttaroka.admin.tab";
+  const TAB_KEY = "tsukuttaroka.admin.tab.v2";
   function setTab(t) {
     document.querySelectorAll("[role=tab][data-tab]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
     document.querySelectorAll("[data-pane]").forEach((el) => {
@@ -1059,9 +1069,10 @@
     setTab(b.dataset.tab || b.dataset.goto);
     if (b.dataset.goto) window.scrollTo({ top: 0, behavior: "smooth" });
   });
-  let tab0 = "home";
-  try { tab0 = sessionStorage.getItem(TAB_KEY) || "home"; } catch {}
+  let tab0 = "report";
+  try { tab0 = sessionStorage.getItem(TAB_KEY) || "report"; } catch {}
   setTab(tab0);
+  { const pl = $("#periodLine"); const sp = $("#sysPanel"); if (pl && sp) sp.appendChild(pl); }
   let keyHelpShown = false;
   $("#keyHelpBtn").addEventListener("click", () => {
     const box = $("#keyHelp");

@@ -51,7 +51,7 @@ import {
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-31.lscw-23";
+const VERSION = "2026-10-31.lscw-24";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -1366,7 +1366,7 @@ async function adminSummary(env, url) {
     const pp = person(r.name);
     if (pp) pp.reported = true;
   }
-  out.people = [...people.values()].sort((a, b) => a.name.localeCompare(b.name, "ja"));
+  out.people = [...people.values()].sort((a, b) => (b.posted || 0) - (a.posted || 0) || (b.copied || 0) - (a.copied || 0) || (b.made || 0) - (a.made || 0) || a.name.localeCompare(b.name, "ja"));
   out.followed = out.people.filter((x) => x.followed).length;
   out.recentErrors = (errs.results || []).map((r) => {
     const d = safeParse(r.detail);
@@ -1392,21 +1392,43 @@ async function adminPosts(env, url) {
   try { await db.exec("ALTER TABLE posts ADD COLUMN post_url TEXT"); } catch {}
   try { await db.exec("ALTER TABLE posts ADD COLUMN li_name TEXT"); } catch {}
   const { results } = await db.prepare(`SELECT * FROM posts WHERE created_at >= ? AND created_at < ?${pcondP} ORDER BY id DESC LIMIT ? OFFSET ?`).bind(isoOf(rg.from), isoOf(rg.to), ...pb, limit, offset).all();
-  const rows = (results || []).map((r) => ({
-    id: r.id,
-    at: jst(r.created_at),
-    action: r.action,
-    role: r.role || "",
-    cards: safeParse(r.cards, []),
-    answers: safeParse(r.answers, []),
-    style: safeParse(r.style, {}),
-    patterns: safeParse(r.patterns, {}),
-    tone: r.tone,
-    finalText: r.final_text,
-    edited: !!r.edited,
-    postUrl: r.post_url || "",
-    liName: r.li_name || "",
-  }));
+  const raw = results || [];
+  // 名前は posts に無いので、同じ端末の events（名前・LinkedIn名・投稿URLを持つ）から引く
+  const nameMap = {};
+  try {
+    const uids = [...new Set(raw.map((r) => uidOf(r.client_id)).filter(Boolean))];
+    if (uids.length) {
+      const ph = uids.map(() => "?").join(",");
+      const evs = await db.prepare(`SELECT detail FROM events WHERE created_at >= ? AND created_at < ? AND json_extract(detail, '$.u') IN (${ph}) ORDER BY id DESC`).bind(isoOf(rg.from), isoOf(rg.to), ...uids).all();
+      for (const er of evs.results || []) {
+        const d = safeParse(er.detail);
+        if (!d || !d.u) continue;
+        const cur = nameMap[d.u] || (nameMap[d.u] = { name: "", liName: "", url: "" });
+        if (!cur.liName && d.liName) cur.liName = d.liName;
+        if (!cur.url && d.url) cur.url = d.url;
+        if (!cur.name && d.name) cur.name = d.name;
+      }
+    }
+  } catch {}
+  const rows = raw.map((r) => {
+    const nm = nameMap[uidOf(r.client_id)] || {};
+    return {
+      id: r.id,
+      at: jst(r.created_at),
+      action: r.action,
+      role: r.role || "",
+      cards: safeParse(r.cards, []),
+      answers: safeParse(r.answers, []),
+      style: safeParse(r.style, {}),
+      patterns: safeParse(r.patterns, {}),
+      tone: r.tone,
+      finalText: r.final_text,
+      edited: !!r.edited,
+      postUrl: r.post_url || nm.url || "",
+      liName: r.li_name || nm.liName || "",
+      name: r.li_name || nm.liName || nm.name || "",
+    };
+  });
   return json({ ok: true, rows });
 }
 
