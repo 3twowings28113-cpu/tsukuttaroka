@@ -51,7 +51,7 @@ import {
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-31.lscw-25";
+const VERSION = "2026-10-31.lscw-26";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -788,6 +788,7 @@ function eventForAdmin(id, d, updatedAt) {
     followRequired: d.followRequired === true,
     aiNote: d.aiNote || "",
     aiProvider: d.aiProvider || "",
+    goal: Number(d.goal) || 0,
     aiKeySet: !!d.aiKey,
     aiKeyTail: d.aiKey ? String(d.aiKey).slice(-4) : "",
     overview: d.overview || "",
@@ -832,6 +833,7 @@ async function adminEventSave(request, env) {
     followRequired: !!followUrl && body.followRequired === true,
     aiNote: multiLine(body.aiNote, 1500),
     aiProvider: typeof body.aiProvider === "string" ? (body.aiProvider === "claude" ? "claude" : "") : prev.aiProvider || "",
+    goal: body.goal != null ? Math.min(100000, Math.max(0, Math.floor(Number(body.goal) || 0))) : Number(prev.goal) || 0,
     aiKey: body.clearAiKey ? "" : str(body.aiKey, 300) || prev.aiKey || "",
     overview: multiLine(body.overview, 3000),
     features: cleanFeatures(body.features),
@@ -1295,6 +1297,7 @@ async function adminSummary(env, url) {
     model: env.GEMINI_MODEL || "gemini-3.8-flash",
     fallback: env.GEMINI_FALLBACK_MODEL || "gemini-flash-lite-latest",
     counts: { generate: 0, refine: 0, copy: 0, later: 0, linkedin: 0, error: 0, report: 0 },
+    goal: 0,
     posts: 0,
     topCards: [],
     tones: {},
@@ -1303,6 +1306,16 @@ async function adminSummary(env, url) {
     people: [],
   };
   if (!db) return json(out);
+  {
+    const eRawG = String(url.searchParams.get("e") || "");
+    const eG = eRawG === "-" ? "" : cleanEventId(eRawG);
+    if (eG) {
+      try {
+        const row = await db.prepare("SELECT data FROM event_settings WHERE id = ?").bind(eG).first();
+        out.goal = Number((row && safeParse(row.data, {}).goal) || 0) || 0;
+      } catch {}
+    }
+  }
   // イベントで分ける（?e=イベントID／?e=- はイベントなし）。events は detail の event、posts は event 列で絞る
   const eRawS = String(url.searchParams.get("e") || "");
   const eF = eRawS === "-" ? "-" : cleanEventId(eRawS);

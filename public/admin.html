@@ -304,6 +304,7 @@
           <label>イベント名<small>参加者の画面の上に出ます（空でもOK）</small><input type="text" id="aevName" maxlength="60" autocomplete="off"></label>
           <label>質問セット・色<small>config.js のプリセット。専用ページがあるもの（LSCW → /lscw）は、QRもそのページになります</small><select id="aevPreset"></select></label>
           <label class="chk"><input type="checkbox" id="aevActive" checked> 参加者が使える状態にする</label>
+          <label>目標の投稿数<small>「投稿と使った人」の上に、目標までの進み具合が出ます（空か0なら出しません）</small><input type="number" id="aevGoal" min="0" max="100000" step="1" inputmode="numeric" placeholder="例：120"></label>
         </fieldset>
         <fieldset>
           <legend>AIのキー</legend>
@@ -405,6 +406,11 @@
       <section class="panel"><h2>書き方（作るときに選んだもの）</h2><div class="bars" id="modes"></div></section>
     </div>
 
+    <section class="panel" id="goalPanel" data-pane="report" hidden>
+      <h2 id="goalTitle">目標まで</h2>
+      <div class="track" style="height:16px"><span class="fill" id="goalFill" style="display:block;height:100%"></span></div>
+      <p class="msg" id="goalText" style="margin:6px 0 0"></p>
+    </section>
     <section class="nums" id="rpNums" data-pane="report" aria-label="件数"></section>
 
     <section class="panel" id="peoplePanel" data-pane="report">
@@ -419,7 +425,7 @@
     <section class="panel" id="errPanel" data-pane="home" hidden><h2>最近のエラー</h2><div class="errs" id="errs"></div></section>
 
     <section class="panel" data-pane="report">
-      <div class="row" style="justify-content:flex-end;float:right"><button class="btn" id="csvBtn" type="button">投稿のCSV</button></div>
+      <div class="row" style="justify-content:flex-end;float:right;gap:8px"><button class="btn" id="linksBtn" type="button">投稿リンクを全部コピー</button><button class="btn" id="csvBtn" type="button">投稿のCSV</button></div>
       <h2>集まった投稿（共有ONの人だけ）<span id="postCount" class="empty"></span></h2>
       <div class="table-wrap">
         <table>
@@ -499,6 +505,20 @@
     const c = s.counts;
     const cell = (label, n, warn, hot) => `<div class="num${warn && n ? " warn" : ""}${hot ? " hot" : ""}"><b>${n}</b><span>${label}</span></div>`;
     $("#nums").innerHTML = cell("生成", c.generate) + cell("書き直し", c.refine) + cell("コピー", c.copy) + cell("あとで投稿", c.later) + cell("LinkedIn投稿", c.linkedin || 0) + cell("エラー", c.error, true);
+    {
+      const gp = $("#goalPanel");
+      if (gp) {
+        const goal = Number(s.goal) || 0;
+        const doneN = (c.linkedin || 0) + (c.copy || 0) + (c.later || 0);
+        gp.hidden = !goal;
+        if (goal) {
+          const pct = Math.min(100, Math.round((doneN / goal) * 100));
+          $("#goalTitle").textContent = `目標 ${goal} 本まで`;
+          $("#goalFill").style.width = pct + "%";
+          $("#goalText").textContent = doneN >= goal ? `目標達成！ ${doneN} 本できました（LinkedIn投稿 ${c.linkedin || 0} 本・コピー ${c.copy + (c.later || 0)} 本）` : `いま ${doneN} 本 ／ あと ${goal - doneN} 本（${pct}%）　内訳：LinkedIn投稿 ${c.linkedin || 0} 本・コピー ${c.copy + (c.later || 0)} 本`;
+        }
+      }
+    }
     const rpNumsEl = $("#rpNums");
     if (rpNumsEl) rpNumsEl.innerHTML = cell("LinkedInに投稿", c.linkedin || 0, false, true) + cell("コピーした", c.copy + (c.later || 0)) + cell("文章を作った", c.generate) + cell("使った人", (s.people || []).length);
     const bars = (items) => {
@@ -551,7 +571,7 @@
           </div>
         </div>`;
       const KIND = { linkedin: "LinkedInに投稿", copy: "コピーした", later: "あとで投稿" };
-      return `<tr class="item" data-id="${r.id}" tabindex="0"><td><b>${esc(r.name || "（名前なし）")}</b></td><td class="at">${esc(r.at)}</td><td>${esc(KIND[r.action] || r.action)}</td><td>${esc(String(r.finalText || "").replace(/\s+/g, " ").slice(0, 48))}…</td></tr><tr class="detail" id="d${r.id}" hidden><td colspan="4">${detail}</td></tr>`;
+      return `<tr class="item" data-id="${r.id}" tabindex="0"><td><b>${esc(r.name || "（名前なし）")}</b></td><td class="at">${esc(r.at)}</td><td>${esc(KIND[r.action] || r.action)}${r.postUrl ? `<br><a href="${esc(r.postUrl)}" target="_blank" rel="noopener" data-rowlink>投稿を見る</a>` : ""}</td><td>${esc(String(r.finalText || "").replace(/\s+/g, " ").slice(0, 48))}…</td></tr><tr class="detail" id="d${r.id}" hidden><td colspan="4">${detail}</td></tr>`;
     }).join("");
     $("#rows").insertAdjacentHTML("beforeend", html);
     $("#noRows").hidden = offset > 0;
@@ -598,6 +618,20 @@
     }
   }
 
+  async function copyAllLinks() {
+    const ev = rpEventVal();
+    const urls = [];
+    for (let off = 0; off < 500; off += 50) {
+      const res = await api(`api/admin/posts?limit=50&offset=${off}` + (ev ? `&e=${encodeURIComponent(ev)}` : ""));
+      const d = await res.json();
+      const rows = d.rows || [];
+      for (const r of rows) if (r.action === "linkedin" && r.postUrl) urls.push(r.postUrl);
+      if (rows.length < 50) break;
+    }
+    if (!urls.length) { alert("LinkedInに直接投稿された投稿が、まだありません"); return; }
+    try { await navigator.clipboard.writeText(urls.join("\n")); alert(`投稿リンクを ${urls.length} 件コピーしました`); }
+    catch { prompt("コピーできなかったので、ここからコピーしてください", urls.join("\n")); }
+  }
   function csv() {
     const ev = rpEventVal();
     return download("api/admin/export" + (ev ? `?e=${encodeURIComponent(ev)}` : ""), "tsukuttaroka.csv");
@@ -758,6 +792,7 @@
     $("#aevClearKey").parentElement.hidden = !f.keySet;
     $("#aevCheer").checked = !!f.cheerAlways;
     $("#aevActive").checked = f.active !== false;
+    $("#aevGoal").value = f.goal || "";
     $("#evMsg").textContent = "";
     evDirty = false;
     $("#evDirty").hidden = true;
@@ -776,6 +811,7 @@
       clearKey: $("#aevClearKey").checked,
       cheerAlways: $("#aevCheer").checked,
       active: $("#aevActive").checked,
+      goal: Number($("#aevGoal").value) || 0,
       mentions: $("#aevMentions").value,
       mentionInText: $("#aevMentionInText").checked,
       followUrl: $("#aevFollowUrl").value.trim(),
@@ -1113,6 +1149,7 @@
   $("#reloadBtn").addEventListener("click", () => loadAll());
   $("#testBtn").addEventListener("click", test);
   $("#csvBtn").addEventListener("click", csv);
+  $("#linksBtn").addEventListener("click", () => copyAllLinks().catch(() => {}));
   $("#moreBtn").addEventListener("click", () => loadRows(false));
   // イベントの概要の下書き（質問セットの案内・タイムスケジュール・参加企業から）
   $("#aevDraft").addEventListener("click", () => {
@@ -1127,7 +1164,7 @@
   $("#wipeBtn").addEventListener("click", () => { $("#wipeConfirm").hidden = false; });
   $("#wipeNo").addEventListener("click", () => { $("#wipeConfirm").hidden = true; });
   $("#wipeYes").addEventListener("click", wipe);
-  $("#rows").addEventListener("click", (e) => { const tr = e.target.closest("tr.item"); if (tr) toggleRow(tr); });
+  $("#rows").addEventListener("click", (e) => { if (e.target.closest("a")) return; const tr = e.target.closest("tr.item"); if (tr) toggleRow(tr); });
   $("#rows").addEventListener("keydown", (e) => { const tr = e.target.closest("tr.item"); if (tr && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); toggleRow(tr); } });
 
   loadAll();
