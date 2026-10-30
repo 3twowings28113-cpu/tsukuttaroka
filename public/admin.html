@@ -520,11 +520,14 @@
       .join("");
   }
 
+  let rowsGen = 0; // 絞り込み切替と初期読み込みが競合したら、古い応答は捨てる
   async function loadRows(reset) {
-    if (reset) { offset = 0; $("#rows").innerHTML = ""; }
+    if (reset) { offset = 0; rowsGen++; $("#rows").innerHTML = ""; }
+    const gen = rowsGen;
     const ev2 = rpEventVal();
     const res = await api(`api/admin/posts?limit=50&offset=${offset}` + (ev2 ? `&e=${encodeURIComponent(ev2)}` : ""));
     const d = await res.json();
+    if (gen !== rowsGen) return;
     const rows = d.rows || [];
     offset += rows.length;
     const html = rows.map((r) => {
