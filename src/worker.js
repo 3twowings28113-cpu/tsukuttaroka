@@ -51,7 +51,7 @@ import {
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-30.lscw-19";
+const VERSION = "2026-10-31.lscw-20";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -1128,7 +1128,7 @@ async function submit(request, env) {
   if (!body) return json({ ok: false, code: "input" }, 400);
   const cid = String(body.clientId || "").slice(0, 64);
   if (limited(`s:${cid}`, 20, 60000)) return json({ ok: false, code: "rate" }, 429);
-  const action = body.action === "later" ? "later" : "copy";
+  const action = ["later", "linkedin"].includes(body.action) ? body.action : "copy";
   const tone = TONE_IDS.includes(body.tone) ? body.tone : "";
   const p = sanitizePayload(body);
   p.answers = p.answers.filter((a) => a.id !== "memo"); // ネタ帳のメモは、サーバーに残さない（端末でも外しているが念のため）
@@ -1172,7 +1172,7 @@ async function stats(env, url) {
   const e = cleanEventId(url && url.searchParams.get("e"));
   if (statsCache.data && statsCache.e === e && Date.now() - statsCache.at < 5000) return json(statsCache.data);
   const db = await getDb(env);
-  const data = { ok: true, generated: 0, copied: 0, later: 0 };
+  const data = { ok: true, generated: 0, copied: 0, later: 0, linkedin: 0 };
   if (db) {
     // 会場スクリーンの数は、いまの期間だけ（過去のイベントの分は数えない）
     const rg = await rangeOf(env, null);
@@ -1185,6 +1185,7 @@ async function stats(env, url) {
       if (r.type === "generate") data.generated = r.n;
       if (r.type === "copy") data.copied = r.n;
       if (r.type === "later") data.later = r.n;
+      if (r.type === "linkedin") data.linkedin = r.n;
     }
   }
   statsCache = { at: Date.now(), data, e };
@@ -1278,7 +1279,7 @@ async function adminSummary(env, url) {
     hasKey: !!env.GEMINI_API_KEY,
     model: env.GEMINI_MODEL || "gemini-3.8-flash",
     fallback: env.GEMINI_FALLBACK_MODEL || "gemini-flash-lite-latest",
-    counts: { generate: 0, refine: 0, copy: 0, later: 0, error: 0, report: 0 },
+    counts: { generate: 0, refine: 0, copy: 0, later: 0, linkedin: 0, error: 0, report: 0 },
     posts: 0,
     topCards: [],
     tones: {},
@@ -1291,7 +1292,7 @@ async function adminSummary(env, url) {
     db.prepare("SELECT type, COUNT(*) AS n FROM events WHERE created_at >= ? AND created_at < ? GROUP BY type").bind(F, T),
     db.prepare("SELECT COUNT(*) AS n FROM posts WHERE created_at >= ? AND created_at < ?").bind(F, T),
     db.prepare("SELECT detail FROM events WHERE type = 'generate' AND created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT 3000").bind(F, T),
-    db.prepare("SELECT detail FROM events WHERE type IN ('copy', 'later') AND created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT 3000").bind(F, T),
+    db.prepare("SELECT type, detail FROM events WHERE type IN ('copy', 'later', 'linkedin') AND created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT 3000").bind(F, T),
     db.prepare("SELECT created_at, detail FROM events WHERE type = 'error' AND created_at >= ? AND created_at < ? ORDER BY id DESC LIMIT 20").bind(F, T),
     db.prepare("SELECT COUNT(*) AS n FROM reports WHERE hidden = 0 AND created_at >= ? AND created_at < ?").bind(rg.from, rg.to),
     db.prepare("SELECT name, created_at FROM reports WHERE hidden = 0 AND created_at >= ? AND created_at < ?").bind(rg.from, rg.to),
@@ -1317,7 +1318,7 @@ async function adminSummary(env, url) {
     const n = cleanName(name);
     const k = n && nameKey(n);
     if (!k) return null;
-    if (!people.has(k)) people.set(k, { name: n, made: 0, copied: 0, reported: false, followed: false });
+    if (!people.has(k)) people.set(k, { name: n, made: 0, copied: 0, posted: 0, reported: false, followed: false });
     return people.get(k);
   };
   for (const r of gens.results || []) {
@@ -1332,7 +1333,10 @@ async function adminSummary(env, url) {
   }
   for (const r of picks.results || []) {
     const pp = person(safeParse(r.detail).name);
-    if (pp) pp.copied += 1;
+    if (pp) {
+      if (r.type === "linkedin") pp.posted += 1;
+      else pp.copied += 1;
+    }
   }
   for (const r of repNames.results || []) {
     const pp = person(r.name);
@@ -1482,12 +1486,12 @@ async function adminStats(env, url) {
          SUM(CASE WHEN json_extract(detail, '$.ownKey') = 1 THEN 1 ELSE 0 END) AS own,
          AVG(json_extract(detail, '$.ms')) AS ms
        FROM events WHERE type = 'generate' AND created_at >= ?${cond} GROUP BY k`, since),
-    q(`SELECT COUNT(DISTINCT ${U}) AS u FROM events WHERE type IN ('copy', 'later') AND created_at >= ?${cond} AND COALESCE(${U}, '') != ''`, since),
+    q(`SELECT COUNT(DISTINCT ${U}) AS u FROM events WHERE type IN ('copy', 'later', 'linkedin') AND created_at >= ?${cond} AND COALESCE(${U}, '') != ''`, since),
     db.prepare(`SELECT ${EV} AS ev, type, COUNT(*) AS n FROM events WHERE created_at >= ? GROUP BY ev, type`).bind(since),
     db.prepare(`SELECT ${EV} AS ev, COUNT(DISTINCT ${U}) AS u FROM events WHERE created_at >= ? AND COALESCE(${U}, '') != '' GROUP BY ev`).bind(since),
     db.prepare("SELECT id, data FROM event_settings"),
   ]);
-  const TYPES = ["view", "generate", "refine", "copy", "later", "report", "error"];
+  const TYPES = ["view", "generate", "refine", "copy", "later", "linkedin", "report", "error"];
   const zero = () => Object.fromEntries(TYPES.map((t) => [t, 0]));
   const total = zero();
   const totalU = zero();

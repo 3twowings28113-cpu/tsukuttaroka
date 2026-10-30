@@ -162,7 +162,7 @@
   async function refresh() {
     try {
       const d = await (await fetch(evId ? `api/stats?e=${encodeURIComponent(evId)}` : "api/stats", { cache: "no-store" })).json();
-      const made = (d.copied || 0) + (d.later || 0);
+      const made = (d.copied || 0) + (d.later || 0) + (d.linkedin || 0);
       document.getElementById("count").innerHTML = made > 0 ? `できた投稿 <b>${made}</b>本` : "";
     } catch {}
   }

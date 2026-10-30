@@ -402,7 +402,7 @@
     <section class="panel" id="peoplePanel" data-pane="report">
       <h2>アプリを使った人（最初に入れた名前）<span id="peopleCount" class="empty"></span></h2>
       <div class="table-wrap"><table class="people">
-        <thead><tr><th>名前</th><th>フォロー</th><th>作った</th><th>コピー</th></tr></thead>
+        <thead><tr><th>名前</th><th>フォロー</th><th>作った</th><th>コピー</th><th>投稿</th></tr></thead>
         <tbody id="peopleRows"></tbody>
       </table></div>
       <p class="empty" id="noPeople" hidden>まだいません。参加者が名前を入れて投稿文を作ると、ここに並びます。</p>
@@ -489,7 +489,7 @@
     try { renderChecklist(); } catch {}
     const c = s.counts;
     const cell = (label, n, warn, hot) => `<div class="num${warn && n ? " warn" : ""}${hot ? " hot" : ""}"><b>${n}</b><span>${label}</span></div>`;
-    $("#nums").innerHTML = cell("生成", c.generate) + cell("書き直し", c.refine) + cell("コピー", c.copy) + cell("あとで投稿", c.later) + cell("エラー", c.error, true);
+    $("#nums").innerHTML = cell("生成", c.generate) + cell("書き直し", c.refine) + cell("コピー", c.copy) + cell("あとで投稿", c.later) + cell("LinkedIn投稿", c.linkedin || 0) + cell("エラー", c.error, true);
     const bars = (items) => {
       const max = Math.max(1, ...items.map((x) => x.n));
       return items.length
@@ -509,7 +509,7 @@
     $("#peopleCount").textContent = `　${people.length}人（主催をフォロー ${s.followed || 0}人）`;
     $("#noPeople").hidden = people.length > 0;
     $("#peopleRows").innerHTML = people
-      .map((p) => `<tr><td>${esc(p.name)}</td><td class="n">${p.followed ? "済" : "—"}</td><td class="n">${p.made ? p.made + "回" : "—"}</td><td class="n">${p.copied ? "済" : "—"}</td></tr>`)
+      .map((p) => `<tr><td>${esc(p.name)}</td><td class="n">${p.followed ? "済" : "—"}</td><td class="n">${p.made ? p.made + "回" : "—"}</td><td class="n">${p.copied ? "済" : "—"}</td><td class="n">${p.posted ? "済" : "—"}</td></tr>`)
       .join("");
   }
 
@@ -529,7 +529,7 @@
             <div>${["formality", "kansai", "length", "emoji"].map((k) => `<span class="tag">${esc(r.style[k] || "")}</span>`).join("")}${r.style.phrase ? `<span class="tag">一言：${esc(r.style.phrase)}</span>` : ""}</div>
           </div>
           <div>
-            <h3>投稿文（${esc(TONE[r.tone] || "")}${r.edited ? "・自分で直した" : ""}／${r.action === "later" ? "あとで投稿" : "コピーしてLinkedIn"}）</h3>
+            <h3>投稿文（${esc(TONE[r.tone] || "")}${r.edited ? "・自分で直した" : ""}／${r.action === "later" ? "あとで投稿" : r.action === "linkedin" ? "LinkedInに直接投稿" : "コピーしてLinkedIn"}）</h3>
             <div class="pre">${esc(r.finalText)}</div>
           </div>
         </div>`;
@@ -892,6 +892,7 @@
       tile(d.users, "使った人（端末）", `今日 ${d.today.users}人`) +
       tile(t.generate, "作った（回）", `今日 ${d.today.generate}回　${avg}`) +
       tile(t.copy + t.later, "コピー・あとで（回）", `今日 ${d.today.copy + d.today.later}回`) +
+      tile(t.linkedin || 0, "LinkedIn投稿（回）", `今日 ${d.today.linkedin || 0}回`) +
       tile(t.view, "ページを開いた（回）", `今日 ${d.today.view}回`) +
       tile(t.refine, "書き直し（回）", "") +
       tile(d.photos.used, "写真つきで作った（回）", d.photos.used ? `写真 合計${d.photos.total}枚` : "") +
@@ -900,7 +901,7 @@
     const fmax = Math.max(1, f.viewed, f.made, f.copied);
     const fbase = Math.max(f.viewed, f.made); // 前の版から使っていた人は「開いた」が数えられていないので、多いほうを100%にする
     const step = (label, n, base) => `<div class="brow"><span>${label}</span><span class="track"><span class="fill" style="width:${(n / fmax) * 100}%;display:block"></span></span><span class="n">${n}人${base ? `（${Math.round((n / base) * 100)}%）` : ""}</span></div>`;
-    $("#stFunnel").innerHTML = step("ページを開いた", f.viewed, 0) + step("文章を作った", f.made, fbase) + step("コピーした", f.copied, fbase);
+    $("#stFunnel").innerHTML = step("ページを開いた", f.viewed, 0) + step("文章を作った", f.made, fbase) + step("投稿・コピーした", f.copied, fbase);
     barChart($("#stHourly"), d.hourly.map((h) => ({ k: `${h.h}時`, v: h.generate })), "回");
     barChart($("#stDaily"), d.daily.map((x) => ({ k: x.d.slice(5).replace("-", "/"), v: x.users })), "人");
     const dl = d.daily;
@@ -908,10 +909,10 @@
     $("#stDailyRows").innerHTML = dl
       .slice()
       .reverse()
-      .map((x) => `<tr><td>${esc(x.d)}</td><td class="n">${x.users}</td><td class="n">${x.view}</td><td class="n">${x.generate}</td><td class="n">${x.refine}</td><td class="n">${x.copy + x.later}</td><td class="n">${x.error}</td></tr>`)
+      .map((x) => `<tr><td>${esc(x.d)}</td><td class="n">${x.users}</td><td class="n">${x.view}</td><td class="n">${x.generate}</td><td class="n">${x.refine}</td><td class="n">${x.copy + x.later + (x.linkedin || 0)}</td><td class="n">${x.error}</td></tr>`)
       .join("");
     $("#stByEvent").innerHTML = d.byEvent.length
-      ? d.byEvent.map((r) => `<tr><td>${esc(r.name)}${r.id ? ` <small class="empty">${esc(r.id)}</small>` : ""}</td><td class="n">${r.users}</td><td class="n">${r.view}</td><td class="n">${r.generate}</td><td class="n">${r.copy + r.later}</td><td class="n">${r.error}</td></tr>`).join("")
+      ? d.byEvent.map((r) => `<tr><td>${esc(r.name)}${r.id ? ` <small class="empty">${esc(r.id)}</small>` : ""}</td><td class="n">${r.users}</td><td class="n">${r.view}</td><td class="n">${r.generate}</td><td class="n">${r.copy + r.later + (r.linkedin || 0)}</td><td class="n">${r.error}</td></tr>`).join("")
       : '<tr><td colspan="6" class="empty">まだありません</td></tr>';
     const kinds = d.kinds || {};
     $("#stNote").textContent = `作ったものの内訳：投稿文 ${kinds.post || 0}回・見出し ${kinds.headline || 0}回・自己紹介 ${kinds.about || 0}回${kinds.profile ? `・プロフィール文（前の版）${kinds.profile}回` : ""}（じぶんのAIキーで作った ${d.ownKey}回）。「使った人」は端末の数で、名前などは集めていません。この数え方は 2026/10/16 の版からです（それより前の分は「回」だけ）。`;
