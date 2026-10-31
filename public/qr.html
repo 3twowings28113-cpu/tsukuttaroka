@@ -148,7 +148,7 @@
           eb.hidden = false;
         }
         const tags = d.event.hashtags || [];
-        const tag = tags.find((h) => h.toLowerCase() !== "#linkedin") || tags[0];
+        const tag = tags.find((h) => h.toLowerCase() !== "#linkedin") || tags[0] || (evId === "lscw" ? "#LSCW2026" : "");
         if (tag) {
           const ft = document.getElementById("feedTagLine");
           ft.textContent = `アプリを使わずに投稿する人は ${tag} を付けてな`;
@@ -163,7 +163,15 @@
     try {
       const d = await (await fetch(evId ? `api/stats?e=${encodeURIComponent(evId)}` : "api/stats", { cache: "no-store" })).json();
       const made = (d.copied || 0) + (d.later || 0) + (d.linkedin || 0);
-      document.getElementById("count").innerHTML = made > 0 ? `できた投稿 <b>${made}</b>本` : "";
+      const goal = Number(d.goal) || 0;
+      const el = document.getElementById("count");
+      if (goal) {
+        el.innerHTML = made >= goal
+          ? `できた投稿 <b>${made}</b>本　目標${goal}本 達成！`
+          : `できた投稿 <b>${made}</b>本 ／ 目標${goal}本まで あと<b>${goal - made}</b>本`;
+      } else {
+        el.innerHTML = made > 0 ? `できた投稿 <b>${made}</b>本` : "";
+      }
     } catch {}
   }
   refresh();

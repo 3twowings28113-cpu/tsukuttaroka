@@ -51,13 +51,14 @@ import {
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-31.lscw-27";
+const VERSION = "2026-10-31.lscw-28";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    if (url.pathname === "/qr-lscw") return Response.redirect(`${url.origin}/qr?url=${encodeURIComponent(url.origin + "/lscw")}`, 302);
     if (!url.pathname.startsWith("/api/")) return env.ASSETS.fetch(request);
     try {
       return await route(request, env, ctx, url);
@@ -1204,6 +1205,12 @@ async function stats(env, url) {
       if (r.type === "later") data.later = r.n;
       if (r.type === "linkedin") data.linkedin = r.n;
     }
+  }
+  if (db && e) {
+    try {
+      const row = await db.prepare("SELECT data FROM event_settings WHERE id = ?").bind(e).first();
+      data.goal = Number((row && safeParse(row.data, {}).goal) || 0) || 0;
+    } catch {}
   }
   statsCache = { at: Date.now(), data, e };
   return json(data);
