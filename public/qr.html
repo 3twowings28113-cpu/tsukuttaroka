@@ -144,6 +144,7 @@
     shown = t.toString();
   } catch {}
   document.getElementById("url").textContent = shown.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  if (evId) { const ft0 = document.getElementById("feedTagLine"); if (ft0) ft0.hidden = true; }
   // イベントのQRなら、イベント名とハッシュタグを運営ページの設定に合わせる
   if (evId) {
     fetch(`api/event?e=${encodeURIComponent(evId)}`)
@@ -151,12 +152,16 @@
       .then((d) => {
         if (!d.ok || !d.event) return;
         if (d.event.name) {
-          // イベント名が上の小さな文字と同じなら、1回だけ出す
-          const same = d.event.name === cfg.eventSub;
-          eb.textContent = same ? d.event.name : cfg.eventSub || "";
-          if (!same) {
-            if (cfg.eventSub) eb.append(document.createElement("br"));
-            eb.append(`「${d.event.name}」`);
+          if (evId === "lscw") {
+            eb.textContent = d.event.name;
+          } else {
+            // イベント名が上の小さな文字と同じなら、1回だけ出す
+            const same = d.event.name === cfg.eventSub;
+            eb.textContent = same ? d.event.name : cfg.eventSub || "";
+            if (!same) {
+              if (cfg.eventSub) eb.append(document.createElement("br"));
+              eb.append(`「${d.event.name}」`);
+            }
           }
           eb.hidden = false;
         }
