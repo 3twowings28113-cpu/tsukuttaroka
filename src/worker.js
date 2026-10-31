@@ -51,7 +51,7 @@ import {
 import { geminiJSON, explainFailure, parseJsonLoose, DEFAULT_BASE } from "./gemini.js";
 import { cleanName, nameKey } from "./report.js";
 
-const VERSION = "2026-10-31.lscw-31";
+const VERSION = "2026-10-31.lscw-32";
 const HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: HEADERS });
 
@@ -458,7 +458,7 @@ async function callAI(env, { system, input, schema, validate, userKey, adv, imag
   // 上級者設定（Gemini以外）があるときは、そのAI一本でいく（予備チェーンなし）
   // ただしイベント指定のAI（fromEvent）は、失敗したら Gemini のチェーンに切り替える
   if (adv) {
-    const args = { baseUrl: adv.baseUrl, model: adv.model, key: adv.key, system, input, images };
+    const args = { baseUrl: adv.baseUrl, model: adv.model, key: adv.key, system, input, images, timeoutMs: adv.fromEvent ? 25000 : 30000 };
     let r = adv.provider === "anthropic" ? await anthropicJSON(args) : await openaiJSON(args);
     if (r.ok && validate) {
       const v = validate(r.json);
@@ -480,7 +480,10 @@ async function callAI(env, { system, input, schema, validate, userKey, adv, imag
   const plan = Date.now() < primaryCoolUntil ? [fallback, primary] : [primary, fallback];
   const thinking = env.GEMINI_THINKING === undefined ? "low" : env.GEMINI_THINKING || null;
   let last = null;
-  for (const step of plan) {
+  for (let round = 0; round < 2; round++) {
+    if (round > 0) await new Promise((r) => setTimeout(r, 1200));
+    last = null;
+    for (const step of plan) {
     if (!step.model) continue;
     const args = {
       apiKey: userKey || env.GEMINI_API_KEY,
@@ -503,6 +506,11 @@ async function callAI(env, { system, input, schema, validate, userKey, adv, imag
     if (step === primary && (r.status === 429 || r.status >= 500 || r.reason === "TIMEOUT")) primaryCoolUntil = Date.now() + 30000;
     console.warn("gemini failed", JSON.stringify({ model: r.model, style: r.style, status: r.status, reason: r.reason, message: r.message }));
     last = r;
+    }
+    // 成功なら即返す。失敗が一時的でなければ、回し直しても同じなので止める
+    if (last && last.ok) return last;
+    const transient = last && (last.status === 429 || last.status >= 500 || ["TIMEOUT", "NETWORK"].includes(last.reason));
+    if (!transient) break;
   }
   return last || { ok: false, status: 0, reason: "NO_MODEL", message: "モデルが未設定" };
 }
@@ -561,7 +569,7 @@ const NO_KEY_MSG = "作るには、イベントのページ（QR）から開く�
 const AI_BODY_MAX = IMAGE_MAX * IMAGE_MAX_CHARS + 60000;
 const imagesKb = (images) => Math.round((images.reduce((n, im) => n + im.data.length, 0) * 3) / 4 / 1024);
 // 写真が原因になりやすい失敗（400・413・返事の形の崩れ）なら、写真なしでもう一度だけ作る
-const photoRetryable = (r) => r.status === 400 || r.status === 413 || ["BAD_SHAPE", "EMPTY", "BAD_JSON"].includes(r.reason);
+const photoRetryable = (r) => r.status === 400 || r.status === 413 || r.status === 429 || r.status >= 500 || ["BAD_SHAPE", "EMPTY", "BAD_JSON", "TIMEOUT", "NETWORK"].includes(r.reason);
 
 async function readAiBody(request, env, ctx, where) {
   const body = await readJson(request, AI_BODY_MAX);

@@ -2381,7 +2381,7 @@
   }
   const photoKb = () => T.photos.reduce((n, p) => n + (p.kb || 0), 0);
   // 写真が多いほど、AIの返事を長く待つ（サーバーは、写真で失敗したら写真なしで作り直すので、その分も見込む）
-  const photoTimeout = (base) => (T.photos.length ? Math.min(150000, base + 30000 + T.photos.length * 6000) : base);
+  const photoTimeout = (base) => (T.photos.length ? Math.min(210000, base + 30000 + T.photos.length * 6000) : base);
   // 生成と書き直しのときだけ、写真を付けて送る（記録用の送信には付けない）
   const withPhotos = (p) => (T.photos.length && !PARTS.includes(p.kind) && p.kind !== "profile" ? { ...p, images: T.photos.map((x) => ({ mime: x.mime, data: x.data })) } : p);
 
@@ -2461,6 +2461,16 @@
     }
   }
 
+  async function postWithRetry(url, body, timeoutMs) {
+    try {
+      return await postJSON(url, body, timeoutMs);
+    } catch (e) {
+      if (!["network", "timeout"].includes(e && e.code)) throw e;
+      await new Promise((r) => setTimeout(r, 1500));
+      return postJSON(url, body, timeoutMs);
+    }
+  }
+
   function toResults(patterns) {
     const list = Array.isArray(patterns) ? patterns : [];
     const out = {};
@@ -2490,7 +2500,7 @@
     async generate(p) {
       if (p.kind === "headline" || p.kind === "about") {
         if (MODE === "preview") return { kind: p.kind, ...samplePart(p), sample: true };
-        const data = await postJSON("api/generate", p, 60000);
+        const data = await postWithRetry("api/generate", p, 120000);
         if (data.sample) return { kind: p.kind, ...samplePart(p), sample: true };
         if (p.kind === "headline") {
           const list = Array.isArray(data.headlines) ? data.headlines.map(String).filter(Boolean) : [];
@@ -2501,7 +2511,7 @@
         return { kind: "about", text: String(data.about), model: data.model || "" };
       }
       if (MODE === "preview") return previewGenerate(p);
-      const data = await postJSON("api/generate", withPhotos(p), photoTimeout(60000));
+      const data = await postWithRetry("api/generate", withPhotos(p), photoTimeout(120000));
       if (data.sample) return { ...sampleGenerate(p), sample: true };
       const r = toResults(data.patterns);
       if (!r) throw Object.assign(new Error("empty"), { code: "empty" });
@@ -2509,7 +2519,7 @@
     },
     async refine(p) {
       if (MODE === "preview") return previewRefine(p);
-      const data = await postJSON("api/refine", withPhotos(p), photoTimeout(45000));
+      const data = await postWithRetry("api/refine", withPhotos(p), photoTimeout(90000));
       if (data.sample) return { body: sampleRefine(p) };
       if (!data.body) throw Object.assign(new Error("empty"), { code: "empty" });
       return { body: data.body };
