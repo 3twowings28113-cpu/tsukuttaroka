@@ -2464,10 +2464,17 @@
   function toResults(patterns) {
     const list = Array.isArray(patterns) ? patterns : [];
     const out = {};
-    TONES.forEach((t, i) => {
-      const hit = list.find((p) => p && p.tone === t.id) || list[i];
+    // まずトーン名で照合する。list[i] の流用は、名前で1つも合わなかったときだけ
+    // （流用を先にやると、選んだトーンと先頭トーンに同じ1本が二重に入り、空っぽ扱いになる）
+    TONES.forEach((t) => {
+      const hit = list.find((p) => p && p.tone === t.id);
       out[t.id] = { body: String((hit && hit.body) || "").trim(), edited: false };
     });
+    if (!TONES.some((t) => out[t.id].body)) {
+      TONES.forEach((t, i) => {
+        out[t.id] = { body: String((list[i] && list[i].body) || "").trim(), edited: false };
+      });
+    }
     // 作るのは1本。空でないトーンが1つだけなら、そのトーンを結果にする
     const filled = TONES.filter((t) => out[t.id].body);
     if (filled.length === 1) {
@@ -2476,7 +2483,7 @@
       one.single = true;
       return one;
     }
-    return null;
+    return filled.length ? out : null;
   }
 
   const API = {
