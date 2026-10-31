@@ -54,6 +54,18 @@
   .sc2 { top: 3vh; left: 33vw; transform: rotate(9deg); }
   .sc3 { bottom: 3vh; left: 3vw; transform: rotate(10deg); }
   .sc4 { bottom: 3vh; right: 3vw; transform: rotate(-12deg); }
+  .printbtn { position: fixed; top: 14px; right: 14px; z-index: 10; padding: 10px 18px; border: 3px solid var(--ink); border-radius: 999px; background: var(--paper); color: var(--ink); font-family: var(--f-body); font-weight: 700; font-size: 15px; cursor: pointer; box-shadow: 4px 4px 0 var(--ink); }
+  .printbtn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--ink); }
+  /* A4印刷：横向き1枚に、画面の見た目のまま収める */
+  @page { size: A4 landscape; margin: 0; }
+  @media print {
+    .printbtn { display: none !important; }
+    html, body { height: auto; overflow: visible; }
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .stage { width: 297mm; height: 210mm; padding: 10mm 12mm; grid-template-columns: 1.25fr 1fr; }
+    .qr { width: min(30vw, 46vh); }
+    .sc { display: none; }
+  }
   @media (max-aspect-ratio: 1/1) {
     body { overflow: auto; }
     .stage { grid-template-columns: 1fr; height: auto; min-height: 100vh; }
@@ -63,6 +75,7 @@
 </style>
 </head>
 <body>
+<button class="printbtn" type="button" onclick="window.print()">A4で印刷する</button>
 <div class="stage">
   <section class="cloud copy" data-bump="70">
     <p class="eyebrow" id="eyebrow"></p>
@@ -199,6 +212,7 @@
   }
   paint();
   addEventListener("resize", paint);
+  addEventListener("beforeprint", paint);
   document.fonts && document.fonts.ready.then(paint);
 })();
 </script>
